@@ -97,7 +97,6 @@ class StockfishEngine(private val context: Context) {
     private fun findSystemStockfish(): String? {
         return try {
             val packageManager = context.packageManager
-            val packageInfo = packageManager.getPackageInfo("com.stockfish141", 0)
             val appInfo = packageManager.getApplicationInfo("com.stockfish141", 0)
             val nativeLibDir = appInfo.nativeLibraryDir
 

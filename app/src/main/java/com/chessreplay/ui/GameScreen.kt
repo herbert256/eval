@@ -836,8 +836,9 @@ private fun GameContent(
 
         // Chess board - drag to make moves during manual replay (no interaction during other stages)
         // Get move arrows from Stockfish PV line (only in Manual stage)
+        val drawArrowsSetting = uiState.stockfishSettings.manualStage.drawArrows
         val numArrows = uiState.stockfishSettings.manualStage.numArrows
-        val moveArrows: List<MoveArrow> = if (uiState.currentStage == AnalysisStage.MANUAL && numArrows > 0) {
+        val moveArrows: List<MoveArrow> = if (uiState.currentStage == AnalysisStage.MANUAL && drawArrowsSetting && numArrows > 0) {
             val pvLine = uiState.analysisResult?.pv ?: ""
             val pvMoves = pvLine.split(" ").filter { it.length >= 4 }.take(numArrows)
             val isWhiteTurnNow = uiState.currentBoard.getTurn() == PieceColor.WHITE
@@ -864,7 +865,7 @@ private fun GameContent(
             ChessBoardView(
                 board = uiState.currentBoard,
                 flipped = uiState.flippedBoard,
-                interactionEnabled = !uiState.currentStage != AnalysisStage.MANUAL,
+                interactionEnabled = uiState.currentStage == AnalysisStage.MANUAL,
                 onMove = { from, to -> viewModel.makeManualMove(from, to) },
                 moveArrows = moveArrows,
                 showArrowNumbers = uiState.stockfishSettings.manualStage.showArrowNumbers,
@@ -924,7 +925,7 @@ private fun GameContent(
     }
 
     // Controls - hide during auto-analysis
-    if (!uiState.currentStage != AnalysisStage.MANUAL) {
+    if (uiState.currentStage == AnalysisStage.MANUAL) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -997,7 +998,7 @@ private fun GameContent(
     }
 
     // Stockfish analysis panel - hide during auto-analysis
-    if (!uiState.currentStage != AnalysisStage.MANUAL) {
+    if (uiState.currentStage == AnalysisStage.MANUAL) {
         Spacer(modifier = Modifier.height(4.dp))
         AnalysisPanel(
             uiState = uiState,
@@ -1009,12 +1010,12 @@ private fun GameContent(
     }
 
     // Show game info card between Stockfish panel and moves list during manual stage
-    if (!uiState.currentStage != AnalysisStage.MANUAL) {
+    if (uiState.currentStage == AnalysisStage.MANUAL) {
         GameInfoCard()
     }
 
     // Moves list - only show during manual replay (not during auto-analysis)
-    if (!uiState.currentStage != AnalysisStage.MANUAL) {
+    if (uiState.currentStage == AnalysisStage.MANUAL) {
         Card(
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surface
