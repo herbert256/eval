@@ -1564,6 +1564,13 @@ private fun AnalysisPanel(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            // Title
+            Text(
+                text = "Stockfish 17.1",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFAAAAAA)
+            )
             result.lines.forEach { line ->
                 PvLineRow(
                     line = line,
