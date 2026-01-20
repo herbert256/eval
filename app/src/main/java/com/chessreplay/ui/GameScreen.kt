@@ -929,7 +929,7 @@ private fun GameContent(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.Center,
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Use exploring line indices when exploring, otherwise use main game indices
@@ -944,28 +944,55 @@ private fun GameContent(
                 uiState.currentMoveIndex >= uiState.moveDetails.size - 1
             }
 
-            // Hide start/end buttons when exploring a line
-            if (!uiState.isExploringLine) {
-                ControlButton("⏮", enabled = !isAtStart) { viewModel.goToStart() }
-                Spacer(modifier = Modifier.width(6.dp))
+            // Left part: Navigation buttons with fixed positions
+            Row(
+                horizontalArrangement = Arrangement.Start,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Button 1: Go to start (hidden when exploring)
+                if (!uiState.isExploringLine) {
+                    ControlButton("⏮", enabled = !isAtStart) { viewModel.goToStart() }
+                    Spacer(modifier = Modifier.width(6.dp))
+                }
+
+                // Button 2: Previous move (hidden when exploring and at start)
+                val showPrevButton = !uiState.isExploringLine || !isAtStart
+                if (showPrevButton) {
+                    ControlButton("◀", enabled = !isAtStart) { viewModel.prevMove() }
+                    Spacer(modifier = Modifier.width(6.dp))
+                }
+
+                // Button 3: Next move (hidden when exploring and at end)
+                val showNextButton = !uiState.isExploringLine || !isAtEnd
+                if (showNextButton) {
+                    ControlButton("▶", enabled = !isAtEnd) { viewModel.nextMove() }
+                }
+
+                // Button 4: Go to end (hidden when exploring)
+                if (!uiState.isExploringLine) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    ControlButton("⏭", enabled = !isAtEnd) { viewModel.goToEnd() }
+                }
             }
-            // Hide previous button when exploring a line and no previous move
-            val showPrevButton = !uiState.isExploringLine || !isAtStart
-            if (showPrevButton) {
-                ControlButton("◀", enabled = !isAtStart) { viewModel.prevMove() }
-                Spacer(modifier = Modifier.width(6.dp))
+
+            // Right part: Arrow toggle and flip board icons
+            Row(
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Draw arrows toggle icon
+                val drawArrowsEnabled = uiState.stockfishSettings.manualStage.drawArrows
+                IconButton(onClick = { viewModel.toggleDrawArrows() }) {
+                    Text(
+                        text = "↗",
+                        fontSize = 24.sp,
+                        color = if (drawArrowsEnabled) Color.White else Color.Gray
+                    )
+                }
+                Spacer(modifier = Modifier.width(4.dp))
+                // Flip board button
+                ControlButton("↻") { viewModel.flipBoard() }
             }
-            // Hide next button when exploring a line and no next move
-            val showNextButton = !uiState.isExploringLine || !isAtEnd
-            if (showNextButton) {
-                ControlButton("▶", enabled = !isAtEnd) { viewModel.nextMove() }
-            }
-            if (!uiState.isExploringLine) {
-                Spacer(modifier = Modifier.width(6.dp))
-                ControlButton("⏭", enabled = !isAtEnd) { viewModel.goToEnd() }
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            ControlButton("↻") { viewModel.flipBoard() }
         }
     }
 

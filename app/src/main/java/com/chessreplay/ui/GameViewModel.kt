@@ -840,6 +840,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(flippedBoard = !_uiState.value.flippedBoard)
     }
 
+    fun toggleDrawArrows() {
+        val currentSettings = _uiState.value.stockfishSettings
+        val newDrawArrows = !currentSettings.manualStage.drawArrows
+        val newSettings = currentSettings.copy(
+            manualStage = currentSettings.manualStage.copy(drawArrows = newDrawArrows)
+        )
+        saveStockfishSettings(newSettings)
+        _uiState.value = _uiState.value.copy(stockfishSettings = newSettings)
+    }
+
     fun showSettingsDialog() {
         // Store current settings to detect changes when dialog closes
         settingsOnDialogOpen = SettingsSnapshot(
