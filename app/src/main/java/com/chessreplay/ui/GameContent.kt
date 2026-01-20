@@ -145,6 +145,8 @@ fun GameContent(
                 val fromSquare = lastMove?.from?.toAlgebraic() ?: ""
                 val toSquare = lastMove?.to?.toAlgebraic() ?: ""
                 val moveColor = if (isWhiteMove) Color.White else Color.Black
+                val currentMoveDetails = uiState.moveDetails.getOrNull(moveIndex)
+                val separator = if (currentMoveDetails?.isCapture == true) "x" else "-"
 
                 // LEFT section - move number
                 Text(
@@ -168,7 +170,7 @@ fun GameContent(
                         color = moveColor
                     )
                     Text(
-                        text = " $fromSquare-$toSquare",
+                        text = " $fromSquare$separator$toSquare",
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 20.sp,
                         color = moveColor
