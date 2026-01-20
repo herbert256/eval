@@ -198,10 +198,10 @@ fun GameContent(
                         if (displayScore.score >= 0) "+%.1f".format(absScore) else "-%.1f".format(absScore)
                     }
                     val scoreColor = when {
-                        displayScore.isMate && displayScore.mateIn > 0 -> Color(0xFF00E676)  // Bright green
-                        displayScore.isMate && displayScore.mateIn < 0 -> Color(0xFFFF1744)  // Vivid red
-                        displayScore.score > 0.1f -> Color(0xFF00E676)  // Bright green
-                        displayScore.score < -0.1f -> Color(0xFFFF1744)  // Vivid red
+                        displayScore.isMate && displayScore.mateIn > 0 -> Color(0xFFFF5252)  // Red for white winning mate
+                        displayScore.isMate && displayScore.mateIn < 0 -> Color(0xFF00E676)  // Green for black winning mate
+                        displayScore.score > 0.1f -> Color(0xFFFF5252)  // Red for white better
+                        displayScore.score < -0.1f -> Color(0xFF00E676)  // Green for black better
                         else -> Color(0xFF64B5F6)  // Bright blue
                     }
                     Text(

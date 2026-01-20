@@ -165,10 +165,10 @@ private fun MoveChip(
             }
             val scoreColor = when {
                 isActive -> Color.White.copy(alpha = 0.9f)
-                score.isMate && score.mateIn > 0 -> Color(0xFF4CAF50) // Green for white winning mate
-                score.isMate && score.mateIn < 0 -> Color(0xFFF44336) // Red for black winning mate
-                score.score > 0.1f -> Color(0xFF4CAF50) // Green for white better
-                score.score < -0.1f -> Color(0xFFF44336) // Red for black better
+                score.isMate && score.mateIn > 0 -> Color(0xFFFF5252) // Red for white winning mate
+                score.isMate && score.mateIn < 0 -> Color(0xFF00E676) // Green for black winning mate
+                score.score > 0.1f -> Color(0xFFFF5252) // Red for white better
+                score.score < -0.1f -> Color(0xFF00E676) // Green for black better
                 else -> Color(0xFF2196F3) // Blue for equal (0)
             }
             Text(

@@ -146,7 +146,7 @@ fun EvaluationGraph(
                 val crossX = p1.x + (p2.x - p1.x) * t
 
                 // Draw first segment (from p1 to crossing point)
-                val color1 = if (p1.score >= 0) greenColor else redColor
+                val color1 = if (p1.score >= 0) redColor else greenColor
                 val path1 = androidx.compose.ui.graphics.Path().apply {
                     moveTo(p1.x, p1.y)
                     lineTo(crossX, centerY)
@@ -156,7 +156,7 @@ fun EvaluationGraph(
                 drawPath(path1, color1.copy(alpha = 0.8f))
 
                 // Draw second segment (from crossing point to p2)
-                val color2 = if (p2.score >= 0) greenColor else redColor
+                val color2 = if (p2.score >= 0) redColor else greenColor
                 val path2 = androidx.compose.ui.graphics.Path().apply {
                     moveTo(crossX, centerY)
                     lineTo(p2.x, p2.y)
@@ -170,7 +170,7 @@ fun EvaluationGraph(
                 drawLine(color2, Offset(crossX, centerY), Offset(p2.x, p2.y), strokeWidth = 2f)
             } else {
                 // No crossing - draw single colored area
-                val color = if (p1.score >= 0) greenColor else redColor
+                val color = if (p1.score >= 0) redColor else greenColor
 
                 val path = androidx.compose.ui.graphics.Path().apply {
                     moveTo(p1.x, p1.y)
