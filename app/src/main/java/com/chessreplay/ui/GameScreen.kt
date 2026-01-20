@@ -1930,7 +1930,7 @@ private fun ColorPickerDialog(
 // Settings sub-screen enum
 private enum class SettingsSubScreen {
     MAIN,
-    MANUAL_MODE,
+    ARROW_SETTINGS,
     STOCKFISH
 }
 
@@ -1957,7 +1957,7 @@ private fun SettingsScreen(
             onBack = onBack,
             onNavigate = { currentSubScreen = it }
         )
-        SettingsSubScreen.MANUAL_MODE -> ManualModeSettingsScreen(
+        SettingsSubScreen.ARROW_SETTINGS -> ArrowSettingsScreen(
             stockfishSettings = stockfishSettings,
             onBack = { currentSubScreen = SettingsSubScreen.MAIN },
             onSave = onSaveStockfish
@@ -2002,11 +2002,11 @@ private fun SettingsMainScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Manual mode card
+        // Arrow settings card
         SettingsNavigationCard(
-            title = "Manual mode",
-            description = "Arrows, colors, display options",
-            onClick = { onNavigate(SettingsSubScreen.MANUAL_MODE) }
+            title = "Arrow settings",
+            description = "Arrow display, colors, numbers",
+            onClick = { onNavigate(SettingsSubScreen.ARROW_SETTINGS) }
         )
 
         // Stockfish settings card
@@ -2082,34 +2082,38 @@ private fun SettingsBackButton(onClick: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ManualModeSettingsScreen(
+private fun ArrowSettingsScreen(
     stockfishSettings: StockfishSettings,
     onBack: () -> Unit,
     onSave: (StockfishSettings) -> Unit
 ) {
-    var manualNumArrows by remember { mutableStateOf(stockfishSettings.manualStage.numArrows) }
-    var manualShowArrowNumbers by remember { mutableStateOf(stockfishSettings.manualStage.showArrowNumbers) }
-    var manualWhiteArrowColor by remember { mutableStateOf(stockfishSettings.manualStage.whiteArrowColor) }
-    var manualBlackArrowColor by remember { mutableStateOf(stockfishSettings.manualStage.blackArrowColor) }
+    var drawArrows by remember { mutableStateOf(stockfishSettings.manualStage.drawArrows) }
+    var numArrows by remember { mutableStateOf(stockfishSettings.manualStage.numArrows) }
+    var showArrowNumbers by remember { mutableStateOf(stockfishSettings.manualStage.showArrowNumbers) }
+    var whiteArrowColor by remember { mutableStateOf(stockfishSettings.manualStage.whiteArrowColor) }
+    var blackArrowColor by remember { mutableStateOf(stockfishSettings.manualStage.blackArrowColor) }
     var showWhiteColorPicker by remember { mutableStateOf(false) }
     var showBlackColorPicker by remember { mutableStateOf(false) }
-    var manualNumArrowsExpanded by remember { mutableStateOf(false) }
-    var manualShowArrowNumbersExpanded by remember { mutableStateOf(false) }
+    var drawArrowsExpanded by remember { mutableStateOf(false) }
+    var numArrowsExpanded by remember { mutableStateOf(false) }
+    var showArrowNumbersExpanded by remember { mutableStateOf(false) }
 
-    val numArrowsOptions = listOf(0, 1, 2, 3, 4, 5, 6, 7, 8)
+    val numArrowsOptions = listOf(1, 2, 3, 4, 5, 6, 7, 8)
 
     fun saveSettings(
-        numArrows: Int = manualNumArrows,
-        showArrowNumbers: Boolean = manualShowArrowNumbers,
-        whiteArrowColor: Long = manualWhiteArrowColor,
-        blackArrowColor: Long = manualBlackArrowColor
+        newDrawArrows: Boolean = drawArrows,
+        newNumArrows: Int = numArrows,
+        newShowArrowNumbers: Boolean = showArrowNumbers,
+        newWhiteArrowColor: Long = whiteArrowColor,
+        newBlackArrowColor: Long = blackArrowColor
     ) {
         onSave(stockfishSettings.copy(
             manualStage = stockfishSettings.manualStage.copy(
-                numArrows = numArrows,
-                showArrowNumbers = showArrowNumbers,
-                whiteArrowColor = whiteArrowColor,
-                blackArrowColor = blackArrowColor
+                drawArrows = newDrawArrows,
+                numArrows = newNumArrows,
+                showArrowNumbers = newShowArrowNumbers,
+                whiteArrowColor = newWhiteArrowColor,
+                blackArrowColor = newBlackArrowColor
             )
         ))
     }
@@ -2123,7 +2127,7 @@ private fun ManualModeSettingsScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(
-            text = "Manual mode",
+            text = "Arrow settings",
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             color = Color.White
@@ -2133,108 +2137,144 @@ private fun ManualModeSettingsScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Number of arrows dropdown
+        // Draw arrows dropdown (always visible)
         ExposedDropdownMenuBox(
-            expanded = manualNumArrowsExpanded,
-            onExpandedChange = { manualNumArrowsExpanded = it }
+            expanded = drawArrowsExpanded,
+            onExpandedChange = { drawArrowsExpanded = it }
         ) {
             OutlinedTextField(
-                value = if (manualNumArrows == 0) "None" else manualNumArrows.toString(),
+                value = if (drawArrows) "Yes" else "No",
                 onValueChange = {},
                 readOnly = true,
-                label = { Text("Number of arrows") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = manualNumArrowsExpanded) },
+                label = { Text("Draw arrows") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = drawArrowsExpanded) },
                 modifier = Modifier.fillMaxWidth().menuAnchor()
             )
-            ExposedDropdownMenu(expanded = manualNumArrowsExpanded, onDismissRequest = { manualNumArrowsExpanded = false }) {
-                numArrowsOptions.forEach { num ->
-                    DropdownMenuItem(
-                        text = { Text(if (num == 0) "None" else num.toString()) },
-                        onClick = {
-                            manualNumArrows = num
-                            manualNumArrowsExpanded = false
-                            saveSettings(numArrows = num)
-                        }
-                    )
-                }
-            }
-        }
-
-        // Show move number in arrow dropdown
-        ExposedDropdownMenuBox(
-            expanded = manualShowArrowNumbersExpanded,
-            onExpandedChange = { manualShowArrowNumbersExpanded = it }
-        ) {
-            OutlinedTextField(
-                value = if (manualShowArrowNumbers) "Yes" else "No",
-                onValueChange = {},
-                readOnly = true,
-                label = { Text("Show move number in arrow") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = manualShowArrowNumbersExpanded) },
-                modifier = Modifier.fillMaxWidth().menuAnchor()
-            )
-            ExposedDropdownMenu(expanded = manualShowArrowNumbersExpanded, onDismissRequest = { manualShowArrowNumbersExpanded = false }) {
+            ExposedDropdownMenu(expanded = drawArrowsExpanded, onDismissRequest = { drawArrowsExpanded = false }) {
                 DropdownMenuItem(
                     text = { Text("Yes") },
                     onClick = {
-                        manualShowArrowNumbers = true
-                        manualShowArrowNumbersExpanded = false
-                        saveSettings(showArrowNumbers = true)
+                        drawArrows = true
+                        drawArrowsExpanded = false
+                        saveSettings(newDrawArrows = true)
                     }
                 )
                 DropdownMenuItem(
                     text = { Text("No") },
                     onClick = {
-                        manualShowArrowNumbers = false
-                        manualShowArrowNumbersExpanded = false
-                        saveSettings(showArrowNumbers = false)
+                        drawArrows = false
+                        drawArrowsExpanded = false
+                        saveSettings(newDrawArrows = false)
                     }
                 )
             }
         }
 
-        // Color picker for white move arrows
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Color of arrow for white moves")
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(manualWhiteArrowColor.toInt()))
-                    .border(2.dp, Color.Gray, RoundedCornerShape(8.dp))
-                    .clickable { showWhiteColorPicker = true }
-            )
+        // All other settings are only visible when drawArrows is true
+        if (drawArrows) {
+            // Number of arrows dropdown
+            ExposedDropdownMenuBox(
+                expanded = numArrowsExpanded,
+                onExpandedChange = { numArrowsExpanded = it }
+            ) {
+                OutlinedTextField(
+                    value = numArrows.toString(),
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Number of arrows") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = numArrowsExpanded) },
+                    modifier = Modifier.fillMaxWidth().menuAnchor()
+                )
+                ExposedDropdownMenu(expanded = numArrowsExpanded, onDismissRequest = { numArrowsExpanded = false }) {
+                    numArrowsOptions.forEach { num ->
+                        DropdownMenuItem(
+                            text = { Text(num.toString()) },
+                            onClick = {
+                                numArrows = num
+                                numArrowsExpanded = false
+                                saveSettings(newNumArrows = num)
+                            }
+                        )
+                    }
+                }
+            }
+
+            // Show move number in arrow dropdown
+            ExposedDropdownMenuBox(
+                expanded = showArrowNumbersExpanded,
+                onExpandedChange = { showArrowNumbersExpanded = it }
+            ) {
+                OutlinedTextField(
+                    value = if (showArrowNumbers) "Yes" else "No",
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Show move number in arrow") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showArrowNumbersExpanded) },
+                    modifier = Modifier.fillMaxWidth().menuAnchor()
+                )
+                ExposedDropdownMenu(expanded = showArrowNumbersExpanded, onDismissRequest = { showArrowNumbersExpanded = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Yes") },
+                        onClick = {
+                            showArrowNumbers = true
+                            showArrowNumbersExpanded = false
+                            saveSettings(newShowArrowNumbers = true)
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("No") },
+                        onClick = {
+                            showArrowNumbers = false
+                            showArrowNumbersExpanded = false
+                            saveSettings(newShowArrowNumbers = false)
+                        }
+                    )
+                }
+            }
+
+            // Color picker for white move arrows
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("White move color")
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(whiteArrowColor.toInt()))
+                        .border(2.dp, Color.Gray, RoundedCornerShape(8.dp))
+                        .clickable { showWhiteColorPicker = true }
+                )
+            }
+
+            // Color picker for black move arrows
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Black move color")
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(blackArrowColor.toInt()))
+                        .border(2.dp, Color.Gray, RoundedCornerShape(8.dp))
+                        .clickable { showBlackColorPicker = true }
+                )
+            }
         }
 
-        // Color picker for black move arrows
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Color of arrow for black moves")
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(manualBlackArrowColor.toInt()))
-                    .border(2.dp, Color.Gray, RoundedCornerShape(8.dp))
-                    .clickable { showBlackColorPicker = true }
-            )
-        }
-
-        // Color picker dialogs
+        // Color picker dialogs (outside the if block so they can still be dismissed)
         if (showWhiteColorPicker) {
             ColorPickerDialog(
-                currentColor = manualWhiteArrowColor,
+                currentColor = whiteArrowColor,
                 title = "Arrow color for white moves",
                 onColorSelected = { color ->
-                    manualWhiteArrowColor = color
-                    saveSettings(whiteArrowColor = color)
+                    whiteArrowColor = color
+                    saveSettings(newWhiteArrowColor = color)
                 },
                 onDismiss = { showWhiteColorPicker = false }
             )
@@ -2242,11 +2282,11 @@ private fun ManualModeSettingsScreen(
 
         if (showBlackColorPicker) {
             ColorPickerDialog(
-                currentColor = manualBlackArrowColor,
+                currentColor = blackArrowColor,
                 title = "Arrow color for black moves",
                 onColorSelected = { color ->
-                    manualBlackArrowColor = color
-                    saveSettings(blackArrowColor = color)
+                    blackArrowColor = color
+                    saveSettings(newBlackArrowColor = color)
                 },
                 onDismiss = { showBlackColorPicker = false }
             )

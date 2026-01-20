@@ -53,7 +53,8 @@ data class ManualStageSettings(
     val hashMb: Int = 64,               // 32, 64, 128, 256
     val multiPv: Int = 3,               // 1-6
     val useNnue: Boolean = true,
-    val numArrows: Int = 4,
+    val drawArrows: Boolean = true,     // Whether to draw arrows at all
+    val numArrows: Int = 2,             // 1-8 (only visible when drawArrows is true)
     val showArrowNumbers: Boolean = false,
     val whiteArrowColor: Long = DEFAULT_WHITE_ARROW_COLOR,
     val blackArrowColor: Long = DEFAULT_BLACK_ARROW_COLOR
@@ -171,6 +172,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         private const val KEY_MANUAL_HASH = "manual_hash"
         private const val KEY_MANUAL_MULTIPV = "manual_multipv"
         private const val KEY_MANUAL_NNUE = "manual_nnue"
+        private const val KEY_MANUAL_DRAWARROWS = "manual_drawarrows"
         private const val KEY_MANUAL_NUMARROWS = "manual_numarrows"
         private const val KEY_MANUAL_SHOWNUMBERS = "manual_shownumbers"
         private const val KEY_MANUAL_WHITE_ARROW_COLOR = "manual_white_arrow_color"
@@ -199,7 +201,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 hashMb = prefs.getInt(KEY_MANUAL_HASH, 64),
                 multiPv = prefs.getInt(KEY_MANUAL_MULTIPV, 3),
                 useNnue = prefs.getBoolean(KEY_MANUAL_NNUE, true),
-                numArrows = prefs.getInt(KEY_MANUAL_NUMARROWS, 4),
+                drawArrows = prefs.getBoolean(KEY_MANUAL_DRAWARROWS, true),
+                numArrows = prefs.getInt(KEY_MANUAL_NUMARROWS, 2),
                 showArrowNumbers = prefs.getBoolean(KEY_MANUAL_SHOWNUMBERS, false),
                 whiteArrowColor = prefs.getLong(KEY_MANUAL_WHITE_ARROW_COLOR, DEFAULT_WHITE_ARROW_COLOR),
                 blackArrowColor = prefs.getLong(KEY_MANUAL_BLACK_ARROW_COLOR, DEFAULT_BLACK_ARROW_COLOR)
@@ -225,6 +228,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             .putInt(KEY_MANUAL_HASH, settings.manualStage.hashMb)
             .putInt(KEY_MANUAL_MULTIPV, settings.manualStage.multiPv)
             .putBoolean(KEY_MANUAL_NNUE, settings.manualStage.useNnue)
+            .putBoolean(KEY_MANUAL_DRAWARROWS, settings.manualStage.drawArrows)
             .putInt(KEY_MANUAL_NUMARROWS, settings.manualStage.numArrows)
             .putBoolean(KEY_MANUAL_SHOWNUMBERS, settings.manualStage.showArrowNumbers)
             .putLong(KEY_MANUAL_WHITE_ARROW_COLOR, settings.manualStage.whiteArrowColor)
