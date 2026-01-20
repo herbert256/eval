@@ -15,7 +15,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.chessreplay.chess.PieceColor
 import com.chessreplay.chess.Square
-import com.chessreplay.data.ChessSource
 
 // Chess piece Unicode symbols for game display
 private const val WHITE_KING = "♔"
@@ -540,12 +539,8 @@ fun GameContent(
             )
             Spacer(modifier = Modifier.height(4.dp))
             // Chess server
-            val serverName = when (uiState.lastSource) {
-                ChessSource.LICHESS -> "lichess.org"
-                ChessSource.CHESS_COM -> "chess.com"
-            }
             Text(
-                text = "Server: $serverName",
+                text = "Server: lichess.org",
                 fontSize = 13.sp,
                 color = Color.White
             )

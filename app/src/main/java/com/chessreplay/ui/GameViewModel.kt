@@ -7,7 +7,6 @@ import androidx.lifecycle.viewModelScope
 import com.chessreplay.chess.ChessBoard
 import com.chessreplay.chess.PgnParser
 import com.chessreplay.data.ChessRepository
-import com.chessreplay.data.ChessSource
 import com.chessreplay.data.LichessGame
 import com.chessreplay.data.Result
 import com.chessreplay.stockfish.AnalysisResult
@@ -115,10 +114,8 @@ data class GameUiState(
     val analyseScores: Map<Int, MoveScore> = emptyMap(),     // Analyse stage scores
     val autoAnalysisCurrentScore: MoveScore? = null,
     val remainingAnalysisMoves: List<Int> = emptyList(),
-    // Chess source settings (per source)
-    val lichessMaxGames: Int = 10,
-    val chessComMaxGames: Int = 10,
-    val lastSource: ChessSource = ChessSource.LICHESS
+    // Lichess settings
+    val lichessMaxGames: Int = 10
 )
 
 class GameViewModel(application: Application) : AndroidViewModel(application) {
@@ -145,17 +142,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val savedLichessUsername: String
         get() = prefs.getString(KEY_LICHESS_USERNAME, "DrNykterstein") ?: "DrNykterstein"
 
-    val savedChessComUsername: String
-        get() = prefs.getString(KEY_CHESSCOM_USERNAME, "magnuscarlsen") ?: "magnuscarlsen"
-
     companion object {
         private const val PREFS_NAME = "chess_replay_prefs"
-        // Per-source settings
+        // Lichess settings
         private const val KEY_LICHESS_USERNAME = "lichess_username"
         private const val KEY_LICHESS_MAX_GAMES = "lichess_max_games"
-        private const val KEY_CHESSCOM_USERNAME = "chesscom_username"
-        private const val KEY_CHESSCOM_MAX_GAMES = "chesscom_max_games"
-        private const val KEY_LAST_SOURCE = "last_source"
         // Preview stage settings
         private const val KEY_PREVIEW_SECONDS = "preview_seconds"
         private const val KEY_PREVIEW_THREADS = "preview_threads"
@@ -308,10 +299,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             .remove(KEY_MANUAL_HASH)
             .remove(KEY_MANUAL_MULTIPV)
             .remove(KEY_MANUAL_NNUE)
-            // Source settings
+            // Lichess settings
             .remove(KEY_LICHESS_MAX_GAMES)
-            .remove(KEY_CHESSCOM_MAX_GAMES)
-            .remove(KEY_LAST_SOURCE)
             .apply()
     }
 
@@ -323,14 +312,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         // Load saved settings (will use defaults if reset or not previously set)
         val settings = loadStockfishSettings()
-        val lastSource = loadLastSource()
         val lichessMaxGames = prefs.getInt(KEY_LICHESS_MAX_GAMES, 10)
-        val chessComMaxGames = prefs.getInt(KEY_CHESSCOM_MAX_GAMES, 10)
         _uiState.value = _uiState.value.copy(
             stockfishSettings = settings,
-            lastSource = lastSource,
-            lichessMaxGames = lichessMaxGames,
-            chessComMaxGames = chessComMaxGames
+            lichessMaxGames = lichessMaxGames
         )
 
         // Initialize Stockfish with manual stage settings (default)
@@ -365,14 +350,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     /**
      * Automatically load the last user's most recent game and start analysis.
-     * Called on app startup if there's a saved username for the last used source.
+     * Called on app startup if there's a saved username.
      */
     private suspend fun autoLoadLastGame() {
-        val lastSource = _uiState.value.lastSource
-        val username = when (lastSource) {
-            ChessSource.LICHESS -> savedLichessUsername
-            ChessSource.CHESS_COM -> savedChessComUsername
-        }
+        val username = savedLichessUsername
         if (username.isBlank()) return
 
         _uiState.value = _uiState.value.copy(
@@ -381,7 +362,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         )
 
         // Fetch only 1 game (the most recent)
-        when (val result = repository.getRecentGames(username, lastSource, 1)) {
+        when (val result = repository.getRecentGames(username, 1)) {
             is Result.Success -> {
                 val games = result.data
                 if (games.isNotEmpty()) {
@@ -409,11 +390,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun loadLastSource(): ChessSource {
-        val sourceOrdinal = prefs.getInt(KEY_LAST_SOURCE, ChessSource.LICHESS.ordinal)
-        return ChessSource.entries.getOrNull(sourceOrdinal) ?: ChessSource.LICHESS
-    }
-
     /**
      * Reload the last game from the active chess server.
      * Called when user clicks the reload button.
@@ -430,20 +406,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(lichessMaxGames = validMax)
     }
 
-    fun setChessComMaxGames(max: Int) {
-        val validMax = max.coerceIn(1, 25)
-        prefs.edit().putInt(KEY_CHESSCOM_MAX_GAMES, validMax).apply()
-        _uiState.value = _uiState.value.copy(chessComMaxGames = validMax)
-    }
-
-    fun fetchGames(username: String, source: ChessSource, maxGames: Int) {
-        // Save the username and source for next time
-        when (source) {
-            ChessSource.LICHESS -> prefs.edit().putString(KEY_LICHESS_USERNAME, username).apply()
-            ChessSource.CHESS_COM -> prefs.edit().putString(KEY_CHESSCOM_USERNAME, username).apply()
-        }
-        prefs.edit().putInt(KEY_LAST_SOURCE, source.ordinal).apply()
-        _uiState.value = _uiState.value.copy(lastSource = source)
+    fun fetchGames(username: String, maxGames: Int) {
+        // Save the username for next time
+        prefs.edit().putString(KEY_LICHESS_USERNAME, username).apply()
 
         // Mark first run complete - user has made their game retrieval choice
         markFirstRunComplete()
@@ -460,7 +425,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 showGameSelection = false
             )
 
-            when (val result = repository.getRecentGames(username, source, maxGames)) {
+            when (val result = repository.getRecentGames(username, maxGames)) {
                 is Result.Success -> {
                     val games = result.data
                     if (games.size == 1) {
@@ -603,10 +568,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         // Flip board if the searched user played black
-        val searchedUser = when (_uiState.value.lastSource) {
-            ChessSource.LICHESS -> savedLichessUsername
-            ChessSource.CHESS_COM -> savedChessComUsername
-        }.lowercase()
+        val searchedUser = savedLichessUsername.lowercase()
         val blackPlayerName = game.players.black.user?.name?.lowercase() ?: ""
         val userPlayedBlack = searchedUser.isNotEmpty() && searchedUser == blackPlayerName
 

@@ -19,7 +19,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.chessreplay.data.ChessSource
 
 /**
  * Main game screen composable that handles game selection and display.
@@ -32,9 +31,7 @@ fun GameScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var lichessUsername by remember { mutableStateOf(viewModel.savedLichessUsername) }
-    var chessComUsername by remember { mutableStateOf(viewModel.savedChessComUsername) }
     var lichessGamesCount by remember { mutableStateOf(uiState.lichessMaxGames.toString()) }
-    var chessComGamesCount by remember { mutableStateOf(uiState.chessComMaxGames.toString()) }
     val focusManager = LocalFocusManager.current
 
     // Keep screen on during Preview and Analyse stages
@@ -148,7 +145,7 @@ fun GameScreen(
         if (uiState.game == null) {
             // Subtitle
             Text(
-                text = "Select Chess Server and Account",
+                text = "Enter Lichess Username",
                 style = MaterialTheme.typography.titleMedium,
                 color = Color(0xFFAAAAAA),
                 textAlign = TextAlign.Center,
@@ -241,7 +238,7 @@ fun GameScreen(
                             onClick = {
                                 focusManager.clearFocus()
                                 if (lichessUsername.isNotBlank()) {
-                                    viewModel.fetchGames(lichessUsername, ChessSource.LICHESS, lichessCount)
+                                    viewModel.fetchGames(lichessUsername, lichessCount)
                                 }
                             },
                             enabled = !uiState.isLoading && lichessUsername.isNotBlank(),
@@ -253,99 +250,10 @@ fun GameScreen(
                             onClick = {
                                 focusManager.clearFocus()
                                 if (lichessUsername.isNotBlank()) {
-                                    viewModel.fetchGames(lichessUsername, ChessSource.LICHESS, 1)
+                                    viewModel.fetchGames(lichessUsername, 1)
                                 }
                             },
                             enabled = !uiState.isLoading && lichessUsername.isNotBlank(),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Retrieve last game")
-                        }
-                    }
-                }
-            }
-
-            // ===== CHESS.COM CARD =====
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 12.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = "chess.com",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFFE0E0E0)
-                    )
-
-                    // Username field
-                    OutlinedTextField(
-                        value = chessComUsername,
-                        onValueChange = { chessComUsername = it },
-                        placeholder = { Text("Enter username") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedBorderColor = Color(0xFF555555),
-                            focusedBorderColor = MaterialTheme.colorScheme.primary
-                        )
-                    )
-
-                    // Games count field
-                    OutlinedTextField(
-                        value = chessComGamesCount,
-                        onValueChange = { newValue ->
-                            val filtered = newValue.filter { it.isDigit() }
-                            chessComGamesCount = filtered
-                            filtered.toIntOrNull()?.let { count ->
-                                viewModel.setChessComMaxGames(count)
-                            }
-                        },
-                        label = { Text("Number of games") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedBorderColor = Color(0xFF555555),
-                            focusedBorderColor = MaterialTheme.colorScheme.primary
-                        )
-                    )
-
-                    // Buttons row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        val chessComCount = chessComGamesCount.toIntOrNull() ?: uiState.chessComMaxGames
-                        Button(
-                            onClick = {
-                                focusManager.clearFocus()
-                                if (chessComUsername.isNotBlank()) {
-                                    viewModel.fetchGames(chessComUsername, ChessSource.CHESS_COM, chessComCount)
-                                }
-                            },
-                            enabled = !uiState.isLoading && chessComUsername.isNotBlank(),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Retrieve last $chessComCount games")
-                        }
-                        Button(
-                            onClick = {
-                                focusManager.clearFocus()
-                                if (chessComUsername.isNotBlank()) {
-                                    viewModel.fetchGames(chessComUsername, ChessSource.CHESS_COM, 1)
-                                }
-                            },
-                            enabled = !uiState.isLoading && chessComUsername.isNotBlank(),
                             modifier = Modifier.weight(1f)
                         ) {
                             Text("Retrieve last game")
