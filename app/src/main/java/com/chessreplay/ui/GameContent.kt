@@ -479,23 +479,81 @@ fun GameContent(
             }
         } else emptyList()
 
-        ChessBoardView(
-            board = uiState.currentBoard,
-            flipped = uiState.flippedBoard,
-            interactionEnabled = uiState.currentStage == AnalysisStage.MANUAL,
-            onMove = { from, to -> viewModel.makeManualMove(from, to) },
-            moveArrows = moveArrows,
-            showArrowNumbers = uiState.stockfishSettings.manualStage.showArrowNumbers,
-            whiteArrowColor = Color(uiState.stockfishSettings.manualStage.whiteArrowColor.toInt()),
-            blackArrowColor = Color(uiState.stockfishSettings.manualStage.blackArrowColor.toInt()),
-            showCoordinates = uiState.boardLayoutSettings.showCoordinates,
-            showLastMove = uiState.boardLayoutSettings.showLastMove,
-            whiteSquareColor = Color(uiState.boardLayoutSettings.whiteSquareColor.toInt()),
-            blackSquareColor = Color(uiState.boardLayoutSettings.blackSquareColor.toInt()),
-            whitePieceColor = Color(uiState.boardLayoutSettings.whitePieceColor.toInt()),
-            blackPieceColor = Color(uiState.boardLayoutSettings.blackPieceColor.toInt()),
-            modifier = Modifier.fillMaxWidth()
-        )
+        // Chess board with optional evaluation bar
+        val evalBarPosition = uiState.boardLayoutSettings.evalBarPosition
+        val showEvalBar = evalBarPosition != EvalBarPosition.NONE
+
+        // Get current score for evaluation bar - calculate directly without remember to ensure reactivity
+        val currentScore = run {
+            // Try to get score from analysis result first (for Manual stage real-time updates)
+            uiState.analysisResult?.lines?.firstOrNull()?.let { line ->
+                if (line.isMate) {
+                    if (line.mateIn > 0) 100f else -100f  // Mate for white/black
+                } else {
+                    line.score
+                }
+            } ?: run {
+                // Fall back to preview/analyse scores
+                val moveIndex = uiState.currentMoveIndex
+                val analyseScore = uiState.analyseScores[moveIndex]
+                val previewScore = uiState.previewScores[moveIndex]
+                (analyseScore ?: previewScore)?.let { score ->
+                    if (score.isMate) {
+                        if (score.mateIn > 0) 100f else -100f
+                    } else {
+                        score.score
+                    }
+                } ?: 0f
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Max)
+        ) {
+            // Left evaluation bar
+            if (showEvalBar && evalBarPosition == EvalBarPosition.LEFT) {
+                EvaluationBar(
+                    score = currentScore,
+                    range = uiState.boardLayoutSettings.evalBarRange,
+                    color1 = Color(uiState.boardLayoutSettings.evalBarColor1.toInt()),
+                    color2 = Color(uiState.boardLayoutSettings.evalBarColor2.toInt()),
+                    flipped = uiState.flippedBoard,
+                    modifier = Modifier.fillMaxHeight()
+                )
+            }
+
+            ChessBoardView(
+                board = uiState.currentBoard,
+                flipped = uiState.flippedBoard,
+                interactionEnabled = uiState.currentStage == AnalysisStage.MANUAL,
+                onMove = { from, to -> viewModel.makeManualMove(from, to) },
+                moveArrows = moveArrows,
+                showArrowNumbers = uiState.stockfishSettings.manualStage.showArrowNumbers,
+                whiteArrowColor = Color(uiState.stockfishSettings.manualStage.whiteArrowColor.toInt()),
+                blackArrowColor = Color(uiState.stockfishSettings.manualStage.blackArrowColor.toInt()),
+                showCoordinates = uiState.boardLayoutSettings.showCoordinates,
+                showLastMove = uiState.boardLayoutSettings.showLastMove,
+                whiteSquareColor = Color(uiState.boardLayoutSettings.whiteSquareColor.toInt()),
+                blackSquareColor = Color(uiState.boardLayoutSettings.blackSquareColor.toInt()),
+                whitePieceColor = Color(uiState.boardLayoutSettings.whitePieceColor.toInt()),
+                blackPieceColor = Color(uiState.boardLayoutSettings.blackPieceColor.toInt()),
+                modifier = Modifier.weight(1f)
+            )
+
+            // Right evaluation bar
+            if (showEvalBar && evalBarPosition == EvalBarPosition.RIGHT) {
+                EvaluationBar(
+                    score = currentScore,
+                    range = uiState.boardLayoutSettings.evalBarRange,
+                    color1 = Color(uiState.boardLayoutSettings.evalBarColor1.toInt()),
+                    color2 = Color(uiState.boardLayoutSettings.evalBarColor2.toInt()),
+                    flipped = uiState.flippedBoard,
+                    modifier = Modifier.fillMaxHeight()
+                )
+            }
+        }
 
         // Show separate bottom bar if mode is BOTH
         if (showPlayersBarsFromVisibility && playerBarMode == PlayerBarMode.BOTH) {
@@ -1025,6 +1083,60 @@ fun CombinedPlayerBar(
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * Evaluation bar component that displays the current position evaluation.
+ * Shows a vertical bar with two colors representing the score.
+ *
+ * @param score The evaluation score in pawns (positive = white advantage, negative = black advantage)
+ * @param range The maximum score range to display (e.g., 5 means -5 to +5 pawns)
+ * @param color1 The color for white's advantage (score portion)
+ * @param color2 The color for black's advantage (filler portion)
+ * @param flipped Whether the board is flipped (affects which color is on top)
+ */
+@Composable
+fun EvaluationBar(
+    score: Float,
+    range: Int,
+    color1: Color,
+    color2: Color,
+    flipped: Boolean,
+    modifier: Modifier = Modifier
+) {
+    // Clamp score to range and calculate proportion
+    val clampedScore = score.coerceIn(-range.toFloat(), range.toFloat())
+    // Convert score to a 0-1 scale where 0.5 is equal position
+    // Positive score = more color1 (from bottom), negative = more color2 (from top)
+    val scoreRatio = ((clampedScore / range) + 1f) / 2f
+
+    // When board is flipped, swap the colors
+    val bottomColor = if (flipped) color2 else color1
+    val topColor = if (flipped) color1 else color2
+    val bottomRatio = (if (flipped) 1f - scoreRatio else scoreRatio).coerceIn(0f, 1f)
+
+    Box(
+        modifier = modifier
+            .width(24.dp)
+            .fillMaxHeight()
+    ) {
+        // Draw top color as background (full height)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(topColor)
+        )
+        // Draw bottom color from the bottom, overlaying the top
+        if (bottomRatio > 0f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(bottomRatio)
+                    .align(Alignment.BottomCenter)
+                    .background(bottomColor)
+            )
         }
     }
 }

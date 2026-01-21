@@ -74,16 +74,16 @@ fun GeneralSettingsScreen(
                     color = Color.White
                 )
 
-                // Long tap for full screen toggle
+                // Full screen mode toggle
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Long tap for full screen", color = Color.White)
+                        Text("Full screen mode", color = Color.White)
                         Text(
-                            text = "Hold anywhere for 1.5 seconds to toggle",
+                            text = "Long tap anywhere to toggle (not saved)",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color(0xFFAAAAAA)
                         )

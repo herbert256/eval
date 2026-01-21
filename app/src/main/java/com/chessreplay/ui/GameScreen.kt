@@ -109,26 +109,35 @@ fun GameScreen(
         }
     }
 
-    // Handle full screen mode
+    // Handle full screen mode (using generalSettings.longTapForFullScreen as the state)
     val window = (context as? Activity)?.window
-    DisposableEffect(uiState.isFullScreen) {
+    val isFullScreen = uiState.generalSettings.longTapForFullScreen
+
+    // Track if we've ever entered full screen to avoid modifying window on startup
+    var hasBeenFullScreen by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isFullScreen) {
         if (window != null) {
-            if (uiState.isFullScreen) {
+            if (isFullScreen) {
                 // Enter full screen mode
+                hasBeenFullScreen = true
                 WindowCompat.setDecorFitsSystemWindows(window, false)
                 val controller = WindowInsetsControllerCompat(window, view)
                 controller.hide(WindowInsetsCompat.Type.systemBars())
                 controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            } else {
-                // Exit full screen mode
+            } else if (hasBeenFullScreen) {
+                // Only restore normal mode if we were previously in full screen
                 WindowCompat.setDecorFitsSystemWindows(window, true)
                 val controller = WindowInsetsControllerCompat(window, view)
                 controller.show(WindowInsetsCompat.Type.systemBars())
             }
         }
+    }
+
+    // Restore normal mode when composable is disposed (only if we modified it)
+    DisposableEffect(Unit) {
         onDispose {
-            // Restore normal mode when composable is disposed
-            if (window != null) {
+            if (window != null && hasBeenFullScreen) {
                 WindowCompat.setDecorFitsSystemWindows(window, true)
                 val controller = WindowInsetsControllerCompat(window, view)
                 controller.show(WindowInsetsCompat.Type.systemBars())
@@ -166,29 +175,26 @@ fun GameScreen(
             .background(backgroundColor)
             .padding(horizontal = 12.dp)
             .verticalScroll(rememberScrollState())
-            .pointerInput(uiState.generalSettings.longTapForFullScreen) {
-                if (uiState.generalSettings.longTapForFullScreen) {
-                    detectTapGestures(
-                        onLongPress = {
-                            viewModel.toggleFullScreen()
-                        }
-                    )
-                }
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onLongPress = {
+                        viewModel.toggleFullScreen()
+                    }
+                )
             }
     ) {
         // Title row with buttons (when game loaded) and settings button - hidden in full screen mode
-        if (!uiState.isFullScreen) {
+        if (!isFullScreen) {
             Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .offset(x = (-8).dp),
+                    .fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Buttons on the left
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy((-8).dp)
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     if (uiState.game != null) {
                         // Reload last game from active server (only if we have a stored last server/user)
@@ -253,7 +259,7 @@ fun GameScreen(
         }
 
         // Stage indicator - only show during Preview and Analyse stages, hidden in full screen mode
-        if (uiState.game != null && uiState.currentStage != AnalysisStage.MANUAL && !uiState.isFullScreen) {
+        if (uiState.game != null && uiState.currentStage != AnalysisStage.MANUAL && !isFullScreen) {
             val isPreviewStage = uiState.currentStage == AnalysisStage.PREVIEW
             val stageText = if (isPreviewStage) "Preview stage" else "Analyse stage"
             val stageColor = if (isPreviewStage) Color(0xFFFFAA00) else Color(0xFF6B9BFF)

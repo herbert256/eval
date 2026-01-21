@@ -35,12 +35,20 @@ fun BoardLayoutSettingsScreen(
     var blackSquareColor by remember { mutableStateOf(boardLayoutSettings.blackSquareColor) }
     var whitePieceColor by remember { mutableStateOf(boardLayoutSettings.whitePieceColor) }
     var blackPieceColor by remember { mutableStateOf(boardLayoutSettings.blackPieceColor) }
+    // Evaluation bar settings
+    var evalBarPosition by remember { mutableStateOf(boardLayoutSettings.evalBarPosition) }
+    var evalBarColor1 by remember { mutableStateOf(boardLayoutSettings.evalBarColor1) }
+    var evalBarColor2 by remember { mutableStateOf(boardLayoutSettings.evalBarColor2) }
+    var evalBarRange by remember { mutableStateOf(boardLayoutSettings.evalBarRange) }
 
     var playerBarModeExpanded by remember { mutableStateOf(false) }
+    var evalBarPositionExpanded by remember { mutableStateOf(false) }
     var showWhiteSquareColorPicker by remember { mutableStateOf(false) }
     var showBlackSquareColorPicker by remember { mutableStateOf(false) }
     var showWhitePieceColorPicker by remember { mutableStateOf(false) }
     var showBlackPieceColorPicker by remember { mutableStateOf(false) }
+    var showEvalBarColor1Picker by remember { mutableStateOf(false) }
+    var showEvalBarColor2Picker by remember { mutableStateOf(false) }
 
     fun saveSettings(
         newShowCoordinates: Boolean = showCoordinates,
@@ -50,7 +58,11 @@ fun BoardLayoutSettingsScreen(
         newWhiteSquareColor: Long = whiteSquareColor,
         newBlackSquareColor: Long = blackSquareColor,
         newWhitePieceColor: Long = whitePieceColor,
-        newBlackPieceColor: Long = blackPieceColor
+        newBlackPieceColor: Long = blackPieceColor,
+        newEvalBarPosition: EvalBarPosition = evalBarPosition,
+        newEvalBarColor1: Long = evalBarColor1,
+        newEvalBarColor2: Long = evalBarColor2,
+        newEvalBarRange: Int = evalBarRange
     ) {
         onSave(BoardLayoutSettings(
             showCoordinates = newShowCoordinates,
@@ -60,7 +72,11 @@ fun BoardLayoutSettingsScreen(
             whiteSquareColor = newWhiteSquareColor,
             blackSquareColor = newBlackSquareColor,
             whitePieceColor = newWhitePieceColor,
-            blackPieceColor = newBlackPieceColor
+            blackPieceColor = newBlackPieceColor,
+            evalBarPosition = newEvalBarPosition,
+            evalBarColor1 = newEvalBarColor1,
+            evalBarColor2 = newEvalBarColor2,
+            evalBarRange = newEvalBarRange
         ))
     }
 
@@ -206,6 +222,136 @@ fun BoardLayoutSettingsScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // ===== EVALUATION BAR CARD =====
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Evaluation bar",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White
+                )
+
+                // Show evaluation bar dropdown
+                ExposedDropdownMenuBox(
+                    expanded = evalBarPositionExpanded,
+                    onExpandedChange = { evalBarPositionExpanded = it }
+                ) {
+                    val displayText = when (evalBarPosition) {
+                        EvalBarPosition.NONE -> "None"
+                        EvalBarPosition.LEFT -> "Left"
+                        EvalBarPosition.RIGHT -> "Right"
+                    }
+                    OutlinedTextField(
+                        value = displayText,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Show evaluation bar") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = evalBarPositionExpanded) },
+                        modifier = Modifier.fillMaxWidth().menuAnchor()
+                    )
+                    ExposedDropdownMenu(expanded = evalBarPositionExpanded, onDismissRequest = { evalBarPositionExpanded = false }) {
+                        DropdownMenuItem(
+                            text = { Text("None") },
+                            onClick = {
+                                evalBarPosition = EvalBarPosition.NONE
+                                evalBarPositionExpanded = false
+                                saveSettings(newEvalBarPosition = EvalBarPosition.NONE)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Left") },
+                            onClick = {
+                                evalBarPosition = EvalBarPosition.LEFT
+                                evalBarPositionExpanded = false
+                                saveSettings(newEvalBarPosition = EvalBarPosition.LEFT)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Right") },
+                            onClick = {
+                                evalBarPosition = EvalBarPosition.RIGHT
+                                evalBarPositionExpanded = false
+                                saveSettings(newEvalBarPosition = EvalBarPosition.RIGHT)
+                            }
+                        )
+                    }
+                }
+
+                // Only show other settings if eval bar is visible
+                if (evalBarPosition != EvalBarPosition.NONE) {
+                    // Color 1 (score color)
+                    ColorSettingRow(
+                        label = "Color 1 (score)",
+                        color = Color(evalBarColor1.toInt()),
+                        onClick = { showEvalBarColor1Picker = true }
+                    )
+
+                    // Color 2 (filler color)
+                    ColorSettingRow(
+                        label = "Color 2 (filler)",
+                        color = Color(evalBarColor2.toInt()),
+                        onClick = { showEvalBarColor2Picker = true }
+                    )
+
+                    // Range stepper
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Range (pawns)", color = Color.White)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    if (evalBarRange > 1) {
+                                        evalBarRange -= 1
+                                        saveSettings(newEvalBarRange = evalBarRange)
+                                    }
+                                },
+                                enabled = evalBarRange > 1,
+                                contentPadding = PaddingValues(horizontal = 12.dp)
+                            ) {
+                                Text("-")
+                            }
+                            Text(
+                                text = evalBarRange.toString(),
+                                color = Color.White,
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.width(24.dp),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                            Button(
+                                onClick = {
+                                    if (evalBarRange < 10) {
+                                        evalBarRange += 1
+                                        saveSettings(newEvalBarRange = evalBarRange)
+                                    }
+                                },
+                                enabled = evalBarRange < 10,
+                                contentPadding = PaddingValues(horizontal = 12.dp)
+                            ) {
+                                Text("+")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         // Reset to defaults button
         Button(
             onClick = {
@@ -218,6 +364,10 @@ fun BoardLayoutSettingsScreen(
                 blackSquareColor = DEFAULT_BLACK_SQUARE_COLOR
                 whitePieceColor = DEFAULT_WHITE_PIECE_COLOR
                 blackPieceColor = DEFAULT_BLACK_PIECE_COLOR
+                evalBarPosition = EvalBarPosition.RIGHT
+                evalBarColor1 = DEFAULT_EVAL_BAR_COLOR_1
+                evalBarColor2 = DEFAULT_EVAL_BAR_COLOR_2
+                evalBarRange = 5
                 // Save the default settings
                 onSave(BoardLayoutSettings())
             },
@@ -280,6 +430,30 @@ fun BoardLayoutSettingsScreen(
                 saveSettings(newBlackPieceColor = color)
             },
             onDismiss = { showBlackPieceColorPicker = false }
+        )
+    }
+
+    if (showEvalBarColor1Picker) {
+        ColorPickerDialog(
+            currentColor = evalBarColor1,
+            title = "Evaluation bar color 1 (score)",
+            onColorSelected = { color ->
+                evalBarColor1 = color
+                saveSettings(newEvalBarColor1 = color)
+            },
+            onDismiss = { showEvalBarColor1Picker = false }
+        )
+    }
+
+    if (showEvalBarColor2Picker) {
+        ColorPickerDialog(
+            currentColor = evalBarColor2,
+            title = "Evaluation bar color 2 (filler)",
+            onColorSelected = { color ->
+                evalBarColor2 = color
+                saveSettings(newEvalBarColor2 = color)
+            },
+            onDismiss = { showEvalBarColor2Picker = false }
         )
     }
 }

@@ -85,12 +85,23 @@ const val DEFAULT_BLACK_SQUARE_COLOR = 0xFFB58863L  // Dark brown
 const val DEFAULT_WHITE_PIECE_COLOR = 0xFFFFFFFF   // White
 const val DEFAULT_BLACK_PIECE_COLOR = 0xFF000000L  // Black
 
+// Evaluation bar defaults
+const val DEFAULT_EVAL_BAR_COLOR_1 = 0xFFFFFFFF   // White (score color)
+const val DEFAULT_EVAL_BAR_COLOR_2 = 0xFF000000L  // Black (filler color)
+
 // Player bar display mode
 enum class PlayerBarMode {
     NONE,    // No player bars
     TOP,     // Single combined bar at top
     BOTTOM,  // Single combined bar at bottom
     BOTH     // Separate bars above and below board (default)
+}
+
+// Evaluation bar position
+enum class EvalBarPosition {
+    NONE,    // No evaluation bar
+    LEFT,    // Evaluation bar on the left of the board
+    RIGHT    // Evaluation bar on the right of the board (default)
 }
 
 // Board layout settings
@@ -102,7 +113,12 @@ data class BoardLayoutSettings(
     val whiteSquareColor: Long = DEFAULT_WHITE_SQUARE_COLOR,
     val blackSquareColor: Long = DEFAULT_BLACK_SQUARE_COLOR,
     val whitePieceColor: Long = DEFAULT_WHITE_PIECE_COLOR,
-    val blackPieceColor: Long = DEFAULT_BLACK_PIECE_COLOR
+    val blackPieceColor: Long = DEFAULT_BLACK_PIECE_COLOR,
+    // Evaluation bar settings
+    val evalBarPosition: EvalBarPosition = EvalBarPosition.RIGHT,
+    val evalBarColor1: Long = DEFAULT_EVAL_BAR_COLOR_1,
+    val evalBarColor2: Long = DEFAULT_EVAL_BAR_COLOR_2,
+    val evalBarRange: Int = 5
 )
 
 // Interface visibility settings for Preview stage
@@ -201,10 +217,8 @@ data class GameUiState(
     val chessComMaxGames: Int = 10,
     // Last server used for reload
     val hasLastServerUser: Boolean = false,
-    // General settings
-    val generalSettings: GeneralSettings = GeneralSettings(),
-    // Full screen state
-    val isFullScreen: Boolean = false
+    // General settings (fullScreenMode is stored here, not persistent)
+    val generalSettings: GeneralSettings = GeneralSettings()
 )
 
 class GameViewModel(application: Application) : AndroidViewModel(application) {
@@ -292,6 +306,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         private const val KEY_BOARD_BLACK_SQUARE_COLOR = "board_black_square_color"
         private const val KEY_BOARD_WHITE_PIECE_COLOR = "board_white_piece_color"
         private const val KEY_BOARD_BLACK_PIECE_COLOR = "board_black_piece_color"
+        // Evaluation bar settings
+        private const val KEY_EVAL_BAR_POSITION = "eval_bar_position"
+        private const val KEY_EVAL_BAR_COLOR_1 = "eval_bar_color_1"
+        private const val KEY_EVAL_BAR_COLOR_2 = "eval_bar_color_2"
+        private const val KEY_EVAL_BAR_RANGE = "eval_bar_range"
         // Interface visibility settings - Preview stage
         private const val KEY_PREVIEW_VIS_MOVELIST = "preview_vis_movelist"
         private const val KEY_PREVIEW_VIS_BOARD = "preview_vis_board"
@@ -314,8 +333,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         private const val KEY_MANUAL_VIS_PGN = "manual_vis_pgn"
         // First run tracking - stores the app version code when user first made a choice
         private const val KEY_FIRST_GAME_RETRIEVED_VERSION = "first_game_retrieved_version"
-        // General settings
-        private const val KEY_GENERAL_LONG_TAP_FULLSCREEN = "general_long_tap_fullscreen"
     }
 
     private fun loadStockfishSettings(): StockfishSettings {
@@ -378,6 +395,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private fun loadBoardLayoutSettings(): BoardLayoutSettings {
         val playerBarModeOrdinal = prefs.getInt(KEY_BOARD_PLAYER_BAR_MODE, PlayerBarMode.BOTH.ordinal)
         val playerBarMode = PlayerBarMode.entries.getOrElse(playerBarModeOrdinal) { PlayerBarMode.BOTH }
+        val evalBarPositionOrdinal = prefs.getInt(KEY_EVAL_BAR_POSITION, EvalBarPosition.RIGHT.ordinal)
+        val evalBarPosition = EvalBarPosition.entries.getOrElse(evalBarPositionOrdinal) { EvalBarPosition.RIGHT }
         return BoardLayoutSettings(
             showCoordinates = prefs.getBoolean(KEY_BOARD_SHOW_COORDINATES, true),
             showLastMove = prefs.getBoolean(KEY_BOARD_SHOW_LAST_MOVE, true),
@@ -386,7 +405,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             whiteSquareColor = prefs.getLong(KEY_BOARD_WHITE_SQUARE_COLOR, DEFAULT_WHITE_SQUARE_COLOR),
             blackSquareColor = prefs.getLong(KEY_BOARD_BLACK_SQUARE_COLOR, DEFAULT_BLACK_SQUARE_COLOR),
             whitePieceColor = prefs.getLong(KEY_BOARD_WHITE_PIECE_COLOR, DEFAULT_WHITE_PIECE_COLOR),
-            blackPieceColor = prefs.getLong(KEY_BOARD_BLACK_PIECE_COLOR, DEFAULT_BLACK_PIECE_COLOR)
+            blackPieceColor = prefs.getLong(KEY_BOARD_BLACK_PIECE_COLOR, DEFAULT_BLACK_PIECE_COLOR),
+            evalBarPosition = evalBarPosition,
+            evalBarColor1 = prefs.getLong(KEY_EVAL_BAR_COLOR_1, DEFAULT_EVAL_BAR_COLOR_1),
+            evalBarColor2 = prefs.getLong(KEY_EVAL_BAR_COLOR_2, DEFAULT_EVAL_BAR_COLOR_2),
+            evalBarRange = prefs.getInt(KEY_EVAL_BAR_RANGE, 5)
         )
     }
 
@@ -400,6 +423,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             .putLong(KEY_BOARD_BLACK_SQUARE_COLOR, settings.blackSquareColor)
             .putLong(KEY_BOARD_WHITE_PIECE_COLOR, settings.whitePieceColor)
             .putLong(KEY_BOARD_BLACK_PIECE_COLOR, settings.blackPieceColor)
+            .putInt(KEY_EVAL_BAR_POSITION, settings.evalBarPosition.ordinal)
+            .putLong(KEY_EVAL_BAR_COLOR_1, settings.evalBarColor1)
+            .putLong(KEY_EVAL_BAR_COLOR_2, settings.evalBarColor2)
+            .putInt(KEY_EVAL_BAR_RANGE, settings.evalBarRange)
             .apply()
     }
 
@@ -457,15 +484,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun loadGeneralSettings(): GeneralSettings {
+        // Full screen mode is not persistent - always starts as false
         return GeneralSettings(
-            longTapForFullScreen = prefs.getBoolean(KEY_GENERAL_LONG_TAP_FULLSCREEN, false)
+            longTapForFullScreen = false
         )
     }
 
+    @Suppress("UNUSED_PARAMETER")
     private fun saveGeneralSettings(settings: GeneralSettings) {
-        prefs.edit()
-            .putBoolean(KEY_GENERAL_LONG_TAP_FULLSCREEN, settings.longTapForFullScreen)
-            .apply()
+        // Full screen mode is not persistent - do not save
+        // Just update the UI state
     }
 
     /**
@@ -1544,13 +1572,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Toggle full screen mode.
-     * Only works if "Long tap for full screen" is enabled in general settings.
+     * Toggle full screen mode via long tap.
+     * Directly toggles the fullScreenMode setting.
      */
     fun toggleFullScreen() {
-        if (!_uiState.value.generalSettings.longTapForFullScreen) return
+        val currentSettings = _uiState.value.generalSettings
+        val newSettings = currentSettings.copy(
+            longTapForFullScreen = !currentSettings.longTapForFullScreen
+        )
         _uiState.value = _uiState.value.copy(
-            isFullScreen = !_uiState.value.isFullScreen
+            generalSettings = newSettings
         )
     }
 
