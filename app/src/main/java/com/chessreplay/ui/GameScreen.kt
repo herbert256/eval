@@ -124,7 +124,7 @@ fun GameScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (uiState.game != null) {
-                // Two buttons on the left
+                // Buttons on the left
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.offset(y = (-4).dp)) {
                     // Reload last game from active server
                     IconButton(onClick = { viewModel.reloadLastGame() }) {
@@ -133,6 +133,19 @@ fun GameScreen(
                     // Show retrieve games view
                     IconButton(onClick = { viewModel.clearGame() }) {
                         Text("≡", fontSize = 34.sp, lineHeight = 34.sp)
+                    }
+                    // Arrow toggle - only show in Manual stage
+                    if (uiState.currentStage == AnalysisStage.MANUAL) {
+                        val drawArrowsEnabled = uiState.stockfishSettings.manualStage.drawArrows
+                        IconButton(onClick = { viewModel.toggleDrawArrows() }) {
+                            Text(
+                                text = "↗",
+                                fontSize = 38.sp,
+                                lineHeight = 38.sp,
+                                color = if (drawArrowsEnabled) Color.White else Color.Gray,
+                                modifier = Modifier.offset(y = (-6).dp)
+                            )
+                        }
                     }
                 }
             } else {
@@ -187,9 +200,10 @@ fun GameScreen(
                         .padding(vertical = 4.dp)
                 ) {
                     Text(
-                        text = "$stageText - Click for manual stage",
+                        text = "$stageText - Tap here for manual stage",
                         fontWeight = FontWeight.Medium,
-                        fontSize = 14.sp
+                        fontSize = 16.sp,
+                        color = Color.Yellow
                     )
                 }
             }

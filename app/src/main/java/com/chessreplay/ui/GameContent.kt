@@ -374,21 +374,6 @@ fun GameContent(
         )
     }
 
-    // Back to original game button (shown when exploring a line) - above navigation buttons
-    if (uiState.isExploringLine) {
-        Button(
-            onClick = { viewModel.backToOriginalGame() },
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF4A6741)
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp)
-        ) {
-            Text("↩ Back to game", fontSize = 13.sp)
-        }
-    }
-
     // Controls - hide during auto-analysis
     if (uiState.currentStage == AnalysisStage.MANUAL) {
         Row(
@@ -452,23 +437,34 @@ fun GameContent(
                 }
             }
 
-            // Right part: Arrow toggle and flip board icons
+            // Right part: Back to game button (when exploring) or flip board icon
             Row(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Draw arrows toggle icon
-                val drawArrowsEnabled = uiState.stockfishSettings.manualStage.drawArrows
-                IconButton(onClick = { viewModel.toggleDrawArrows() }) {
-                    Text(
-                        text = "↗",
-                        fontSize = 24.sp,
-                        color = if (drawArrowsEnabled) Color.White else Color.Gray
-                    )
+                if (uiState.isExploringLine) {
+                    // Back to game button - same style as navigation buttons
+                    Button(
+                        onClick = { viewModel.backToOriginalGame() },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        ),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+                    ) {
+                        Text("Back to game", fontSize = 18.sp)
+                    }
+                } else {
+                    // Flip board button - same size as nav buttons but bigger icon
+                    Button(
+                        onClick = { viewModel.flipBoard() },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        ),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
+                    ) {
+                        Text(text = "↻", fontSize = 26.sp)
+                    }
                 }
-                Spacer(modifier = Modifier.width(4.dp))
-                // Flip board button
-                ControlButton("↻") { viewModel.flipBoard() }
             }
         }
     }

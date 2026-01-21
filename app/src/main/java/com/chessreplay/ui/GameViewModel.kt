@@ -870,7 +870,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 currentBoard = newBoard,
                 exploringLineMoveIndex = newIndex
             )
-            analyzePosition(newBoard)
+            // Use full restart for proper Stockfish analysis
+            restartAnalysisForExploringLine()
         } else {
             val currentIndex = _uiState.value.currentMoveIndex
             val moves = _uiState.value.moves
@@ -902,7 +903,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 currentBoard = newBoard,
                 exploringLineMoveIndex = newIndex
             )
-            analyzePosition(newBoard)
+            // Use full restart for proper Stockfish analysis
+            restartAnalysisForExploringLine()
         } else {
             val currentIndex = _uiState.value.currentMoveIndex
             if (currentIndex < 0) return
