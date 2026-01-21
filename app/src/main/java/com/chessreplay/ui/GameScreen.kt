@@ -48,6 +48,31 @@ fun GameScreen(
     var lichessGamesCount by remember { mutableStateOf(uiState.lichessMaxGames.toString()) }
     val focusManager = LocalFocusManager.current
 
+    // Calculate background color based on game result
+    val backgroundColor = remember(uiState.game) {
+        val game = uiState.game
+        if (game == null) {
+            Color(0xFF2A2A2A)  // Default dark gray when no game loaded
+        } else {
+            val searchedUser = viewModel.savedLichessUsername.lowercase()
+            val whitePlayerName = game.players.white.user?.name?.lowercase() ?: ""
+            val blackPlayerName = game.players.black.user?.name?.lowercase() ?: ""
+
+            // Determine which color the user played
+            val userPlayedWhite = searchedUser.isNotEmpty() && searchedUser == whitePlayerName
+            val userPlayedBlack = searchedUser.isNotEmpty() && searchedUser == blackPlayerName
+
+            when {
+                game.winner == "white" && userPlayedWhite -> Color(0xFF2A4A2A)  // Light green - user won as white
+                game.winner == "black" && userPlayedBlack -> Color(0xFF2A4A2A)  // Light green - user won as black
+                game.winner == "white" && userPlayedBlack -> Color(0xFF4A2A2A)  // Light red - user lost as black
+                game.winner == "black" && userPlayedWhite -> Color(0xFF4A2A2A)  // Light red - user lost as white
+                game.winner == null -> Color(0xFF2A3A4A)  // Light blue - draw
+                else -> Color(0xFF2A2A2A)  // Default dark gray
+            }
+        }
+    }
+
     // Keep screen on during Preview and Analyse stages
     val view = LocalView.current
     DisposableEffect(uiState.currentStage) {
@@ -72,7 +97,7 @@ fun GameScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF2A2A2A))  // Lighter dark gray background
+            .background(backgroundColor)
             .padding(horizontal = 12.dp)
             .verticalScroll(rememberScrollState())
     ) {
