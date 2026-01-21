@@ -1,15 +1,16 @@
 # Chess Replay
 
-A powerful Android application for fetching and analyzing chess games from Lichess.org using the Stockfish 17.1 chess engine. The app provides comprehensive game analysis through an intelligent three-stage system that automatically identifies critical positions and mistakes.
+A powerful Android application for fetching and analyzing chess games from Lichess.org and Chess.com using the Stockfish 17.1 chess engine. The app provides comprehensive game analysis through an intelligent three-stage system that automatically identifies critical positions and mistakes.
 
 ## Features
 
 ### Game Retrieval
-- **Lichess Integration**: Fetch recent games from any Lichess.org user by username
-- **Multiple Games**: Retrieve up to 100 games at once and select which to analyze
-- **Quick Reload**: "Retrieve last game" button for instant access to most recent game
+- **Dual Server Support**: Fetch recent games from both Lichess.org and Chess.com
+- **Multiple Games**: Retrieve up to 25 games at once and select which to analyze
+- **Quick Reload**: Reload button for instant access to most recent game from last used server/user
 - **Auto-Load**: Automatically loads your most recent game on app startup (after initial setup)
 - **PGN Parsing**: Full support for PGN notation including clock times, openings, and game metadata
+- **Persistent Usernames**: Both Lichess and Chess.com usernames are saved for convenience
 
 ### Three-Stage Analysis System
 
@@ -256,7 +257,8 @@ This project is provided as-is for personal use in analyzing chess games.
 
 ## Acknowledgments
 
-- **Lichess.org** - For providing the excellent free API for game retrieval
+- **Lichess.org** - For providing an excellent free API for game retrieval
+- **Chess.com** - For providing a public API for game retrieval
 - **Stockfish Team** - For the world's strongest open-source chess engine
 - **Jetpack Compose** - For modern Android UI development
 

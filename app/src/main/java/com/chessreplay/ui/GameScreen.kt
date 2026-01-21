@@ -23,13 +23,21 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.foundation.text.ClickableText
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.lifecycle.viewmodel.compose.viewModel
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
+import android.view.View
+import android.view.WindowManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.delay
+import com.chessreplay.data.ChessServer
 
 /**
  * Main game screen composable that handles game selection and display.
@@ -61,6 +69,8 @@ fun GameScreen(
 
     var lichessUsername by remember { mutableStateOf(viewModel.savedLichessUsername) }
     var lichessGamesCount by remember { mutableStateOf(uiState.lichessMaxGames.toString()) }
+    var chessComUsername by remember { mutableStateOf(viewModel.savedChessComUsername) }
+    var chessComGamesCount by remember { mutableStateOf(uiState.chessComMaxGames.toString()) }
     val focusManager = LocalFocusManager.current
 
     // Calculate background color based on game result
@@ -99,16 +109,45 @@ fun GameScreen(
         }
     }
 
+    // Handle full screen mode
+    val window = (context as? Activity)?.window
+    DisposableEffect(uiState.isFullScreen) {
+        if (window != null) {
+            if (uiState.isFullScreen) {
+                // Enter full screen mode
+                WindowCompat.setDecorFitsSystemWindows(window, false)
+                val controller = WindowInsetsControllerCompat(window, view)
+                controller.hide(WindowInsetsCompat.Type.systemBars())
+                controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            } else {
+                // Exit full screen mode
+                WindowCompat.setDecorFitsSystemWindows(window, true)
+                val controller = WindowInsetsControllerCompat(window, view)
+                controller.show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+        onDispose {
+            // Restore normal mode when composable is disposed
+            if (window != null) {
+                WindowCompat.setDecorFitsSystemWindows(window, true)
+                val controller = WindowInsetsControllerCompat(window, view)
+                controller.show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+    }
+
     // Show settings screen or main game screen
     if (uiState.showSettingsDialog) {
         SettingsScreen(
             stockfishSettings = uiState.stockfishSettings,
             boardLayoutSettings = uiState.boardLayoutSettings,
             interfaceVisibility = uiState.interfaceVisibility,
+            generalSettings = uiState.generalSettings,
             onBack = { viewModel.hideSettingsDialog() },
             onSaveStockfish = { viewModel.updateStockfishSettings(it) },
             onSaveBoardLayout = { viewModel.updateBoardLayoutSettings(it) },
-            onSaveInterfaceVisibility = { viewModel.updateInterfaceVisibilitySettings(it) }
+            onSaveInterfaceVisibility = { viewModel.updateInterfaceVisibilitySettings(it) },
+            onSaveGeneral = { viewModel.updateGeneralSettings(it) }
         )
         return
     }
@@ -127,81 +166,94 @@ fun GameScreen(
             .background(backgroundColor)
             .padding(horizontal = 12.dp)
             .verticalScroll(rememberScrollState())
+            .pointerInput(uiState.generalSettings.longTapForFullScreen) {
+                if (uiState.generalSettings.longTapForFullScreen) {
+                    detectTapGestures(
+                        onLongPress = {
+                            viewModel.toggleFullScreen()
+                        }
+                    )
+                }
+            }
     ) {
-        // Title row with buttons (when game loaded) and settings button
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .offset(x = (-8).dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Buttons on the left
+        // Title row with buttons (when game loaded) and settings button - hidden in full screen mode
+        if (!uiState.isFullScreen) {
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy((-8).dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .offset(x = (-8).dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                if (uiState.game != null) {
-                    // Reload last game from active server
-                    Box(
-                        modifier = Modifier
-                            .size(52.dp)
-                            .clickable { viewModel.reloadLastGame() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("↻", fontSize = 44.sp, color = Color.White, modifier = Modifier.offset(y = (-12).dp))
-                    }
-                    // Show retrieve games view
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clickable { viewModel.clearGame() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("≡", fontSize = 44.sp, color = Color.White, modifier = Modifier.offset(y = (-12).dp))
-                    }
-                    // Arrow mode toggle - only show in Manual stage
-                    if (uiState.currentStage == AnalysisStage.MANUAL) {
+                // Buttons on the left
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy((-8).dp)
+                ) {
+                    if (uiState.game != null) {
+                        // Reload last game from active server (only if we have a stored last server/user)
+                        if (uiState.hasLastServerUser) {
+                            Box(
+                                modifier = Modifier
+                                    .size(52.dp)
+                                    .clickable { viewModel.reloadLastGame() },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("↻", fontSize = 44.sp, color = Color.White, modifier = Modifier.offset(y = (-12).dp))
+                            }
+                        }
+                        // Show retrieve games view
                         Box(
                             modifier = Modifier
                                 .size(44.dp)
-                                .clickable { viewModel.cycleArrowMode() },
+                                .clickable { viewModel.clearGame() },
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("↗", fontSize = 40.sp, color = Color.White, modifier = Modifier.offset(y = (-11).dp))
+                            Text("≡", fontSize = 44.sp, color = Color.White, modifier = Modifier.offset(y = (-12).dp))
+                        }
+                        // Arrow mode toggle - only show in Manual stage
+                        if (uiState.currentStage == AnalysisStage.MANUAL) {
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clickable { viewModel.cycleArrowMode() },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("↗", fontSize = 40.sp, color = Color.White, modifier = Modifier.offset(y = (-11).dp))
+                            }
                         }
                     }
+                    // Settings and help icons
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clickable { viewModel.showSettingsDialog() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("⚙", fontSize = 30.sp, color = Color.White, modifier = Modifier.offset(y = (-3).dp))
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clickable { viewModel.showHelpScreen() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("?", fontSize = 30.sp, color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.offset(y = (-3).dp))
+                    }
                 }
-                // Settings and help icons
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clickable { viewModel.showSettingsDialog() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("⚙", fontSize = 30.sp, color = Color.White, modifier = Modifier.offset(y = (-3).dp))
-                }
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clickable { viewModel.showHelpScreen() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("?", fontSize = 30.sp, color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.offset(y = (-3).dp))
-                }
+                Text(
+                    text = "Chess Replay",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.End,
+                    maxLines = 1
+                )
             }
-            Text(
-                text = "Chess Replay",
-                style = MaterialTheme.typography.headlineMedium,
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.End,
-                maxLines = 1
-            )
         }
 
-        // Stage indicator - only show during Preview and Analyse stages
-        if (uiState.game != null && uiState.currentStage != AnalysisStage.MANUAL) {
+        // Stage indicator - only show during Preview and Analyse stages, hidden in full screen mode
+        if (uiState.game != null && uiState.currentStage != AnalysisStage.MANUAL && !uiState.isFullScreen) {
             val isPreviewStage = uiState.currentStage == AnalysisStage.PREVIEW
             val stageText = if (isPreviewStage) "Preview stage" else "Analyse stage"
             val stageColor = if (isPreviewStage) Color(0xFFFFAA00) else Color(0xFF6B9BFF)
@@ -251,7 +303,7 @@ fun GameScreen(
         if (uiState.game == null) {
             // Subtitle
             Text(
-                text = "Enter Lichess Username",
+                text = "Get chess game",
                 style = MaterialTheme.typography.titleMedium,
                 color = Color(0xFFAAAAAA),
                 textAlign = TextAlign.Center,
@@ -344,7 +396,7 @@ fun GameScreen(
                             onClick = {
                                 focusManager.clearFocus()
                                 if (lichessUsername.isNotBlank()) {
-                                    viewModel.fetchGames(lichessUsername, lichessCount)
+                                    viewModel.fetchGames(ChessServer.LICHESS, lichessUsername, lichessCount)
                                 }
                             },
                             enabled = !uiState.isLoading && lichessUsername.isNotBlank(),
@@ -356,10 +408,99 @@ fun GameScreen(
                             onClick = {
                                 focusManager.clearFocus()
                                 if (lichessUsername.isNotBlank()) {
-                                    viewModel.fetchGames(lichessUsername, 1)
+                                    viewModel.fetchGames(ChessServer.LICHESS, lichessUsername, 1)
                                 }
                             },
                             enabled = !uiState.isLoading && lichessUsername.isNotBlank(),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Retrieve last game")
+                        }
+                    }
+                }
+            }
+
+            // ===== CHESS.COM CARD =====
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "chess.com",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFFE0E0E0)
+                    )
+
+                    // Username field
+                    OutlinedTextField(
+                        value = chessComUsername,
+                        onValueChange = { chessComUsername = it },
+                        placeholder = { Text("Enter username") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedBorderColor = Color(0xFF555555),
+                            focusedBorderColor = MaterialTheme.colorScheme.primary
+                        )
+                    )
+
+                    // Games count field
+                    OutlinedTextField(
+                        value = chessComGamesCount,
+                        onValueChange = { newValue ->
+                            val filtered = newValue.filter { it.isDigit() }
+                            chessComGamesCount = filtered
+                            filtered.toIntOrNull()?.let { count ->
+                                viewModel.setChessComMaxGames(count)
+                            }
+                        },
+                        label = { Text("Number of games") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedBorderColor = Color(0xFF555555),
+                            focusedBorderColor = MaterialTheme.colorScheme.primary
+                        )
+                    )
+
+                    // Buttons row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val chessComCount = chessComGamesCount.toIntOrNull() ?: uiState.chessComMaxGames
+                        Button(
+                            onClick = {
+                                focusManager.clearFocus()
+                                if (chessComUsername.isNotBlank()) {
+                                    viewModel.fetchGames(ChessServer.CHESS_COM, chessComUsername, chessComCount)
+                                }
+                            },
+                            enabled = !uiState.isLoading && chessComUsername.isNotBlank(),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Retrieve last $chessComCount games")
+                        }
+                        Button(
+                            onClick = {
+                                focusManager.clearFocus()
+                                if (chessComUsername.isNotBlank()) {
+                                    viewModel.fetchGames(ChessServer.CHESS_COM, chessComUsername, 1)
+                                }
+                            },
+                            enabled = !uiState.isLoading && chessComUsername.isNotBlank(),
                             modifier = Modifier.weight(1f)
                         ) {
                             Text("Retrieve last game")

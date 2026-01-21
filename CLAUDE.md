@@ -22,17 +22,17 @@ cp app/build/outputs/apk/debug/app-debug.apk /Users/herbert/cloud/
 
 ## Project Overview
 
-Chess Replay is an Android app for fetching and analyzing chess games from Lichess.org using the Stockfish 17.1 chess engine. The app retrieves games via the Lichess API, parses PGN notation, and provides multi-stage computer analysis with an interactive board display.
+Chess Replay is an Android app for fetching and analyzing chess games from Lichess.org and Chess.com using the Stockfish 17.1 chess engine. The app retrieves games via both APIs, parses PGN notation, and provides multi-stage computer analysis with an interactive board display.
 
 **Key Dependencies:**
 - External app required: "Stockfish 17.1 Chess Engine" (com.stockfish141) from Google Play Store
 - Android SDK: minSdk 26, targetSdk 34, compileSdk 34
 - Kotlin with Jetpack Compose for UI
-- Retrofit for networking (Lichess API)
+- Retrofit for networking (Lichess and Chess.com APIs)
 
 ## Architecture
 
-### Package Structure (22 Kotlin files, ~8,620 lines)
+### Package Structure (23 Kotlin files, ~8,900 lines)
 
 ```
 com.chessreplay/
@@ -42,13 +42,14 @@ com.chessreplay/
 │   └── PgnParser.kt (70 lines) - PGN parsing with clock time extraction
 ├── data/
 │   ├── LichessApi.kt (48 lines) - Retrofit interface for Lichess NDJSON API
+│   ├── ChessComApi.kt (88 lines) - Retrofit interface for Chess.com API
 │   ├── LichessModels.kt (40 lines) - Data classes: LichessGame, Players, Clock
-│   └── LichessRepository.kt (56 lines) - Repository with sealed Result<T> type
+│   └── LichessRepository.kt (207 lines) - Repository with ChessServer enum and dual-server support
 ├── stockfish/
 │   └── StockfishEngine.kt (504 lines) - UCI protocol wrapper, process management
 └── ui/
-    ├── GameViewModel.kt (2,042 lines) - Central state management, analysis orchestration
-    ├── GameScreen.kt (515 lines) - Main screen, Lichess username input, Stockfish check
+    ├── GameViewModel.kt (2,100 lines) - Central state management, analysis orchestration
+    ├── GameScreen.kt (590 lines) - Main screen, dual-server cards (Lichess/Chess.com), Stockfish check
     ├── GameContent.kt (1,030 lines) - Game display: board, players, moves, result bar
     ├── ChessBoardView.kt (554 lines) - Canvas-based interactive chess board with arrows
     ├── AnalysisComponents.kt (611 lines) - Evaluation graph, analysis panel
@@ -67,6 +68,9 @@ com.chessreplay/
 ### Key Data Classes
 
 ```kotlin
+// Chess servers
+enum class ChessServer { LICHESS, CHESS_COM }
+
 // Analysis stages
 enum class AnalysisStage { PREVIEW, ANALYSE, MANUAL }
 
@@ -222,6 +226,12 @@ SharedPreferences keys in `chess_replay_prefs`:
 ```
 // Lichess
 lichess_username, lichess_max_games
+
+// Chess.com
+chesscom_username, chesscom_max_games
+
+// Last server/user for reload
+last_server, last_username
 
 // Preview stage
 preview_seconds, preview_threads, preview_hash, preview_nnue

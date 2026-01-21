@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
  */
 enum class SettingsSubScreen {
     MAIN,
+    GENERAL_SETTINGS,
     ARROW_SETTINGS,
     STOCKFISH,
     BOARD_LAYOUT,
@@ -34,10 +35,12 @@ fun SettingsScreen(
     stockfishSettings: StockfishSettings,
     boardLayoutSettings: BoardLayoutSettings,
     interfaceVisibility: InterfaceVisibilitySettings,
+    generalSettings: GeneralSettings,
     onBack: () -> Unit,
     onSaveStockfish: (StockfishSettings) -> Unit,
     onSaveBoardLayout: (BoardLayoutSettings) -> Unit,
-    onSaveInterfaceVisibility: (InterfaceVisibilitySettings) -> Unit
+    onSaveInterfaceVisibility: (InterfaceVisibilitySettings) -> Unit,
+    onSaveGeneral: (GeneralSettings) -> Unit
 ) {
     var currentSubScreen by remember { mutableStateOf(SettingsSubScreen.MAIN) }
 
@@ -54,6 +57,12 @@ fun SettingsScreen(
         SettingsSubScreen.MAIN -> SettingsMainScreen(
             onBack = onBack,
             onNavigate = { currentSubScreen = it }
+        )
+        SettingsSubScreen.GENERAL_SETTINGS -> GeneralSettingsScreen(
+            generalSettings = generalSettings,
+            onBackToSettings = { currentSubScreen = SettingsSubScreen.MAIN },
+            onBackToGame = onBack,
+            onSave = onSaveGeneral
         )
         SettingsSubScreen.ARROW_SETTINGS -> ArrowSettingsScreen(
             stockfishSettings = stockfishSettings,
@@ -116,6 +125,13 @@ private fun SettingsMainScreen(
         }
 
         Spacer(modifier = Modifier.height(8.dp))
+
+        // General settings card
+        SettingsNavigationCard(
+            title = "General settings",
+            description = "Full screen mode, app-wide settings",
+            onClick = { onNavigate(SettingsSubScreen.GENERAL_SETTINGS) }
+        )
 
         // Board layout card
         SettingsNavigationCard(

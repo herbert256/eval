@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.chessreplay.chess.ChessBoard
 import com.chessreplay.chess.PgnParser
 import com.chessreplay.data.ChessRepository
+import com.chessreplay.data.ChessServer
 import com.chessreplay.data.LichessGame
 import com.chessreplay.data.Result
 import com.google.gson.Gson
@@ -195,7 +196,15 @@ data class GameUiState(
     val autoAnalysisCurrentScore: MoveScore? = null,
     val remainingAnalysisMoves: List<Int> = emptyList(),
     // Lichess settings
-    val lichessMaxGames: Int = 10
+    val lichessMaxGames: Int = 10,
+    // Chess.com settings
+    val chessComMaxGames: Int = 10,
+    // Last server used for reload
+    val hasLastServerUser: Boolean = false,
+    // General settings
+    val generalSettings: GeneralSettings = GeneralSettings(),
+    // Full screen state
+    val isFullScreen: Boolean = false
 )
 
 class GameViewModel(application: Application) : AndroidViewModel(application) {
@@ -223,6 +232,22 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val savedLichessUsername: String
         get() = prefs.getString(KEY_LICHESS_USERNAME, "DrNykterstein") ?: "DrNykterstein"
 
+    val savedChessComUsername: String
+        get() = prefs.getString(KEY_CHESSCOM_USERNAME, "magnuscarlsen") ?: "magnuscarlsen"
+
+    val savedLastServer: ChessServer?
+        get() {
+            val serverName = prefs.getString(KEY_LAST_SERVER, null) ?: return null
+            return try {
+                ChessServer.valueOf(serverName)
+            } catch (e: Exception) {
+                null
+            }
+        }
+
+    val savedLastUsername: String?
+        get() = prefs.getString(KEY_LAST_USERNAME, null)
+
     companion object {
         private const val PREFS_NAME = "chess_replay_prefs"
         // Current game storage
@@ -230,6 +255,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         // Lichess settings
         private const val KEY_LICHESS_USERNAME = "lichess_username"
         private const val KEY_LICHESS_MAX_GAMES = "lichess_max_games"
+        // Chess.com settings
+        private const val KEY_CHESSCOM_USERNAME = "chesscom_username"
+        private const val KEY_CHESSCOM_MAX_GAMES = "chesscom_max_games"
+        // Last server/user for reload
+        private const val KEY_LAST_SERVER = "last_server"
+        private const val KEY_LAST_USERNAME = "last_username"
         // Preview stage settings
         private const val KEY_PREVIEW_SECONDS = "preview_seconds"
         private const val KEY_PREVIEW_THREADS = "preview_threads"
@@ -283,6 +314,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         private const val KEY_MANUAL_VIS_PGN = "manual_vis_pgn"
         // First run tracking - stores the app version code when user first made a choice
         private const val KEY_FIRST_GAME_RETRIEVED_VERSION = "first_game_retrieved_version"
+        // General settings
+        private const val KEY_GENERAL_LONG_TAP_FULLSCREEN = "general_long_tap_fullscreen"
     }
 
     private fun loadStockfishSettings(): StockfishSettings {
@@ -423,6 +456,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             .apply()
     }
 
+    private fun loadGeneralSettings(): GeneralSettings {
+        return GeneralSettings(
+            longTapForFullScreen = prefs.getBoolean(KEY_GENERAL_LONG_TAP_FULLSCREEN, false)
+        )
+    }
+
+    private fun saveGeneralSettings(settings: GeneralSettings) {
+        prefs.edit()
+            .putBoolean(KEY_GENERAL_LONG_TAP_FULLSCREEN, settings.longTapForFullScreen)
+            .apply()
+    }
+
     /**
      * Save the current game to SharedPreferences as JSON.
      */
@@ -537,12 +582,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val settings = loadStockfishSettings()
             val boardSettings = loadBoardLayoutSettings()
             val interfaceVisibility = loadInterfaceVisibilitySettings()
+            val generalSettings = loadGeneralSettings()
             val lichessMaxGames = prefs.getInt(KEY_LICHESS_MAX_GAMES, 10)
+            val chessComMaxGames = prefs.getInt(KEY_CHESSCOM_MAX_GAMES, 10)
+            val hasLastServerUser = savedLastServer != null && savedLastUsername != null
             _uiState.value = _uiState.value.copy(
                 stockfishSettings = settings,
                 boardLayoutSettings = boardSettings,
                 interfaceVisibility = interfaceVisibility,
-                lichessMaxGames = lichessMaxGames
+                generalSettings = generalSettings,
+                lichessMaxGames = lichessMaxGames,
+                chessComMaxGames = chessComMaxGames,
+                hasLastServerUser = hasLastServerUser
             )
 
             // Initialize Stockfish with manual stage settings (default)
@@ -619,12 +670,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val settings = loadStockfishSettings()
         val boardSettings = loadBoardLayoutSettings()
         val interfaceVisibility = loadInterfaceVisibilitySettings()
+        val generalSettings = loadGeneralSettings()
         val lichessMaxGames = prefs.getInt(KEY_LICHESS_MAX_GAMES, 10)
+        val chessComMaxGames = prefs.getInt(KEY_CHESSCOM_MAX_GAMES, 10)
+        val hasLastServerUser = savedLastServer != null && savedLastUsername != null
         _uiState.value = _uiState.value.copy(
             stockfishSettings = settings,
             boardLayoutSettings = boardSettings,
             interfaceVisibility = interfaceVisibility,
-            lichessMaxGames = lichessMaxGames
+            generalSettings = generalSettings,
+            lichessMaxGames = lichessMaxGames,
+            chessComMaxGames = chessComMaxGames,
+            hasLastServerUser = hasLastServerUser
         )
 
         // Initialize Stockfish with manual stage settings (default)
@@ -677,19 +734,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * Automatically load a game and start analysis on app startup.
      * First tries to load the stored current game, then falls back to fetching
-     * the most recent game from Lichess for the stored username.
+     * the most recent game from Lichess for DrNykterstein.
      */
     private suspend fun autoLoadLastGame() {
         // First, try to load the stored current game
         val storedGame = loadCurrentGame()
         if (storedGame != null) {
-            loadGame(storedGame)
+            loadGame(storedGame, null, null) // No server/user update needed for stored game
             return
         }
 
-        // No stored game - fetch the last game from Lichess
-        val username = savedLichessUsername
-        if (username.isBlank()) return
+        // No stored game - fetch the last game from Lichess (default: DrNykterstein)
+        val username = "DrNykterstein"
 
         _uiState.value = _uiState.value.copy(
             isLoading = true,
@@ -697,7 +753,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         )
 
         // Fetch only 1 game (the most recent)
-        when (val result = repository.getRecentGames(username, 1)) {
+        when (val result = repository.getLichessGames(username, 1)) {
             is Result.Success -> {
                 val games = result.data
                 if (games.isNotEmpty()) {
@@ -706,8 +762,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                         gameList = games,
                         showGameSelection = false
                     )
-                    loadGame(games.first())
-                    // loadGame() already calls startAutoAnalysis()
+                    loadGame(games.first(), ChessServer.LICHESS, username)
                 } else {
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
@@ -726,22 +781,24 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Reload the last game from Lichess for the stored username.
+     * Reload the last game from the stored last server/user.
      * Called when user clicks the reload button.
-     * Always fetches from Lichess (does not use stored game).
+     * Uses the saved "last server/user" to fetch fresh game.
      */
     fun reloadLastGame() {
+        val server = savedLastServer ?: return
+        val username = savedLastUsername ?: return
+
         viewModelScope.launch {
-            fetchLastGameFromLichess()
+            fetchLastGameFromServer(server, username)
         }
     }
 
     /**
-     * Fetch the most recent game from Lichess for the stored username.
-     * Used by the reload button - always fetches fresh from Lichess.
+     * Fetch the most recent game from a specific server for a username.
+     * Used by the reload button - always fetches fresh from the server.
      */
-    private suspend fun fetchLastGameFromLichess() {
-        val username = savedLichessUsername
+    private suspend fun fetchLastGameFromServer(server: ChessServer, username: String) {
         if (username.isBlank()) return
 
         _uiState.value = _uiState.value.copy(
@@ -749,7 +806,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             errorMessage = null
         )
 
-        when (val result = repository.getRecentGames(username, 1)) {
+        val result = when (server) {
+            ChessServer.LICHESS -> repository.getLichessGames(username, 1)
+            ChessServer.CHESS_COM -> repository.getChessComGames(username, 1)
+        }
+
+        when (result) {
             is Result.Success -> {
                 val games = result.data
                 if (games.isNotEmpty()) {
@@ -758,11 +820,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                         gameList = games,
                         showGameSelection = false
                     )
-                    loadGame(games.first())
+                    loadGame(games.first(), server, username)
                 } else {
+                    val serverName = if (server == ChessServer.LICHESS) "Lichess" else "Chess.com"
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        errorMessage = "No games found for $username"
+                        errorMessage = "No games found for $username on $serverName"
                     )
                 }
             }
@@ -781,9 +844,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(lichessMaxGames = validMax)
     }
 
-    fun fetchGames(username: String, maxGames: Int) {
+    fun setChessComMaxGames(max: Int) {
+        val validMax = max.coerceIn(1, 25)
+        prefs.edit().putInt(KEY_CHESSCOM_MAX_GAMES, validMax).apply()
+        _uiState.value = _uiState.value.copy(chessComMaxGames = validMax)
+    }
+
+    fun fetchGames(server: ChessServer, username: String, maxGames: Int) {
         // Save the username for next time
-        prefs.edit().putString(KEY_LICHESS_USERNAME, username).apply()
+        when (server) {
+            ChessServer.LICHESS -> prefs.edit().putString(KEY_LICHESS_USERNAME, username).apply()
+            ChessServer.CHESS_COM -> prefs.edit().putString(KEY_CHESSCOM_USERNAME, username).apply()
+        }
 
         // Mark first run complete - user has made their game retrieval choice
         markFirstRunComplete()
@@ -800,7 +872,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 showGameSelection = false
             )
 
-            when (val result = repository.getRecentGames(username, maxGames)) {
+            val result = when (server) {
+                ChessServer.LICHESS -> repository.getLichessGames(username, maxGames)
+                ChessServer.CHESS_COM -> repository.getChessComGames(username, maxGames)
+            }
+
+            when (result) {
                 is Result.Success -> {
                     val games = result.data
                     if (games.size == 1) {
@@ -810,8 +887,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                             gameList = games,
                             showGameSelection = false
                         )
-                        loadGame(games.first())
+                        loadGame(games.first(), server, username)
                     } else {
+                        // Store server/username for when user selects a game
+                        pendingGameSelectionServer = server
+                        pendingGameSelectionUsername = username
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
                             gameList = games,
@@ -829,9 +909,17 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // Temporary storage for server/username when showing game selection dialog
+    private var pendingGameSelectionServer: ChessServer? = null
+    private var pendingGameSelectionUsername: String? = null
+
     fun selectGame(game: LichessGame) {
         _uiState.value = _uiState.value.copy(showGameSelection = false)
-        loadGame(game)
+        val server = pendingGameSelectionServer
+        val username = pendingGameSelectionUsername
+        pendingGameSelectionServer = null
+        pendingGameSelectionUsername = null
+        loadGame(game, server, username)
     }
 
     fun dismissGameSelection() {
@@ -868,7 +956,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    private fun loadGame(game: LichessGame) {
+    private fun loadGame(game: LichessGame, server: ChessServer?, username: String?) {
         // Cancel any ongoing analysis before loading new game
         autoAnalysisJob?.cancel()
         manualAnalysisJob?.cancel()
@@ -881,6 +969,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 errorMessage = "No PGN data available"
             )
             return
+        }
+
+        // Save the server/username as "last server/user" for reload button
+        if (server != null && username != null) {
+            prefs.edit()
+                .putString(KEY_LAST_SERVER, server.name)
+                .putString(KEY_LAST_USERNAME, username)
+                .apply()
+            _uiState.value = _uiState.value.copy(hasLastServerUser = true)
         }
 
         // Extract opening name from PGN headers
@@ -948,7 +1045,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         // Flip board if the searched user played black
-        val searchedUser = savedLichessUsername.lowercase()
+        // Use the username parameter if provided, otherwise fall back to saved Lichess username
+        val searchedUser = (username ?: savedLichessUsername).lowercase()
         val blackPlayerName = game.players.black.user?.name?.lowercase() ?: ""
         val userPlayedBlack = searchedUser.isNotEmpty() && searchedUser == blackPlayerName
 
@@ -1436,6 +1534,24 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+    }
+
+    fun updateGeneralSettings(settings: GeneralSettings) {
+        saveGeneralSettings(settings)
+        _uiState.value = _uiState.value.copy(
+            generalSettings = settings
+        )
+    }
+
+    /**
+     * Toggle full screen mode.
+     * Only works if "Long tap for full screen" is enabled in general settings.
+     */
+    fun toggleFullScreen() {
+        if (!_uiState.value.generalSettings.longTapForFullScreen) return
+        _uiState.value = _uiState.value.copy(
+            isFullScreen = !_uiState.value.isFullScreen
+        )
     }
 
     private var manualAnalysisJob: Job? = null

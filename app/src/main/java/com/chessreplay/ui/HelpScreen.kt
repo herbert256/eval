@@ -55,7 +55,7 @@ fun HelpScreen(
             // Welcome section
             HelpSection(
                 title = "Welcome to Chess Replay",
-                content = "Analyze your Lichess games with the powerful Stockfish 17.1 engine. " +
+                content = "Analyze your chess games from Lichess.org and Chess.com with the powerful Stockfish 17.1 engine. " +
                     "The app automatically fetches your games and provides deep analysis to help you improve."
             )
 
@@ -63,7 +63,7 @@ fun HelpScreen(
             HelpSection(
                 title = "Getting Started",
                 icon = "🚀",
-                content = "Enter your Lichess username and tap 'Retrieve last X games' to fetch multiple games, " +
+                content = "Enter your username in either the Lichess or Chess.com card and tap 'Retrieve last X games' to fetch multiple games, " +
                     "or 'Retrieve last game' for just the most recent one. " +
                     "Select a game to start the analysis. The app remembers your last game for quick startup."
             )
@@ -164,7 +164,7 @@ fun HelpScreen(
                 icon = "ℹ",
                 content = "Chess Replay uses the Stockfish 17.1 chess engine for analysis. " +
                     "Stockfish is the world's strongest open-source chess engine.\n\n" +
-                    "Game data is fetched from lichess.org via their public API."
+                    "Game data is fetched from lichess.org and chess.com via their public APIs."
             )
 
             Spacer(modifier = Modifier.height(32.dp))
