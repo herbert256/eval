@@ -955,7 +955,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             currentBoard = exploringLineHistory.getOrNull(targetIndex + 1)?.copy() ?: startBoard
         )
 
-        analyzeCurrentPosition()
+        // Use full restart for proper Stockfish analysis
+        restartAnalysisForExploringLine()
     }
 
     fun backToOriginalGame() {
@@ -971,13 +972,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             currentMoveIndex = savedIndex
         )
 
-        analyzeCurrentPosition()
+        // Use full restart for proper Stockfish analysis
+        restartAnalysisForExploringLine()
     }
 
     fun setAnalysisEnabled(enabled: Boolean) {
         _uiState.value = _uiState.value.copy(analysisEnabled = enabled)
         if (enabled) {
-            analyzeCurrentPosition()
+            // Use full restart for proper Stockfish analysis
+            restartAnalysisForExploringLine()
         } else {
             stockfish.stop()
         }
@@ -1068,7 +1071,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 // -> If in Manual stage, just reconfigure; otherwise enter Manual stage
                 if (_uiState.value.currentStage == AnalysisStage.MANUAL) {
                     configureForManualStage()
-                    analyzeCurrentPosition()
+                    // Use full restart for proper Stockfish analysis
+                    restartAnalysisForExploringLine()
                 } else {
                     enterManualStageAtCurrentPosition()
                 }
@@ -1089,7 +1093,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 AnalysisStage.MANUAL -> configureForManualStage()
             }
             if (_uiState.value.currentStage == AnalysisStage.MANUAL) {
-                analyzeCurrentPosition()
+                // Use full restart for proper Stockfish analysis
+                restartAnalysisForExploringLine()
             }
         }
     }
