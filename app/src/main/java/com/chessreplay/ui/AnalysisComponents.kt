@@ -309,19 +309,38 @@ fun ScoreDifferenceGraph(
         val barWidth = if (totalMoves > 0) (width / totalMoves) * 0.8f else width * 0.1f
         val barSpacing = if (totalMoves > 0) width / totalMoves else width
 
-        // Merge scores: prefer analyse scores, fall back to preview scores
-        val mergedScores = mutableMapOf<Int, MoveScore>()
-        for (moveIndex in 0 until totalMoves) {
-            val score = analyseScores[moveIndex] ?: previewScores[moveIndex]
-            if (score != null) {
-                mergedScores[moveIndex] = score
-            }
-        }
+        val isAnalyseStage = currentStage == AnalysisStage.ANALYSE
 
         // Draw bars for each move
+        // During Analyse stage (going backwards), use analyse scores only when BOTH consecutive
+        // analyse scores are available, otherwise fall back to preview scores.
+        // This ensures each bar updates exactly once (when the previous move's analyse completes).
         for (moveIndex in 0 until totalMoves) {
-            val currentScore = mergedScores[moveIndex]
-            val prevScore = if (moveIndex > 0) mergedScores[moveIndex - 1] else null
+            val currentScore: MoveScore?
+            val prevScore: MoveScore?
+
+            if (isAnalyseStage) {
+                // During Analyse stage: use analyse scores if BOTH are available,
+                // otherwise fall back to preview scores
+                val hasAnalyseCurrent = analyseScores.containsKey(moveIndex)
+                val hasAnalysePrev = moveIndex == 0 || analyseScores.containsKey(moveIndex - 1)
+
+                if (hasAnalyseCurrent && hasAnalysePrev) {
+                    // Both analyse scores available - use them
+                    currentScore = analyseScores[moveIndex]
+                    prevScore = if (moveIndex > 0) analyseScores[moveIndex - 1] else null
+                } else {
+                    // Fall back to preview scores
+                    currentScore = previewScores[moveIndex]
+                    prevScore = if (moveIndex > 0) previewScores[moveIndex - 1] else null
+                }
+            } else {
+                // Preview/Manual stage: prefer analyse scores, fall back to preview
+                currentScore = analyseScores[moveIndex] ?: previewScores[moveIndex]
+                prevScore = if (moveIndex > 0) {
+                    analyseScores[moveIndex - 1] ?: previewScores[moveIndex - 1]
+                } else null
+            }
 
             if (currentScore != null && prevScore != null) {
                 // Calculate difference: current - previous
