@@ -111,6 +111,14 @@ fun GameScreen(
         return
     }
 
+    // Show help screen
+    if (uiState.showHelpScreen) {
+        HelpScreen(
+            onBack = { viewModel.hideHelpScreen() }
+        )
+        return
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -138,18 +146,11 @@ fun GameScreen(
                     }
                     // Arrow mode toggle - only show in Manual stage
                     if (uiState.currentStage == AnalysisStage.MANUAL) {
-                        val arrowMode = uiState.stockfishSettings.manualStage.arrowMode
-                        val arrowColor = when (arrowMode) {
-                            ArrowMode.NONE -> Color.Gray
-                            ArrowMode.MAIN_LINE -> Color.White
-                            ArrowMode.MULTI_LINES -> Color(0xFF64B5F6)  // Light blue
-                        }
                         IconButton(onClick = { viewModel.cycleArrowMode() }) {
                             Text(
                                 text = "↗",
                                 fontSize = 38.sp,
                                 lineHeight = 38.sp,
-                                color = arrowColor,
                                 modifier = Modifier.offset(y = (-6).dp)
                             )
                         }
@@ -158,17 +159,22 @@ fun GameScreen(
             } else {
                 Spacer(modifier = Modifier.width(96.dp))
             }
+            Row {
+                IconButton(onClick = { viewModel.showSettingsDialog() }) {
+                    Text("⚙", fontSize = 30.sp, lineHeight = 30.sp)
+                }
+                IconButton(onClick = { viewModel.showHelpScreen() }) {
+                    Text("?", fontSize = 32.sp, lineHeight = 32.sp, fontWeight = FontWeight.Bold)
+                }
+            }
             Text(
                 text = "Chess Replay",
                 style = MaterialTheme.typography.headlineSmall,
                 color = Color.White,
-                fontWeight = FontWeight.Light,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.weight(1f)
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.End,
+                modifier = Modifier.weight(1f).padding(end = 8.dp)
             )
-            IconButton(onClick = { viewModel.showSettingsDialog() }) {
-                Text("⚙", fontSize = 30.sp, lineHeight = 30.sp)
-            }
         }
 
         // Stage indicator - only show during Preview and Analyse stages

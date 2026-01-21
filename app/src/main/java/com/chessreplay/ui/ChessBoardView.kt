@@ -395,6 +395,12 @@ fun ChessBoardView(
                 val greenColor = android.graphics.Color.rgb(0x00, 0xE6, 0x76)  // Bright green
                 val redColor = android.graphics.Color.rgb(0xFF, 0x52, 0x52)    // Bright red
 
+                // Count arrows per target square (for multi-lines mode positioning)
+                val targetSquareCounts = moveArrows
+                    .filter { it.scoreText != null }
+                    .groupingBy { "${it.to.file},${it.to.rank}" }
+                    .eachCount()
+
                 for (arrow in moveArrows.sortedBy { it.index }) {
                     val (arrowFrom, arrowTo) = arrow.from to arrow.to
 
@@ -403,10 +409,6 @@ fun ChessBoardView(
                     val fromRank = if (flipped) arrowFrom.rank else 7 - arrowFrom.rank
                     val toFile = if (flipped) 7 - arrowTo.file else arrowTo.file
                     val toRank = if (flipped) arrowTo.rank else 7 - arrowTo.rank
-
-                    // Calculate center of arrow (midpoint between from and to)
-                    val centerX = (fromFile + toFile) * squareSize / 2 + squareSize / 2
-                    val centerY = (fromRank + toRank) * squareSize / 2 + squareSize / 2
 
                     // Determine what text to draw
                     val textToDraw = if (arrow.scoreText != null) {
@@ -420,6 +422,25 @@ fun ChessBoardView(
                     }
 
                     if (textToDraw != null) {
+                        // For multi-lines mode with scores: place in target center if only one arrow goes there
+                        // Otherwise (multiple arrows to same target, or main line mode): place in arrow middle
+                        val targetKey = "${arrowTo.file},${arrowTo.rank}"
+                        val arrowsToSameTarget = targetSquareCounts[targetKey] ?: 0
+                        val placeInTargetCenter = arrow.scoreText != null && arrowsToSameTarget == 1
+
+                        val centerX: Float
+                        val centerY: Float
+
+                        if (placeInTargetCenter) {
+                            // Place score centered in target square
+                            centerX = toFile * squareSize + squareSize / 2
+                            centerY = toRank * squareSize + squareSize / 2
+                        } else {
+                            // Place in middle of arrow (original behavior)
+                            centerX = (fromFile + toFile) * squareSize / 2 + squareSize / 2
+                            centerY = (fromRank + toRank) * squareSize / 2 + squareSize / 2
+                        }
+
                         // Create position key to check for overlaps (rounded to nearest quarter square)
                         val gridX = ((centerX / squareSize) * 4).toInt()
                         val gridY = ((centerY / squareSize) * 4).toInt()

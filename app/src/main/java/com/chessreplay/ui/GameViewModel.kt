@@ -134,6 +134,7 @@ data class GameUiState(
     val stockfishSettings: StockfishSettings = StockfishSettings(),
     val boardLayoutSettings: BoardLayoutSettings = BoardLayoutSettings(),
     val showSettingsDialog: Boolean = false,
+    val showHelpScreen: Boolean = false,
     // Exploring line state
     val isExploringLine: Boolean = false,
     val exploringLineMoves: List<String> = emptyList(),
@@ -1226,6 +1227,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+    }
+
+    fun showHelpScreen() {
+        _uiState.value = _uiState.value.copy(showHelpScreen = true)
+    }
+
+    fun hideHelpScreen() {
+        _uiState.value = _uiState.value.copy(showHelpScreen = false)
     }
 
     fun updateStockfishSettings(settings: StockfishSettings) {
