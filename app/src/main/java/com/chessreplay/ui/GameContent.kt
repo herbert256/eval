@@ -261,6 +261,32 @@ fun GameContent(
                             .height(120.dp)
                     )
                 }
+
+                // Score difference graph - shows change between consecutive moves
+                // Only show during Analyse and Manual stages when we have scores
+                if (uiState.currentStage != AnalysisStage.PREVIEW) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    key(uiState.previewScores.size, uiState.analyseScores.size) {
+                        ScoreDifferenceGraph(
+                            previewScores = uiState.previewScores,
+                            analyseScores = uiState.analyseScores,
+                            totalMoves = uiState.moveDetails.size,
+                            currentMoveIndex = uiState.currentMoveIndex,
+                            currentStage = uiState.currentStage,
+                            userPlayedBlack = uiState.userPlayedBlack,
+                            onMoveSelected = { moveIndex ->
+                                when (uiState.currentStage) {
+                                    AnalysisStage.PREVIEW -> { /* Not interruptible - ignore clicks */ }
+                                    AnalysisStage.ANALYSE -> viewModel.enterManualStageAtMove(moveIndex)
+                                    AnalysisStage.MANUAL -> viewModel.restartAnalysisAtMove(moveIndex)
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(80.dp)
+                        )
+                    }
+                }
             }
         }
     }
@@ -288,6 +314,20 @@ fun GameContent(
 
     // Show the board (hide during Preview stage)
     if (uiState.currentStage != AnalysisStage.PREVIEW) {
+        // Calculate game results for each player
+        val whiteResult = when (game.winner) {
+            "white" -> "won"
+            "black" -> "lost"
+            null -> if (game.status == "draw" || game.status == "stalemate") "draw" else null
+            else -> null
+        }
+        val blackResult = when (game.winner) {
+            "black" -> "won"
+            "white" -> "lost"
+            null -> if (game.status == "draw" || game.status == "stalemate") "draw" else null
+            else -> null
+        }
+
         // Player bar above board (opponent when not flipped, or player when flipped)
         val topIsBlack = !uiState.flippedBoard
         PlayerBar(
@@ -295,7 +335,8 @@ fun GameContent(
             playerName = if (topIsBlack) blackName else whiteName,
             rating = if (topIsBlack) blackRating else whiteRating,
             clockTime = if (topIsBlack) blackClockTime else whiteClockTime,
-            isToMove = if (topIsBlack) !isWhiteTurn else isWhiteTurn
+            isToMove = if (topIsBlack) !isWhiteTurn else isWhiteTurn,
+            gameResult = if (topIsBlack) blackResult else whiteResult
         )
 
         // Chess board - drag to make moves during manual replay (no interaction during other stages)
@@ -365,49 +406,23 @@ fun GameContent(
             }
         } else emptyList()
 
-        Box(contentAlignment = Alignment.Center) {
-            ChessBoardView(
-                board = uiState.currentBoard,
-                flipped = uiState.flippedBoard,
-                interactionEnabled = uiState.currentStage == AnalysisStage.MANUAL,
-                onMove = { from, to -> viewModel.makeManualMove(from, to) },
-                moveArrows = moveArrows,
-                showArrowNumbers = uiState.stockfishSettings.manualStage.showArrowNumbers,
-                whiteArrowColor = Color(uiState.stockfishSettings.manualStage.whiteArrowColor.toInt()),
-                blackArrowColor = Color(uiState.stockfishSettings.manualStage.blackArrowColor.toInt()),
-                showCoordinates = uiState.boardLayoutSettings.showCoordinates,
-                showLastMove = uiState.boardLayoutSettings.showLastMove,
-                whiteSquareColor = Color(uiState.boardLayoutSettings.whiteSquareColor.toInt()),
-                blackSquareColor = Color(uiState.boardLayoutSettings.blackSquareColor.toInt()),
-                whitePieceColor = Color(uiState.boardLayoutSettings.whitePieceColor.toInt()),
-                blackPieceColor = Color(uiState.boardLayoutSettings.blackPieceColor.toInt()),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            // Show game result overlay when at end position
-            val isAtEndPosition = uiState.currentMoveIndex >= uiState.moveDetails.size - 1 && uiState.moveDetails.isNotEmpty()
-            if (isAtEndPosition) {
-                val gameResult = when (game.winner) {
-                    "white" -> "1 - 0"
-                    "black" -> "0 - 1"
-                    else -> if (game.status == "draw" || game.status == "stalemate") "½ - ½" else null
-                }
-                gameResult?.let { result ->
-                    Box(
-                        modifier = Modifier
-                            .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(16.dp))
-                            .padding(horizontal = 24.dp, vertical = 12.dp)
-                    ) {
-                        Text(
-                            text = result,
-                            fontSize = 48.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    }
-                }
-            }
-        }
+        ChessBoardView(
+            board = uiState.currentBoard,
+            flipped = uiState.flippedBoard,
+            interactionEnabled = uiState.currentStage == AnalysisStage.MANUAL,
+            onMove = { from, to -> viewModel.makeManualMove(from, to) },
+            moveArrows = moveArrows,
+            showArrowNumbers = uiState.stockfishSettings.manualStage.showArrowNumbers,
+            whiteArrowColor = Color(uiState.stockfishSettings.manualStage.whiteArrowColor.toInt()),
+            blackArrowColor = Color(uiState.stockfishSettings.manualStage.blackArrowColor.toInt()),
+            showCoordinates = uiState.boardLayoutSettings.showCoordinates,
+            showLastMove = uiState.boardLayoutSettings.showLastMove,
+            whiteSquareColor = Color(uiState.boardLayoutSettings.whiteSquareColor.toInt()),
+            blackSquareColor = Color(uiState.boardLayoutSettings.blackSquareColor.toInt()),
+            whitePieceColor = Color(uiState.boardLayoutSettings.whitePieceColor.toInt()),
+            blackPieceColor = Color(uiState.boardLayoutSettings.blackPieceColor.toInt()),
+            modifier = Modifier.fillMaxWidth()
+        )
 
         // Player bar below board (player when not flipped, or opponent when flipped)
         PlayerBar(
@@ -415,7 +430,8 @@ fun GameContent(
             playerName = if (topIsBlack) whiteName else blackName,
             rating = if (topIsBlack) whiteRating else blackRating,
             clockTime = if (topIsBlack) whiteClockTime else blackClockTime,
-            isToMove = if (topIsBlack) isWhiteTurn else !isWhiteTurn
+            isToMove = if (topIsBlack) isWhiteTurn else !isWhiteTurn,
+            gameResult = if (topIsBlack) whiteResult else blackResult
         )
     }
 
@@ -681,7 +697,8 @@ fun ControlButton(
 }
 
 /**
- * Player bar showing player name, rating, and clock time.
+ * Player bar showing player name, rating, clock time, and game result.
+ * @param gameResult "won", "lost", "draw", or null if game not finished
  */
 @Composable
 fun PlayerBar(
@@ -689,7 +706,8 @@ fun PlayerBar(
     playerName: String,
     rating: Int?,
     clockTime: String?,
-    isToMove: Boolean
+    isToMove: Boolean,
+    gameResult: String? = null
 ) {
     val backgroundColor = if (isWhite) Color.White else Color.Black
     val textColor = if (isWhite) Color.Black else Color.White
@@ -718,12 +736,36 @@ fun PlayerBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(
-            text = playerText,
-            color = textColor,
-            fontWeight = FontWeight.Medium,
-            fontSize = 14.sp
-        )
+        // Left side: game result + player name
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Game result indicator
+            if (gameResult != null) {
+                val (resultText, resultColor) = when (gameResult) {
+                    "won" -> "1" to Color(0xFF00C853)  // Green
+                    "lost" -> "0" to Color(0xFFFF1744)  // Red
+                    "draw" -> "½" to Color(0xFF64B5F6)  // Blue
+                    else -> "" to Color.Transparent
+                }
+                if (resultText.isNotEmpty()) {
+                    Text(
+                        text = resultText,
+                        color = resultColor,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
+                }
+            }
+
+            Text(
+                text = playerText,
+                color = textColor,
+                fontWeight = FontWeight.Medium,
+                fontSize = 14.sp
+            )
+        }
 
         // Clock time on the right
         if (clockTime != null) {

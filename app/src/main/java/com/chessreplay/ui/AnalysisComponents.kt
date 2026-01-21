@@ -76,7 +76,7 @@ fun EvaluationGraph(
                         change.consume()
                         val x = change.position.x.coerceIn(0f, graphWidth)
                         val moveIndex = if (totalMoves > 1) {
-                            ((x / graphWidth) * (totalMoves - 1)).toInt().coerceIn(0, totalMoves - 1)
+                            ((x / graphWidth) * (totalMoves - 1) + 0.5f).toInt().coerceIn(0, totalMoves - 1)
                         } else {
                             0
                         }
@@ -91,7 +91,7 @@ fun EvaluationGraph(
                         onTap = { offset ->
                             val x = offset.x.coerceIn(0f, graphWidth)
                             val moveIndex = if (totalMoves > 1) {
-                                ((x / graphWidth) * (totalMoves - 1)).toInt().coerceIn(0, totalMoves - 1)
+                                ((x / graphWidth) * (totalMoves - 1) + 0.5f).toInt().coerceIn(0, totalMoves - 1)
                             } else {
                                 0
                             }
@@ -224,6 +224,143 @@ fun EvaluationGraph(
                 start = Offset(x, 0f),
                 end = Offset(x, height),
                 strokeWidth = 5f
+            )
+        }
+    }
+}
+
+/**
+ * Bar graph showing the score difference between consecutive moves.
+ * Highlights blunders (big negative bars) and good moves (positive bars).
+ * Uses analyse scores when available, otherwise preview scores.
+ */
+@Composable
+fun ScoreDifferenceGraph(
+    previewScores: Map<Int, MoveScore>,
+    analyseScores: Map<Int, MoveScore>,
+    totalMoves: Int,
+    currentMoveIndex: Int,
+    currentStage: AnalysisStage,
+    userPlayedBlack: Boolean,
+    onMoveSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    // Score multiplier: invert scores when user played black so positive = good for user
+    val scorePerspective = if (userPlayedBlack) -1f else 1f
+    val goodMoveColor = Color(0xFF00E676)  // Green for good moves (position improved)
+    val blunderColor = Color(0xFFFF5252)   // Red for blunders (position worsened)
+    val lineColor = Color(0xFF666666)
+    val currentMoveColor = Color(0xFF2196F3)
+
+    var graphWidth by remember { mutableStateOf(0f) }
+    val isManualStage = currentStage == AnalysisStage.MANUAL
+
+    Canvas(
+        modifier = modifier
+            .background(Color(0xFF1A1A1A), RoundedCornerShape(8.dp))
+            .padding(8.dp)
+            .pointerInput(totalMoves, currentStage) {
+                if (totalMoves > 0 && isManualStage) {
+                    detectHorizontalDragGestures { change, _ ->
+                        change.consume()
+                        val x = change.position.x.coerceIn(0f, graphWidth)
+                        val moveIndex = if (totalMoves > 0) {
+                            ((x / graphWidth) * totalMoves).toInt().coerceIn(0, totalMoves - 1)
+                        } else {
+                            0
+                        }
+                        onMoveSelected(moveIndex)
+                    }
+                }
+            }
+            .pointerInput(totalMoves, currentStage) {
+                if (totalMoves > 0 && currentStage != AnalysisStage.PREVIEW) {
+                    detectTapGestures(
+                        onTap = { offset ->
+                            val x = offset.x.coerceIn(0f, graphWidth)
+                            val moveIndex = if (totalMoves > 0) {
+                                ((x / graphWidth) * totalMoves).toInt().coerceIn(0, totalMoves - 1)
+                            } else {
+                                0
+                            }
+                            onMoveSelected(moveIndex)
+                        }
+                    )
+                }
+            }
+    ) {
+        if (totalMoves == 0) return@Canvas
+
+        val width = size.width
+        val height = size.height
+        graphWidth = width
+        val centerY = height / 2
+        val maxDiff = 3f // Cap display at +/- 3 pawns difference
+
+        // Draw center line (x-axis at 0 difference)
+        drawLine(
+            color = lineColor,
+            start = Offset(0f, centerY),
+            end = Offset(width, centerY),
+            strokeWidth = 1f
+        )
+
+        // Calculate bar width based on number of moves
+        val barWidth = if (totalMoves > 0) (width / totalMoves) * 0.8f else width * 0.1f
+        val barSpacing = if (totalMoves > 0) width / totalMoves else width
+
+        // Merge scores: prefer analyse scores, fall back to preview scores
+        val mergedScores = mutableMapOf<Int, MoveScore>()
+        for (moveIndex in 0 until totalMoves) {
+            val score = analyseScores[moveIndex] ?: previewScores[moveIndex]
+            if (score != null) {
+                mergedScores[moveIndex] = score
+            }
+        }
+
+        // Draw bars for each move
+        for (moveIndex in 0 until totalMoves) {
+            val currentScore = mergedScores[moveIndex]
+            val prevScore = if (moveIndex > 0) mergedScores[moveIndex - 1] else null
+
+            if (currentScore != null && prevScore != null) {
+                // Calculate difference: current - previous
+                val currentAdj = currentScore.score * scorePerspective
+                val prevAdj = prevScore.score * scorePerspective
+                val diff = currentAdj - prevAdj
+
+                val clampedDiff = diff.coerceIn(-maxDiff, maxDiff)
+                val barHeight = kotlin.math.abs(clampedDiff / maxDiff) * (height / 2 - 4)
+
+                val barX = moveIndex * barSpacing + (barSpacing - barWidth) / 2
+                val color = if (diff >= 0) goodMoveColor else blunderColor
+
+                if (diff >= 0) {
+                    // Bar goes up from center
+                    drawRect(
+                        color = color,
+                        topLeft = Offset(barX, centerY - barHeight),
+                        size = androidx.compose.ui.geometry.Size(barWidth, barHeight)
+                    )
+                } else {
+                    // Bar goes down from center
+                    drawRect(
+                        color = color,
+                        topLeft = Offset(barX, centerY),
+                        size = androidx.compose.ui.geometry.Size(barWidth, barHeight)
+                    )
+                }
+            }
+        }
+
+        // Draw current move indicator (only in manual stage)
+        if (isManualStage && currentMoveIndex >= 0 && currentMoveIndex < totalMoves) {
+            val x = currentMoveIndex * barSpacing + barSpacing / 2
+            drawLine(
+                color = currentMoveColor,
+                start = Offset(x, 0f),
+                end = Offset(x, height),
+                strokeWidth = 3f
             )
         }
     }

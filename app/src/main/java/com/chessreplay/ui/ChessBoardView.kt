@@ -391,6 +391,10 @@ fun ChessBoardView(
                     strokeWidth = squareSize * 0.03f
                 }
 
+                // Colors for score text in multi-lines mode
+                val greenColor = android.graphics.Color.rgb(0x00, 0xE6, 0x76)  // Bright green
+                val redColor = android.graphics.Color.rgb(0xFF, 0x52, 0x52)    // Bright red
+
                 for (arrow in moveArrows.sortedBy { it.index }) {
                     val (arrowFrom, arrowTo) = arrow.from to arrow.to
 
@@ -424,6 +428,17 @@ fun ChessBoardView(
                         // Only draw if this position hasn't been used
                         if (!drawnNumberPositions.contains(positionKey)) {
                             drawnNumberPositions.add(positionKey)
+
+                            // Set color based on score for multi-lines mode
+                            if (arrow.scoreText != null) {
+                                // Determine if score is positive or negative
+                                // Format: "+1.5", "-1.5", "M3", "-M3"
+                                val isPositive = arrow.scoreText.startsWith("+") ||
+                                    (arrow.scoreText.startsWith("M") && !arrow.scoreText.startsWith("-"))
+                                textPaint.color = if (isPositive) greenColor else redColor
+                            } else {
+                                textPaint.color = android.graphics.Color.WHITE
+                            }
 
                             val textY = centerY + squareSize * 0.12f // Adjust for text baseline
 

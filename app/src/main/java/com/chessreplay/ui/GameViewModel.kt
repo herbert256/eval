@@ -27,9 +27,9 @@ enum class AnalysisStage {
 
 // Settings for Preview Stage (quick analysis during navigation)
 data class PreviewStageSettings(
-    val secondsForMove: Float = 0.10f,  // 0.01, 0.05, 0.10, 0.25, 0.50
+    val secondsForMove: Float = 0.05f,  // 0.01, 0.05, 0.10, 0.25, 0.50
     val threads: Int = 1,               // 1-2
-    val hashMb: Int = 16,               // 8, 16, 32, 64
+    val hashMb: Int = 8,                // 8, 16, 32, 64
     val useNnue: Boolean = false
 )
 
@@ -55,7 +55,7 @@ const val DEFAULT_MULTI_LINES_ARROW_COLOR = 0xCC3399FFL  // Semi-transparent blu
 
 // Settings for Manual Analyse Stage (interactive deep analysis)
 data class ManualStageSettings(
-    val depth: Int = 24,                // 16-32
+    val depth: Int = 32,                // 16-32
     val threads: Int = 4,               // 1-12
     val hashMb: Int = 64,               // 32, 64, 128, 256
     val multiPv: Int = 3,               // 1-6
@@ -214,9 +214,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private fun loadStockfishSettings(): StockfishSettings {
         return StockfishSettings(
             previewStage = PreviewStageSettings(
-                secondsForMove = prefs.getFloat(KEY_PREVIEW_SECONDS, 0.10f),
+                secondsForMove = prefs.getFloat(KEY_PREVIEW_SECONDS, 0.05f),
                 threads = prefs.getInt(KEY_PREVIEW_THREADS, 1),
-                hashMb = prefs.getInt(KEY_PREVIEW_HASH, 16),
+                hashMb = prefs.getInt(KEY_PREVIEW_HASH, 8),
                 useNnue = prefs.getBoolean(KEY_PREVIEW_NNUE, false)
             ),
             analyseStage = AnalyseStageSettings(
@@ -226,7 +226,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 useNnue = prefs.getBoolean(KEY_ANALYSE_NNUE, true)
             ),
             manualStage = ManualStageSettings(
-                depth = prefs.getInt(KEY_MANUAL_DEPTH, 24),
+                depth = prefs.getInt(KEY_MANUAL_DEPTH, 32),
                 threads = prefs.getInt(KEY_MANUAL_THREADS, 4),
                 hashMb = prefs.getInt(KEY_MANUAL_HASH, 64),
                 multiPv = prefs.getInt(KEY_MANUAL_MULTIPV, 3),
