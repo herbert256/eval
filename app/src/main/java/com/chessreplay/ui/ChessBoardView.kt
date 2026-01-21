@@ -244,17 +244,23 @@ fun ChessBoardView(
                 if (dragFromSquare != square) {
                     val piece = board.getPiece(displayFile, displayRank)
                     if (piece != null) {
-                        val pieceImage = pieceImages[Pair(piece.color, piece.type)]
+                        val padding = squareSize * 0.05f
+                        val pieceSize = (squareSize - padding * 2).toInt()
+
+                        // Determine piece tint color and which image to use
+                        val isWhitePiece = piece.color == PieceColor.WHITE
+                        val tintColor = if (isWhitePiece) whitePieceColor else blackPieceColor
+                        val defaultColor = if (isWhitePiece) Color.White else Color.Black
+                        val hasCustomColor = tintColor != defaultColor
+
+                        // For black pieces with custom color, use white piece images and tint them
+                        // (because black * color = black, but white * color = color)
+                        val imageColor = if (!isWhitePiece && hasCustomColor) PieceColor.WHITE else piece.color
+                        val pieceImage = pieceImages[Pair(imageColor, piece.type)]
+
                         if (pieceImage != null) {
-                            val padding = squareSize * 0.05f
-                            val pieceSize = (squareSize - padding * 2).toInt()
-
-                            // Determine piece tint color
-                            val tintColor = if (piece.color == PieceColor.WHITE) whitePieceColor else blackPieceColor
-                            val defaultColor = if (piece.color == PieceColor.WHITE) Color.White else Color.Black
-
-                            // Only apply color filter if color differs from default
-                            val colorFilter = if (tintColor != defaultColor) {
+                            // Apply color filter if using custom color
+                            val colorFilter = if (hasCustomColor) {
                                 ColorFilter.tint(tintColor, BlendMode.Modulate)
                             } else {
                                 null
@@ -421,15 +427,21 @@ fun ChessBoardView(
         if (fromSquare != null && pos != null) {
             val piece = board.getPiece(fromSquare)
             if (piece != null) {
-                val pieceImage = pieceImages[Pair(piece.color, piece.type)]
-                if (pieceImage != null) {
-                    val pieceDrawSize = (squareSize * 1.2f).toInt() // Slightly larger when dragging
-                    val halfSize = pieceDrawSize / 2
+                val pieceDrawSize = (squareSize * 1.2f).toInt() // Slightly larger when dragging
+                val halfSize = pieceDrawSize / 2
 
-                    // Apply same color tinting as board pieces
-                    val tintColor = if (piece.color == PieceColor.WHITE) whitePieceColor else blackPieceColor
-                    val defaultColor = if (piece.color == PieceColor.WHITE) Color.White else Color.Black
-                    val colorFilter = if (tintColor != defaultColor) {
+                // Apply same color tinting logic as board pieces
+                val isWhitePiece = piece.color == PieceColor.WHITE
+                val tintColor = if (isWhitePiece) whitePieceColor else blackPieceColor
+                val defaultColor = if (isWhitePiece) Color.White else Color.Black
+                val hasCustomColor = tintColor != defaultColor
+
+                // For black pieces with custom color, use white piece images and tint them
+                val imageColor = if (!isWhitePiece && hasCustomColor) PieceColor.WHITE else piece.color
+                val pieceImage = pieceImages[Pair(imageColor, piece.type)]
+
+                if (pieceImage != null) {
+                    val colorFilter = if (hasCustomColor) {
                         ColorFilter.tint(tintColor, BlendMode.Modulate)
                     } else {
                         null
