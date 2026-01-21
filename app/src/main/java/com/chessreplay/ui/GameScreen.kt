@@ -143,11 +143,11 @@ fun GameScreen(
                     // Reload last game from active server
                     Box(
                         modifier = Modifier
-                            .size(44.dp)
+                            .size(52.dp)
                             .clickable { viewModel.reloadLastGame() },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("↻", fontSize = 36.sp, color = Color.White, modifier = Modifier.offset(y = (-7).dp))
+                        Text("↻", fontSize = 44.sp, color = Color.White, modifier = Modifier.offset(y = (-12).dp))
                     }
                     // Show retrieve games view
                     Box(
@@ -156,7 +156,7 @@ fun GameScreen(
                             .clickable { viewModel.clearGame() },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("≡", fontSize = 36.sp, color = Color.White, modifier = Modifier.offset(y = (-4).dp))
+                        Text("≡", fontSize = 44.sp, color = Color.White, modifier = Modifier.offset(y = (-12).dp))
                     }
                     // Arrow mode toggle - only show in Manual stage
                     if (uiState.currentStage == AnalysisStage.MANUAL) {
@@ -166,7 +166,7 @@ fun GameScreen(
                                 .clickable { viewModel.cycleArrowMode() },
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("↗", fontSize = 36.sp, color = Color.White, modifier = Modifier.offset(y = (-6).dp))
+                            Text("↗", fontSize = 40.sp, color = Color.White, modifier = Modifier.offset(y = (-11).dp))
                         }
                     }
                 }
@@ -177,7 +177,7 @@ fun GameScreen(
                         .clickable { viewModel.showSettingsDialog() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("⚙", fontSize = 26.sp, color = Color.White, modifier = Modifier.offset(y = (-2).dp))
+                    Text("⚙", fontSize = 30.sp, color = Color.White, modifier = Modifier.offset(y = (-3).dp))
                 }
                 Box(
                     modifier = Modifier
@@ -185,7 +185,7 @@ fun GameScreen(
                         .clickable { viewModel.showHelpScreen() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("?", fontSize = 26.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                    Text("?", fontSize = 30.sp, color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.offset(y = (-3).dp))
                 }
             }
             Text(
@@ -209,6 +209,7 @@ fun GameScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .offset(y = (-8).dp)
                         .padding(vertical = 4.dp)
                         .background(stageColor.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
                         .padding(12.dp),
@@ -231,6 +232,7 @@ fun GameScreen(
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
+                        .offset(y = (-8).dp)
                         .padding(vertical = 4.dp)
                 ) {
                     Text(

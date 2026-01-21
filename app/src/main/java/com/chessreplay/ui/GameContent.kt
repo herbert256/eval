@@ -238,7 +238,7 @@ fun GameContent(
 
     // Graph content as a composable lambda
     val GraphContent: @Composable () -> Unit = {
-        Column(modifier = Modifier.padding(vertical = 4.dp)) {
+        Column(modifier = Modifier.offset(y = (-8).dp)) {
             if (uiState.moveDetails.isNotEmpty()) {
                 // Use key to force recomposition when scores change
                 key(uiState.previewScores.size, uiState.analyseScores.size) {
@@ -295,7 +295,6 @@ fun GameContent(
     val GameInfoCard: @Composable () -> Unit = {
         GraphContent()
         if (uiState.currentStage == AnalysisStage.ANALYSE) {
-            Spacer(modifier = Modifier.height(8.dp))
             ResultBar()
         }
     }
@@ -543,6 +542,7 @@ fun GameContent(
 
     // Show game info card between Stockfish panel and moves list during manual stage
     if (uiState.currentStage == AnalysisStage.MANUAL) {
+        Spacer(modifier = Modifier.height(8.dp))
         GameInfoCard()
     }
 
