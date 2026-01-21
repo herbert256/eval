@@ -260,13 +260,30 @@ fun AnalysisPanel(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            // Title
-            Text(
-                text = "Stockfish 17.1",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFFAAAAAA)
-            )
+            // Title row with depth and nodes info
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Stockfish 17.1",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFAAAAAA)
+                )
+                // Format nodes with K or M suffix
+                val nodesFormatted = when {
+                    result.nodes >= 1_000_000 -> "${result.nodes / 1_000_000}M"
+                    result.nodes >= 1_000 -> "${result.nodes / 1_000}K"
+                    else -> "${result.nodes}"
+                }
+                Text(
+                    text = "Depth: ${result.depth}  Nodes: $nodesFormatted",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF888888)
+                )
+            }
             result.lines.forEach { line ->
                 PvLineRow(
                     line = line,

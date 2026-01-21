@@ -283,7 +283,7 @@ fun GameContent(
     // Result bar above board in manual stage
     if (uiState.currentStage == AnalysisStage.MANUAL) {
         ResultBar()
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(8.dp))
     }
 
     // Show the board (hide during Preview stage)
