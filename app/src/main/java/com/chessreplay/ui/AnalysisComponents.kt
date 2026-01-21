@@ -50,16 +50,17 @@ fun EvaluationGraph(
     currentMoveIndex: Int,
     currentStage: AnalysisStage,
     userPlayedBlack: Boolean,
+    graphSettings: GraphSettings,
     onMoveSelected: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     // Score multiplier: invert scores when user played black so positive = good for user
     val scorePerspective = if (userPlayedBlack) -1f else 1f
-    val greenColor = Color(0xFF00E676)  // Bright green
-    val redColor = Color(0xFFFF5252)    // Bright red
+    val greenColor = Color(graphSettings.plusScoreColor.toInt())
+    val redColor = Color(graphSettings.negativeScoreColor.toInt())
     val lineColor = Color(0xFF666666)
-    val currentMoveColor = Color(0xFF2196F3)
-    val analyseColor = Color(0xFFFFEB3B) // Yellow for analyse stage scores
+    val currentMoveColor = Color(graphSettings.verticalLineColor.toInt())
+    val analyseColor = Color(graphSettings.analyseLineColor.toInt())
 
     // Track the graph width for calculating move index from drag position
     var graphWidth by remember { mutableStateOf(0f) }
@@ -67,7 +68,7 @@ fun EvaluationGraph(
 
     Canvas(
         modifier = modifier
-            .background(Color(0xFF1A1A1A), RoundedCornerShape(8.dp))
+            .background(Color(graphSettings.backgroundColor.toInt()), RoundedCornerShape(8.dp))
             .padding(8.dp)
             .pointerInput(totalMoves, currentStage) {
                 // Only allow horizontal drag navigation in manual stage
@@ -209,11 +210,11 @@ fun EvaluationGraph(
             }
         }
 
-        // Draw analyse stage as yellow line
+        // Draw analyse stage as white line
         for (i in 0 until pointsAnalyse.size - 1) {
             val p1 = pointsAnalyse[i]
             val p2 = pointsAnalyse[i + 1]
-            drawLine(analyseColor, Offset(p1.x, p1.y), Offset(p2.x, p2.y), strokeWidth = 4f)
+            drawLine(analyseColor, Offset(p1.x, p1.y), Offset(p2.x, p2.y), strokeWidth = 8f)
         }
 
         // Draw current move indicator (only in manual stage)
@@ -242,22 +243,23 @@ fun ScoreDifferenceGraph(
     currentMoveIndex: Int,
     currentStage: AnalysisStage,
     userPlayedBlack: Boolean,
+    graphSettings: GraphSettings,
     onMoveSelected: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     // Score multiplier: invert scores when user played black so positive = good for user
     val scorePerspective = if (userPlayedBlack) -1f else 1f
-    val goodMoveColor = Color(0xFF00E676)  // Green for good moves (position improved)
-    val blunderColor = Color(0xFFFF5252)   // Red for blunders (position worsened)
+    val goodMoveColor = Color(graphSettings.plusScoreColor.toInt())
+    val blunderColor = Color(graphSettings.negativeScoreColor.toInt())
     val lineColor = Color(0xFF666666)
-    val currentMoveColor = Color(0xFF2196F3)
+    val currentMoveColor = Color(graphSettings.verticalLineColor.toInt())
 
     var graphWidth by remember { mutableStateOf(0f) }
     val isManualStage = currentStage == AnalysisStage.MANUAL
 
     Canvas(
         modifier = modifier
-            .background(Color(0xFF1A1A1A), RoundedCornerShape(8.dp))
+            .background(Color(graphSettings.backgroundColor.toInt()), RoundedCornerShape(8.dp))
             .padding(8.dp)
             .pointerInput(totalMoves, currentStage) {
                 if (totalMoves > 0 && isManualStage) {

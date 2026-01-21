@@ -89,6 +89,22 @@ const val DEFAULT_BLACK_PIECE_COLOR = 0xFF000000L  // Black
 const val DEFAULT_EVAL_BAR_COLOR_1 = 0xFFFFFFFF   // White (score color)
 const val DEFAULT_EVAL_BAR_COLOR_2 = 0xFF000000L  // Black (filler color)
 
+// Graph color defaults
+const val DEFAULT_GRAPH_PLUS_SCORE_COLOR = 0xFF00E676L    // Bright green
+const val DEFAULT_GRAPH_NEGATIVE_SCORE_COLOR = 0xFFFF5252L // Bright red
+const val DEFAULT_GRAPH_BACKGROUND_COLOR = 0xFF1A1A1AL    // Dark gray
+const val DEFAULT_GRAPH_ANALYSE_LINE_COLOR = 0xFFFFFFFFL  // White
+const val DEFAULT_GRAPH_VERTICAL_LINE_COLOR = 0xFF2196F3L // Blue
+
+// Graph settings
+data class GraphSettings(
+    val plusScoreColor: Long = DEFAULT_GRAPH_PLUS_SCORE_COLOR,
+    val negativeScoreColor: Long = DEFAULT_GRAPH_NEGATIVE_SCORE_COLOR,
+    val backgroundColor: Long = DEFAULT_GRAPH_BACKGROUND_COLOR,
+    val analyseLineColor: Long = DEFAULT_GRAPH_ANALYSE_LINE_COLOR,
+    val verticalLineColor: Long = DEFAULT_GRAPH_VERTICAL_LINE_COLOR
+)
+
 // Player bar display mode
 enum class PlayerBarMode {
     NONE,    // No player bars
@@ -196,6 +212,7 @@ data class GameUiState(
     val userPlayedBlack: Boolean = false,  // True if searched user played black (for score perspective)
     val stockfishSettings: StockfishSettings = StockfishSettings(),
     val boardLayoutSettings: BoardLayoutSettings = BoardLayoutSettings(),
+    val graphSettings: GraphSettings = GraphSettings(),
     val interfaceVisibility: InterfaceVisibilitySettings = InterfaceVisibilitySettings(),
     val showSettingsDialog: Boolean = false,
     val showHelpScreen: Boolean = false,
@@ -311,6 +328,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         private const val KEY_EVAL_BAR_COLOR_1 = "eval_bar_color_1"
         private const val KEY_EVAL_BAR_COLOR_2 = "eval_bar_color_2"
         private const val KEY_EVAL_BAR_RANGE = "eval_bar_range"
+        // Graph settings
+        private const val KEY_GRAPH_PLUS_SCORE_COLOR = "graph_plus_score_color"
+        private const val KEY_GRAPH_NEGATIVE_SCORE_COLOR = "graph_negative_score_color"
+        private const val KEY_GRAPH_BACKGROUND_COLOR = "graph_background_color"
+        private const val KEY_GRAPH_ANALYSE_LINE_COLOR = "graph_analyse_line_color"
+        private const val KEY_GRAPH_VERTICAL_LINE_COLOR = "graph_vertical_line_color"
         // Interface visibility settings - Preview stage
         private const val KEY_PREVIEW_VIS_MOVELIST = "preview_vis_movelist"
         private const val KEY_PREVIEW_VIS_BOARD = "preview_vis_board"
@@ -427,6 +450,26 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             .putLong(KEY_EVAL_BAR_COLOR_1, settings.evalBarColor1)
             .putLong(KEY_EVAL_BAR_COLOR_2, settings.evalBarColor2)
             .putInt(KEY_EVAL_BAR_RANGE, settings.evalBarRange)
+            .apply()
+    }
+
+    private fun loadGraphSettings(): GraphSettings {
+        return GraphSettings(
+            plusScoreColor = prefs.getLong(KEY_GRAPH_PLUS_SCORE_COLOR, DEFAULT_GRAPH_PLUS_SCORE_COLOR),
+            negativeScoreColor = prefs.getLong(KEY_GRAPH_NEGATIVE_SCORE_COLOR, DEFAULT_GRAPH_NEGATIVE_SCORE_COLOR),
+            backgroundColor = prefs.getLong(KEY_GRAPH_BACKGROUND_COLOR, DEFAULT_GRAPH_BACKGROUND_COLOR),
+            analyseLineColor = prefs.getLong(KEY_GRAPH_ANALYSE_LINE_COLOR, DEFAULT_GRAPH_ANALYSE_LINE_COLOR),
+            verticalLineColor = prefs.getLong(KEY_GRAPH_VERTICAL_LINE_COLOR, DEFAULT_GRAPH_VERTICAL_LINE_COLOR)
+        )
+    }
+
+    private fun saveGraphSettings(settings: GraphSettings) {
+        prefs.edit()
+            .putLong(KEY_GRAPH_PLUS_SCORE_COLOR, settings.plusScoreColor)
+            .putLong(KEY_GRAPH_NEGATIVE_SCORE_COLOR, settings.negativeScoreColor)
+            .putLong(KEY_GRAPH_BACKGROUND_COLOR, settings.backgroundColor)
+            .putLong(KEY_GRAPH_ANALYSE_LINE_COLOR, settings.analyseLineColor)
+            .putLong(KEY_GRAPH_VERTICAL_LINE_COLOR, settings.verticalLineColor)
             .apply()
     }
 
@@ -609,6 +652,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             // Load saved settings (will use defaults if reset or not previously set)
             val settings = loadStockfishSettings()
             val boardSettings = loadBoardLayoutSettings()
+            val graphSettings = loadGraphSettings()
             val interfaceVisibility = loadInterfaceVisibilitySettings()
             val generalSettings = loadGeneralSettings()
             val lichessMaxGames = prefs.getInt(KEY_LICHESS_MAX_GAMES, 10)
@@ -617,6 +661,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.value = _uiState.value.copy(
                 stockfishSettings = settings,
                 boardLayoutSettings = boardSettings,
+                graphSettings = graphSettings,
                 interfaceVisibility = interfaceVisibility,
                 generalSettings = generalSettings,
                 lichessMaxGames = lichessMaxGames,
@@ -697,6 +742,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         // Load saved settings (will use defaults if reset or not previously set)
         val settings = loadStockfishSettings()
         val boardSettings = loadBoardLayoutSettings()
+        val graphSettings = loadGraphSettings()
         val interfaceVisibility = loadInterfaceVisibilitySettings()
         val generalSettings = loadGeneralSettings()
         val lichessMaxGames = prefs.getInt(KEY_LICHESS_MAX_GAMES, 10)
@@ -705,6 +751,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(
             stockfishSettings = settings,
             boardLayoutSettings = boardSettings,
+            graphSettings = graphSettings,
             interfaceVisibility = interfaceVisibility,
             generalSettings = generalSettings,
             lichessMaxGames = lichessMaxGames,
@@ -1525,6 +1572,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
+    fun updateGraphSettings(settings: GraphSettings) {
+        saveGraphSettings(settings)
+        _uiState.value = _uiState.value.copy(
+            graphSettings = settings
+        )
+    }
+
     fun updateInterfaceVisibilitySettings(settings: InterfaceVisibilitySettings) {
         val currentSettings = _uiState.value.interfaceVisibility
 
@@ -1718,13 +1772,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * Build the list of move indices for analysis based on the current stage.
      * Preview stage: Forward sequence (move 1 to end)
-     * Analyse stage: Backwards sequence (end to move 1)
+     * Analyse stage: Backwards sequence (end to move 1), unless board is visible then forward
      */
     private fun buildMoveIndices(): List<Int> {
         val moves = _uiState.value.moves
+        val showBoardInAnalyse = _uiState.value.interfaceVisibility.analyseStage.showBoard
         return when (_uiState.value.currentStage) {
             AnalysisStage.PREVIEW -> (0 until moves.size).toList()  // Forward
-            AnalysisStage.ANALYSE -> (moves.size - 1 downTo 0).toList()  // Backwards
+            AnalysisStage.ANALYSE -> if (showBoardInAnalyse) {
+                (0 until moves.size).toList()  // Forward when board is visible
+            } else {
+                (moves.size - 1 downTo 0).toList()  // Backwards when board is hidden
+            }
             AnalysisStage.MANUAL -> emptyList()  // No auto-analysis in manual stage
         }
     }

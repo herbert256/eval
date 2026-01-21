@@ -118,11 +118,6 @@ fun GameContent(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(
-                    Color(0xFF4A4A4A),  // Dark gray background
-                    RoundedCornerShape(4.dp)
-                )
-                .border(1.dp, Color(0xFFFFD700), RoundedCornerShape(4.dp))  // Yellow border
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -292,6 +287,7 @@ fun GameContent(
                             currentMoveIndex = uiState.currentMoveIndex,
                             currentStage = uiState.currentStage,
                             userPlayedBlack = uiState.userPlayedBlack,
+                            graphSettings = uiState.graphSettings,
                             onMoveSelected = { moveIndex ->
                                 when (uiState.currentStage) {
                                     AnalysisStage.PREVIEW -> { /* Not interruptible - ignore clicks */ }
@@ -317,6 +313,7 @@ fun GameContent(
                             currentMoveIndex = uiState.currentMoveIndex,
                             currentStage = uiState.currentStage,
                             userPlayedBlack = uiState.userPlayedBlack,
+                            graphSettings = uiState.graphSettings,
                             onMoveSelected = { moveIndex ->
                                 when (uiState.currentStage) {
                                     AnalysisStage.PREVIEW -> { /* Not interruptible - ignore clicks */ }

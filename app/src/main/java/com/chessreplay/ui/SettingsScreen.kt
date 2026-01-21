@@ -23,6 +23,7 @@ enum class SettingsSubScreen {
     ARROW_SETTINGS,
     STOCKFISH,
     BOARD_LAYOUT,
+    GRAPH_SETTINGS,
     INTERFACE_VISIBILITY
 }
 
@@ -34,11 +35,13 @@ enum class SettingsSubScreen {
 fun SettingsScreen(
     stockfishSettings: StockfishSettings,
     boardLayoutSettings: BoardLayoutSettings,
+    graphSettings: GraphSettings,
     interfaceVisibility: InterfaceVisibilitySettings,
     generalSettings: GeneralSettings,
     onBack: () -> Unit,
     onSaveStockfish: (StockfishSettings) -> Unit,
     onSaveBoardLayout: (BoardLayoutSettings) -> Unit,
+    onSaveGraph: (GraphSettings) -> Unit,
     onSaveInterfaceVisibility: (InterfaceVisibilitySettings) -> Unit,
     onSaveGeneral: (GeneralSettings) -> Unit
 ) {
@@ -81,6 +84,12 @@ fun SettingsScreen(
             onBackToSettings = { currentSubScreen = SettingsSubScreen.MAIN },
             onBackToGame = onBack,
             onSave = onSaveBoardLayout
+        )
+        SettingsSubScreen.GRAPH_SETTINGS -> GraphSettingsScreen(
+            graphSettings = graphSettings,
+            onBackToSettings = { currentSubScreen = SettingsSubScreen.MAIN },
+            onBackToGame = onBack,
+            onSave = onSaveGraph
         )
         SettingsSubScreen.INTERFACE_VISIBILITY -> InterfaceSettingsScreen(
             interfaceVisibility = interfaceVisibility,
@@ -138,6 +147,13 @@ private fun SettingsMainScreen(
             title = "Board layout",
             description = "Coordinates, colors, last move highlight",
             onClick = { onNavigate(SettingsSubScreen.BOARD_LAYOUT) }
+        )
+
+        // Graph settings card
+        SettingsNavigationCard(
+            title = "Graph settings",
+            description = "Graph colors for scores and lines",
+            onClick = { onNavigate(SettingsSubScreen.GRAPH_SETTINGS) }
         )
 
         // Arrow settings card

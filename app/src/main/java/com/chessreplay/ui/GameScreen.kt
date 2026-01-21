@@ -150,11 +150,13 @@ fun GameScreen(
         SettingsScreen(
             stockfishSettings = uiState.stockfishSettings,
             boardLayoutSettings = uiState.boardLayoutSettings,
+            graphSettings = uiState.graphSettings,
             interfaceVisibility = uiState.interfaceVisibility,
             generalSettings = uiState.generalSettings,
             onBack = { viewModel.hideSettingsDialog() },
             onSaveStockfish = { viewModel.updateStockfishSettings(it) },
             onSaveBoardLayout = { viewModel.updateBoardLayoutSettings(it) },
+            onSaveGraph = { viewModel.updateGraphSettings(it) },
             onSaveInterfaceVisibility = { viewModel.updateInterfaceVisibilitySettings(it) },
             onSaveGeneral = { viewModel.updateGeneralSettings(it) }
         )
