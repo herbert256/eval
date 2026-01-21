@@ -135,39 +135,45 @@ fun EvaluationGraph(
             }
         }
 
-        // Draw filled areas and lines between consecutive points
+        // Draw filled areas between consecutive points
+        // Use slight overlap (1px) to prevent anti-aliasing gaps
+        val overlap = 1f
+
         for (i in 0 until points.size - 1) {
             val p1 = points[i]
             val p2 = points[i + 1]
+
+            // Extend left edge back and right edge forward to overlap with neighbors
+            val leftX = if (i == 0) p1.x else p1.x - overlap
+            val rightX = if (i == points.size - 2) p2.x else p2.x + overlap
 
             // Check if the line crosses the x-axis (scores have different signs)
             val crossesAxis = (p1.score >= 0 && p2.score < 0) || (p1.score < 0 && p2.score >= 0)
 
             if (crossesAxis) {
                 // Find the x-coordinate where the line crosses the x-axis
-                // Linear interpolation: crossX = p1.x + (p2.x - p1.x) * t, where t = |p1.score| / (|p1.score| + |p2.score|)
                 val t = kotlin.math.abs(p1.score) / (kotlin.math.abs(p1.score) + kotlin.math.abs(p2.score))
                 val crossX = p1.x + (p2.x - p1.x) * t
 
                 // Draw first segment (from p1 to crossing point)
                 val color1 = if (p1.score >= 0) greenColor else redColor
                 val path1 = androidx.compose.ui.graphics.Path().apply {
-                    moveTo(p1.x, p1.y)
+                    moveTo(leftX, p1.y)
                     lineTo(crossX, centerY)
-                    lineTo(p1.x, centerY)
+                    lineTo(leftX, centerY)
                     close()
                 }
-                drawPath(path1, color1.copy(alpha = 0.8f))
+                drawPath(path1, color1)
 
                 // Draw second segment (from crossing point to p2)
                 val color2 = if (p2.score >= 0) greenColor else redColor
                 val path2 = androidx.compose.ui.graphics.Path().apply {
                     moveTo(crossX, centerY)
-                    lineTo(p2.x, p2.y)
-                    lineTo(p2.x, centerY)
+                    lineTo(rightX, p2.y)
+                    lineTo(rightX, centerY)
                     close()
                 }
-                drawPath(path2, color2.copy(alpha = 0.8f))
+                drawPath(path2, color2)
 
                 // Draw solid line on top (two segments with different colors)
                 drawLine(color1, Offset(p1.x, p1.y), Offset(crossX, centerY), strokeWidth = 2f)
@@ -177,13 +183,13 @@ fun EvaluationGraph(
                 val color = if (p1.score >= 0) greenColor else redColor
 
                 val path = androidx.compose.ui.graphics.Path().apply {
-                    moveTo(p1.x, p1.y)
-                    lineTo(p2.x, p2.y)
-                    lineTo(p2.x, centerY)
-                    lineTo(p1.x, centerY)
+                    moveTo(leftX, p1.y)
+                    lineTo(rightX, p2.y)
+                    lineTo(rightX, centerY)
+                    lineTo(leftX, centerY)
                     close()
                 }
-                drawPath(path, color.copy(alpha = 0.8f))
+                drawPath(path, color)
 
                 // Draw solid line on top
                 drawLine(color, Offset(p1.x, p1.y), Offset(p2.x, p2.y), strokeWidth = 2f)
@@ -207,13 +213,7 @@ fun EvaluationGraph(
         for (i in 0 until pointsAnalyse.size - 1) {
             val p1 = pointsAnalyse[i]
             val p2 = pointsAnalyse[i + 1]
-
-            drawLine(
-                color = analyseColor,
-                start = Offset(p1.x, p1.y),
-                end = Offset(p2.x, p2.y),
-                strokeWidth = 4f
-            )
+            drawLine(analyseColor, Offset(p1.x, p1.y), Offset(p2.x, p2.y), strokeWidth = 4f)
         }
 
         // Draw current move indicator (only in manual stage)

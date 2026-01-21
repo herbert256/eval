@@ -207,7 +207,7 @@ fun GameScreen(
                         .padding(vertical = 4.dp)
                 ) {
                     Text(
-                        text = "$stageText - Tap here for manual stage",
+                        text = "Analys running - tap to end",
                         fontWeight = FontWeight.Medium,
                         fontSize = 16.sp,
                         color = Color.Yellow
