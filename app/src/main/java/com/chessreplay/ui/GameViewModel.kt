@@ -66,6 +66,22 @@ data class StockfishSettings(
     val manualStage: ManualStageSettings = ManualStageSettings()
 )
 
+// Default board colors
+const val DEFAULT_WHITE_SQUARE_COLOR = 0xFFF0D9B5L  // Light brown
+const val DEFAULT_BLACK_SQUARE_COLOR = 0xFFB58863L  // Dark brown
+const val DEFAULT_WHITE_PIECE_COLOR = 0xFFFFFFFF   // White
+const val DEFAULT_BLACK_PIECE_COLOR = 0xFF000000L  // Black
+
+// Board layout settings
+data class BoardLayoutSettings(
+    val showCoordinates: Boolean = true,
+    val showLastMove: Boolean = true,
+    val whiteSquareColor: Long = DEFAULT_WHITE_SQUARE_COLOR,
+    val blackSquareColor: Long = DEFAULT_BLACK_SQUARE_COLOR,
+    val whitePieceColor: Long = DEFAULT_WHITE_PIECE_COLOR,
+    val blackPieceColor: Long = DEFAULT_BLACK_PIECE_COLOR
+)
+
 data class MoveScore(
     val score: Float,
     val isMate: Boolean,
@@ -104,6 +120,7 @@ data class GameUiState(
     val flippedBoard: Boolean = false,
     val userPlayedBlack: Boolean = false,  // True if searched user played black (for score perspective)
     val stockfishSettings: StockfishSettings = StockfishSettings(),
+    val boardLayoutSettings: BoardLayoutSettings = BoardLayoutSettings(),
     val showSettingsDialog: Boolean = false,
     // Exploring line state
     val isExploringLine: Boolean = false,
@@ -171,6 +188,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         private const val KEY_MANUAL_SHOWNUMBERS = "manual_shownumbers"
         private const val KEY_MANUAL_WHITE_ARROW_COLOR = "manual_white_arrow_color"
         private const val KEY_MANUAL_BLACK_ARROW_COLOR = "manual_black_arrow_color"
+        // Board layout settings
+        private const val KEY_BOARD_SHOW_COORDINATES = "board_show_coordinates"
+        private const val KEY_BOARD_SHOW_LAST_MOVE = "board_show_last_move"
+        private const val KEY_BOARD_WHITE_SQUARE_COLOR = "board_white_square_color"
+        private const val KEY_BOARD_BLACK_SQUARE_COLOR = "board_black_square_color"
+        private const val KEY_BOARD_WHITE_PIECE_COLOR = "board_white_piece_color"
+        private const val KEY_BOARD_BLACK_PIECE_COLOR = "board_black_piece_color"
         // First run tracking - stores the app version code when user first made a choice
         private const val KEY_FIRST_GAME_RETRIEVED_VERSION = "first_game_retrieved_version"
     }
@@ -227,6 +251,28 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             .putBoolean(KEY_MANUAL_SHOWNUMBERS, settings.manualStage.showArrowNumbers)
             .putLong(KEY_MANUAL_WHITE_ARROW_COLOR, settings.manualStage.whiteArrowColor)
             .putLong(KEY_MANUAL_BLACK_ARROW_COLOR, settings.manualStage.blackArrowColor)
+            .apply()
+    }
+
+    private fun loadBoardLayoutSettings(): BoardLayoutSettings {
+        return BoardLayoutSettings(
+            showCoordinates = prefs.getBoolean(KEY_BOARD_SHOW_COORDINATES, true),
+            showLastMove = prefs.getBoolean(KEY_BOARD_SHOW_LAST_MOVE, true),
+            whiteSquareColor = prefs.getLong(KEY_BOARD_WHITE_SQUARE_COLOR, DEFAULT_WHITE_SQUARE_COLOR),
+            blackSquareColor = prefs.getLong(KEY_BOARD_BLACK_SQUARE_COLOR, DEFAULT_BLACK_SQUARE_COLOR),
+            whitePieceColor = prefs.getLong(KEY_BOARD_WHITE_PIECE_COLOR, DEFAULT_WHITE_PIECE_COLOR),
+            blackPieceColor = prefs.getLong(KEY_BOARD_BLACK_PIECE_COLOR, DEFAULT_BLACK_PIECE_COLOR)
+        )
+    }
+
+    private fun saveBoardLayoutSettings(settings: BoardLayoutSettings) {
+        prefs.edit()
+            .putBoolean(KEY_BOARD_SHOW_COORDINATES, settings.showCoordinates)
+            .putBoolean(KEY_BOARD_SHOW_LAST_MOVE, settings.showLastMove)
+            .putLong(KEY_BOARD_WHITE_SQUARE_COLOR, settings.whiteSquareColor)
+            .putLong(KEY_BOARD_BLACK_SQUARE_COLOR, settings.blackSquareColor)
+            .putLong(KEY_BOARD_WHITE_PIECE_COLOR, settings.whitePieceColor)
+            .putLong(KEY_BOARD_BLACK_PIECE_COLOR, settings.blackPieceColor)
             .apply()
     }
 
@@ -321,9 +367,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
             // Load saved settings (will use defaults if reset or not previously set)
             val settings = loadStockfishSettings()
+            val boardSettings = loadBoardLayoutSettings()
             val lichessMaxGames = prefs.getInt(KEY_LICHESS_MAX_GAMES, 10)
             _uiState.value = _uiState.value.copy(
                 stockfishSettings = settings,
+                boardLayoutSettings = boardSettings,
                 lichessMaxGames = lichessMaxGames
             )
 
@@ -399,9 +447,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         // Load saved settings (will use defaults if reset or not previously set)
         val settings = loadStockfishSettings()
+        val boardSettings = loadBoardLayoutSettings()
         val lichessMaxGames = prefs.getInt(KEY_LICHESS_MAX_GAMES, 10)
         _uiState.value = _uiState.value.copy(
             stockfishSettings = settings,
+            boardLayoutSettings = boardSettings,
             lichessMaxGames = lichessMaxGames
         )
 
@@ -1099,6 +1149,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 restartAnalysisForExploringLine()
             }
         }
+    }
+
+    fun updateBoardLayoutSettings(settings: BoardLayoutSettings) {
+        saveBoardLayoutSettings(settings)
+        _uiState.value = _uiState.value.copy(
+            boardLayoutSettings = settings
+        )
     }
 
     private var manualAnalysisJob: Job? = null

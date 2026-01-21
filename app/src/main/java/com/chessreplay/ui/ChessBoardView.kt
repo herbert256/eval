@@ -20,8 +20,9 @@ import androidx.core.graphics.drawable.toBitmap
 import com.chessreplay.R
 import com.chessreplay.chess.*
 
-val BoardLight = Color(0xFFF0D9B5)
-val BoardDark = Color(0xFFB58863)
+// Default board colors (used as fallback)
+val BoardLightDefault = Color(0xFFF0D9B5)
+val BoardDarkDefault = Color(0xFFB58863)
 val HighlightColor = Color(0xFFCDD26A)
 val LegalMoveColor = Color(0x6644AA44)
 val SelectedSquareColor = Color(0x8844AA44)
@@ -45,6 +46,10 @@ fun ChessBoardView(
     showArrowNumbers: Boolean = false,  // Show move numbers on arrows
     whiteArrowColor: Color = Color(0xCC3399FF),  // Default blue
     blackArrowColor: Color = Color(0xCC44BB44),  // Default green
+    showCoordinates: Boolean = true,
+    showLastMove: Boolean = true,
+    whiteSquareColor: Color = BoardLightDefault,
+    blackSquareColor: Color = BoardDarkDefault,
     modifier: Modifier = Modifier
 ) {
     val lastMove = board.getLastMove()
@@ -181,12 +186,12 @@ fun ChessBoardView(
                 val displayFile = if (flipped) 7 - file else file
 
                 val isLight = (file + rank) % 2 == 0
-                var squareColor = if (isLight) BoardLight else BoardDark
+                var squareColor = if (isLight) whiteSquareColor else blackSquareColor
 
                 val square = Square(displayFile, displayRank)
 
-                // Highlight last move
-                if (lastMove != null) {
+                // Highlight last move (if enabled)
+                if (showLastMove && lastMove != null) {
                     if (square == lastMove.from || square == lastMove.to) {
                         squareColor = HighlightColor
                     }
@@ -419,39 +424,41 @@ fun ChessBoardView(
             }
         }
 
-        // Draw file labels (a-h) and rank labels (1-8)
-        val labelSize = squareSize * 0.22f
-        drawContext.canvas.nativeCanvas.apply {
-            val paint = android.graphics.Paint().apply {
-                textSize = labelSize
-                isAntiAlias = true
-                isFakeBoldText = true
-            }
+        // Draw file labels (a-h) and rank labels (1-8) if enabled
+        if (showCoordinates) {
+            val labelSize = squareSize * 0.22f
+            drawContext.canvas.nativeCanvas.apply {
+                val paint = android.graphics.Paint().apply {
+                    textSize = labelSize
+                    isAntiAlias = true
+                    isFakeBoldText = true
+                }
 
-            // File labels (a-h) at bottom of each column
-            for (file in 0..7) {
-                val displayFile = if (flipped) 7 - file else file
-                val label = ('a' + displayFile).toString()
-                val x = file * squareSize + squareSize - labelSize * 0.7f
-                val y = size.height - labelSize * 0.25f
+                // File labels (a-h) at bottom of each column
+                for (file in 0..7) {
+                    val displayFile = if (flipped) 7 - file else file
+                    val label = ('a' + displayFile).toString()
+                    val x = file * squareSize + squareSize - labelSize * 0.7f
+                    val y = size.height - labelSize * 0.25f
 
-                // Use black color for coordinates
-                paint.color = android.graphics.Color.BLACK
+                    // Use black color for coordinates
+                    paint.color = android.graphics.Color.BLACK
 
-                drawText(label, x, y, paint)
-            }
+                    drawText(label, x, y, paint)
+                }
 
-            // Rank labels (1-8) at left of each row
-            for (rank in 0..7) {
-                val displayRank = if (flipped) rank + 1 else 8 - rank
-                val label = displayRank.toString()
-                val x = labelSize * 0.25f
-                val y = rank * squareSize + labelSize * 1.0f
+                // Rank labels (1-8) at left of each row
+                for (rank in 0..7) {
+                    val displayRank = if (flipped) rank + 1 else 8 - rank
+                    val label = displayRank.toString()
+                    val x = labelSize * 0.25f
+                    val y = rank * squareSize + labelSize * 1.0f
 
-                // Use black color for coordinates
-                paint.color = android.graphics.Color.BLACK
+                    // Use black color for coordinates
+                    paint.color = android.graphics.Color.BLACK
 
-                drawText(label, x, y, paint)
+                    drawText(label, x, y, paint)
+                }
             }
         }
     }

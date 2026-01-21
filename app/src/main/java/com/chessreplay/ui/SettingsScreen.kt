@@ -20,7 +20,8 @@ import androidx.compose.ui.unit.dp
 enum class SettingsSubScreen {
     MAIN,
     ARROW_SETTINGS,
-    STOCKFISH
+    STOCKFISH,
+    BOARD_LAYOUT
 }
 
 /**
@@ -30,8 +31,10 @@ enum class SettingsSubScreen {
 @Composable
 fun SettingsScreen(
     stockfishSettings: StockfishSettings,
+    boardLayoutSettings: BoardLayoutSettings,
     onBack: () -> Unit,
-    onSaveStockfish: (StockfishSettings) -> Unit
+    onSaveStockfish: (StockfishSettings) -> Unit,
+    onSaveBoardLayout: (BoardLayoutSettings) -> Unit
 ) {
     var currentSubScreen by remember { mutableStateOf(SettingsSubScreen.MAIN) }
 
@@ -58,6 +61,11 @@ fun SettingsScreen(
             stockfishSettings = stockfishSettings,
             onBack = { currentSubScreen = SettingsSubScreen.MAIN },
             onSave = onSaveStockfish
+        )
+        SettingsSubScreen.BOARD_LAYOUT -> BoardLayoutSettingsScreen(
+            boardLayoutSettings = boardLayoutSettings,
+            onBack = { currentSubScreen = SettingsSubScreen.MAIN },
+            onSave = onSaveBoardLayout
         )
     }
 }
@@ -96,6 +104,13 @@ private fun SettingsMainScreen(
         }
 
         Spacer(modifier = Modifier.height(8.dp))
+
+        // Board layout card
+        SettingsNavigationCard(
+            title = "Board layout",
+            description = "Coordinates, colors, last move highlight",
+            onClick = { onNavigate(SettingsSubScreen.BOARD_LAYOUT) }
+        )
 
         // Arrow settings card
         SettingsNavigationCard(

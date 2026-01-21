@@ -103,8 +103,10 @@ fun GameScreen(
     if (uiState.showSettingsDialog) {
         SettingsScreen(
             stockfishSettings = uiState.stockfishSettings,
+            boardLayoutSettings = uiState.boardLayoutSettings,
             onBack = { viewModel.hideSettingsDialog() },
-            onSaveStockfish = { viewModel.updateStockfishSettings(it) }
+            onSaveStockfish = { viewModel.updateStockfishSettings(it) },
+            onSaveBoardLayout = { viewModel.updateBoardLayoutSettings(it) }
         )
         return
     }

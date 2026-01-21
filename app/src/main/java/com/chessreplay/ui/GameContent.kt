@@ -336,6 +336,10 @@ fun GameContent(
                 showArrowNumbers = uiState.stockfishSettings.manualStage.showArrowNumbers,
                 whiteArrowColor = Color(uiState.stockfishSettings.manualStage.whiteArrowColor.toInt()),
                 blackArrowColor = Color(uiState.stockfishSettings.manualStage.blackArrowColor.toInt()),
+                showCoordinates = uiState.boardLayoutSettings.showCoordinates,
+                showLastMove = uiState.boardLayoutSettings.showLastMove,
+                whiteSquareColor = Color(uiState.boardLayoutSettings.whiteSquareColor.toInt()),
+                blackSquareColor = Color(uiState.boardLayoutSettings.blackSquareColor.toInt()),
                 modifier = Modifier.fillMaxWidth()
             )
 
