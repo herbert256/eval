@@ -237,10 +237,11 @@ fun AnalysisPanel(
     val turn = uiState.currentBoard.getTurn()
     val isWhiteTurn = turn == PieceColor.WHITE
 
-    // Only show if analysis is enabled, ready with results, and result is for current position
+    // Show if analysis is enabled, ready, and has results
+    // Keep showing even if result is stale (waiting for new position analysis) to avoid UI jumping
     val currentFen = uiState.currentBoard.getFen()
     val isResultForCurrentPosition = uiState.analysisResultFen == currentFen
-    if (!uiState.analysisEnabled || !uiState.stockfishReady || result == null || !isResultForCurrentPosition) {
+    if (!uiState.analysisEnabled || !uiState.stockfishReady || result == null) {
         return
     }
 

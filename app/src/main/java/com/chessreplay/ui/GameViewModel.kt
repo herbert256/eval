@@ -652,51 +652,58 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun goToStart() {
         if (!handleNavigationInterrupt()) return
 
-        val newBoard: ChessBoard
         if (_uiState.value.isExploringLine) {
-            newBoard = exploringLineHistory.firstOrNull()?.copy() ?: ChessBoard()
+            val newBoard = exploringLineHistory.firstOrNull()?.copy() ?: ChessBoard()
             _uiState.value = _uiState.value.copy(
                 currentBoard = newBoard,
                 exploringLineMoveIndex = -1
             )
+            analyzePosition(newBoard)
         } else {
-            newBoard = boardHistory.firstOrNull()?.copy() ?: ChessBoard()
-            _uiState.value = _uiState.value.copy(
-                currentBoard = newBoard,
-                currentMoveIndex = -1
-            )
+            // In manual stage, use restartAnalysisAtMove for reliable sync
+            if (_uiState.value.currentStage == AnalysisStage.MANUAL) {
+                restartAnalysisAtMove(-1)
+            } else {
+                val newBoard = boardHistory.firstOrNull()?.copy() ?: ChessBoard()
+                _uiState.value = _uiState.value.copy(
+                    currentBoard = newBoard,
+                    currentMoveIndex = -1
+                )
+                analyzePosition(newBoard)
+            }
         }
-        analyzePosition(newBoard)
     }
 
     fun goToEnd() {
         if (!handleNavigationInterrupt()) return
 
-        val newBoard: ChessBoard
         if (_uiState.value.isExploringLine) {
             val moves = _uiState.value.exploringLineMoves
             if (moves.isEmpty()) {
                 analyzePosition(_uiState.value.currentBoard)
                 return
             }
-            newBoard = exploringLineHistory.lastOrNull()?.copy() ?: ChessBoard()
+            val newBoard = exploringLineHistory.lastOrNull()?.copy() ?: ChessBoard()
             _uiState.value = _uiState.value.copy(
                 currentBoard = newBoard,
                 exploringLineMoveIndex = moves.size - 1
             )
+            analyzePosition(newBoard)
         } else {
             val moves = _uiState.value.moves
-            if (moves.isEmpty()) {
-                analyzePosition(_uiState.value.currentBoard)
-                return
+            if (moves.isEmpty()) return
+            // In manual stage, use restartAnalysisAtMove for reliable sync
+            if (_uiState.value.currentStage == AnalysisStage.MANUAL) {
+                restartAnalysisAtMove(moves.size - 1)
+            } else {
+                val newBoard = boardHistory.lastOrNull()?.copy() ?: ChessBoard()
+                _uiState.value = _uiState.value.copy(
+                    currentBoard = newBoard,
+                    currentMoveIndex = moves.size - 1
+                )
+                analyzePosition(newBoard)
             }
-            newBoard = boardHistory.lastOrNull()?.copy() ?: ChessBoard()
-            _uiState.value = _uiState.value.copy(
-                currentBoard = newBoard,
-                currentMoveIndex = moves.size - 1
-            )
         }
-        analyzePosition(newBoard)
     }
 
     fun goToMove(index: Int) {
@@ -748,12 +755,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val fenToAnalyze = board.getFen()
             currentAnalysisFen = fenToAnalyze
 
-            // Update UI state
+            // Update UI state - keep analysisResult to avoid UI jumping, just clear the FEN
+            // The card will stay visible with old content until new results arrive
             _uiState.value = _uiState.value.copy(
                 currentMoveIndex = validIndex,
                 currentBoard = board.copy(),
-                analysisResult = null,
-                analysisResultFen = null
+                analysisResultFen = null  // Mark as stale, but keep result for UI stability
             )
 
             // Small delay to ensure Stockfish has stopped
@@ -773,55 +780,65 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun nextMove() {
         if (!handleNavigationInterrupt()) return
 
-        val newBoard: ChessBoard
         if (_uiState.value.isExploringLine) {
             val currentIndex = _uiState.value.exploringLineMoveIndex
             val moves = _uiState.value.exploringLineMoves
             if (currentIndex >= moves.size - 1) return
             val newIndex = currentIndex + 1
-            newBoard = exploringLineHistory.getOrNull(newIndex + 1)?.copy() ?: _uiState.value.currentBoard
+            val newBoard = exploringLineHistory.getOrNull(newIndex + 1)?.copy() ?: _uiState.value.currentBoard
             _uiState.value = _uiState.value.copy(
                 currentBoard = newBoard,
                 exploringLineMoveIndex = newIndex
             )
+            analyzePosition(newBoard)
         } else {
             val currentIndex = _uiState.value.currentMoveIndex
             val moves = _uiState.value.moves
             if (currentIndex >= moves.size - 1) return
-            val newIndex = currentIndex + 1
-            newBoard = boardHistory.getOrNull(newIndex + 1)?.copy() ?: _uiState.value.currentBoard
-            _uiState.value = _uiState.value.copy(
-                currentBoard = newBoard,
-                currentMoveIndex = newIndex
-            )
+            // In manual stage, use restartAnalysisAtMove for reliable sync
+            if (_uiState.value.currentStage == AnalysisStage.MANUAL) {
+                restartAnalysisAtMove(currentIndex + 1)
+            } else {
+                val newIndex = currentIndex + 1
+                val newBoard = boardHistory.getOrNull(newIndex + 1)?.copy() ?: _uiState.value.currentBoard
+                _uiState.value = _uiState.value.copy(
+                    currentBoard = newBoard,
+                    currentMoveIndex = newIndex
+                )
+                analyzePosition(newBoard)
+            }
         }
-        analyzePosition(newBoard)
     }
 
     fun prevMove() {
         if (!handleNavigationInterrupt()) return
 
-        val newBoard: ChessBoard
         if (_uiState.value.isExploringLine) {
             val currentIndex = _uiState.value.exploringLineMoveIndex
             if (currentIndex < 0) return
             val newIndex = currentIndex - 1
-            newBoard = exploringLineHistory.getOrNull(newIndex + 1)?.copy() ?: ChessBoard()
+            val newBoard = exploringLineHistory.getOrNull(newIndex + 1)?.copy() ?: ChessBoard()
             _uiState.value = _uiState.value.copy(
                 currentBoard = newBoard,
                 exploringLineMoveIndex = newIndex
             )
+            analyzePosition(newBoard)
         } else {
             val currentIndex = _uiState.value.currentMoveIndex
             if (currentIndex < 0) return
-            val newIndex = currentIndex - 1
-            newBoard = boardHistory.getOrNull(newIndex + 1)?.copy() ?: ChessBoard()
-            _uiState.value = _uiState.value.copy(
-                currentBoard = newBoard,
-                currentMoveIndex = newIndex
-            )
+            // In manual stage, use restartAnalysisAtMove for reliable sync
+            if (_uiState.value.currentStage == AnalysisStage.MANUAL) {
+                restartAnalysisAtMove(currentIndex - 1)
+            } else {
+                val newIndex = currentIndex - 1
+                val newBoard = boardHistory.getOrNull(newIndex + 1)?.copy() ?: ChessBoard()
+                _uiState.value = _uiState.value.copy(
+                    currentBoard = newBoard,
+                    currentMoveIndex = newIndex
+                )
+                analyzePosition(newBoard)
+            }
         }
-        analyzePosition(newBoard)
     }
 
     fun exploreLine(pv: String, moveIndex: Int = 0) {
