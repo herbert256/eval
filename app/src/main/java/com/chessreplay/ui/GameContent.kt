@@ -583,14 +583,13 @@ fun GameContent(
         }
     }
 
-    // PGN Info Card - always shown at bottom
+    // Game Information Card - table layout
     Spacer(modifier = Modifier.height(12.dp))
     Card(
         colors = CardDefaults.cardColors(
             containerColor = Color(0xFF2A4A6A)  // Lighter blue background
         ),
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier = Modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier.padding(12.dp),
@@ -606,27 +605,27 @@ fun GameContent(
                 textAlign = TextAlign.Center
             )
             Spacer(modifier = Modifier.height(4.dp))
-            // Chess server
-            Text(
-                text = "Server: lichess.org",
-                fontSize = 13.sp,
-                color = Color.White
-            )
+
+            // Table rows with aligned labels and values
+            val labelWidth = 90.dp
+
+            // Server
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Text("Server:", fontSize = 13.sp, color = Color(0xFFAAAAAA), modifier = Modifier.width(labelWidth))
+                Text("lichess.org", fontSize = 13.sp, color = Color.White)
+            }
             // White player
-            Text(
-                text = "White: $whiteName${whiteRating?.let { " ($it)" } ?: ""}",
-                fontSize = 13.sp,
-                color = Color.White
-            )
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Text("White:", fontSize = 13.sp, color = Color(0xFFAAAAAA), modifier = Modifier.width(labelWidth))
+                Text("$whiteName${whiteRating?.let { " ($it)" } ?: ""}", fontSize = 13.sp, color = Color.White)
+            }
             // Black player
-            Text(
-                text = "Black: $blackName${blackRating?.let { " ($it)" } ?: ""}",
-                fontSize = 13.sp,
-                color = Color.White
-            )
-            // Time format
-            val timeFormatText = buildString {
-                append("Format: ")
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Text("Black:", fontSize = 13.sp, color = Color(0xFFAAAAAA), modifier = Modifier.width(labelWidth))
+                Text("$blackName${blackRating?.let { " ($it)" } ?: ""}", fontSize = 13.sp, color = Color.White)
+            }
+            // Format
+            val formatText = buildString {
                 append(game.speed.replaceFirstChar { it.uppercase() })
                 game.clock?.let { clock ->
                     val minutes = clock.initial / 60
@@ -635,28 +634,25 @@ fun GameContent(
                 }
                 if (game.rated) append(" • Rated") else append(" • Casual")
             }
-            Text(
-                text = timeFormatText,
-                fontSize = 13.sp,
-                color = Color.White
-            )
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Text("Format:", fontSize = 13.sp, color = Color(0xFFAAAAAA), modifier = Modifier.width(labelWidth))
+                Text(formatText, fontSize = 13.sp, color = Color.White)
+            }
             // Opening
             uiState.openingName?.let { opening ->
-                Text(
-                    text = "Opening: $opening",
-                    fontSize = 13.sp,
-                    color = Color.White
-                )
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    Text("Opening:", fontSize = 13.sp, color = Color(0xFFAAAAAA), modifier = Modifier.width(labelWidth))
+                    Text(opening, fontSize = 13.sp, color = Color.White)
+                }
             }
             // Date
             game.createdAt?.let { timestamp ->
                 val date = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
                     .format(java.util.Date(timestamp))
-                Text(
-                    text = "Date: $date",
-                    fontSize = 13.sp,
-                    color = Color.White
-                )
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    Text("Date:", fontSize = 13.sp, color = Color(0xFFAAAAAA), modifier = Modifier.width(labelWidth))
+                    Text(date, fontSize = 13.sp, color = Color.White)
+                }
             }
             // Result
             val resultText = when (game.winner) {
@@ -664,10 +660,61 @@ fun GameContent(
                 "black" -> "0-1"
                 else -> if (game.status == "draw" || game.status == "stalemate") "½-½" else game.status
             }
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Text("Result:", fontSize = 13.sp, color = Color(0xFFAAAAAA), modifier = Modifier.width(labelWidth))
+                Text(resultText, fontSize = 13.sp, color = Color.White)
+            }
+            // Termination - extract from PGN headers
+            game.pgn?.let { pgn ->
+                val terminationMatch = Regex("\\[Termination \"([^\"]+)\"\\]").find(pgn)
+                terminationMatch?.groupValues?.get(1)?.let { termination ->
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        Text("Termination:", fontSize = 13.sp, color = Color(0xFFAAAAAA), modifier = Modifier.width(labelWidth))
+                        Text(termination, fontSize = 13.sp, color = Color.White)
+                    }
+                }
+            }
+        }
+    }
+
+    // PGN Card - always shown at bottom
+    Spacer(modifier = Modifier.height(12.dp))
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFF3A3A3A)  // Dark gray background
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
             Text(
-                text = "Result: $resultText",
-                fontSize = 13.sp,
-                color = Color.White
+                text = "PGN",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            game.pgn?.let { pgn ->
+                // Format PGN with each move on a new line
+                val formattedPgn = pgn.replace(Regex("(\\d+\\.)")) { match ->
+                    "\n${match.value}"
+                }.trimStart()
+                Text(
+                    text = formattedPgn,
+                    fontSize = 11.sp,
+                    color = Color(0xFFCCCCCC),
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    lineHeight = 14.sp
+                )
+            } ?: Text(
+                text = "No PGN data available",
+                fontSize = 12.sp,
+                color = Color(0xFF888888),
+                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
             )
         }
     }
