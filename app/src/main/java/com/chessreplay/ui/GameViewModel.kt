@@ -102,6 +102,7 @@ data class GameUiState(
     val analysisResultFen: String? = null,  // FEN for which analysisResult is valid
     val stockfishReady: Boolean = false,
     val flippedBoard: Boolean = false,
+    val userPlayedBlack: Boolean = false,  // True if searched user played black (for score perspective)
     val stockfishSettings: StockfishSettings = StockfishSettings(),
     val showSettingsDialog: Boolean = false,
     // Exploring line state
@@ -375,6 +376,83 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * Check if Stockfish is installed. Returns true if installed.
+     */
+    fun checkStockfishInstalled(): Boolean {
+        return stockfish.isStockfishInstalled()
+    }
+
+    /**
+     * Initialize Stockfish after it has been installed.
+     * Called when the app detects Stockfish was installed while on the "not installed" screen.
+     */
+    fun initializeStockfish() {
+        val installed = stockfish.isStockfishInstalled()
+        if (!installed) return
+
+        _uiState.value = _uiState.value.copy(stockfishInstalled = true)
+
+        // Reset settings to defaults on first run (fresh install or app update)
+        if (isFirstRun()) {
+            resetSettingsToDefaults()
+        }
+
+        // Load saved settings (will use defaults if reset or not previously set)
+        val settings = loadStockfishSettings()
+        val lichessMaxGames = prefs.getInt(KEY_LICHESS_MAX_GAMES, 10)
+        _uiState.value = _uiState.value.copy(
+            stockfishSettings = settings,
+            lichessMaxGames = lichessMaxGames
+        )
+
+        // Initialize Stockfish with manual stage settings (default)
+        viewModelScope.launch {
+            val ready = stockfish.initialize()
+            if (ready) {
+                configureForManualStage()
+            }
+            _uiState.value = _uiState.value.copy(stockfishReady = ready)
+
+            // Auto-load the last user's most recent game and start analysis
+            // Skip on first run (after install or update) - user must make a choice first
+            if (ready && !isFirstRun()) {
+                autoLoadLastGame()
+            }
+        }
+
+        // Observe analysis results (only for Preview/Analyse stages - Manual stage handles its own updates)
+        viewModelScope.launch {
+            stockfish.analysisResult.collect { result ->
+                // In Manual stage, results are handled directly by ensureStockfishAnalysis
+                // to avoid race conditions. Only update UI here for other stages.
+                if (_uiState.value.currentStage != AnalysisStage.MANUAL) {
+                    if (result != null) {
+                        val expectedFen = currentAnalysisFen
+                        if (expectedFen != null && expectedFen == _uiState.value.currentBoard.getFen()) {
+                            _uiState.value = _uiState.value.copy(
+                                analysisResult = result,
+                                analysisResultFen = expectedFen
+                            )
+                        }
+                    } else {
+                        _uiState.value = _uiState.value.copy(
+                            analysisResult = null,
+                            analysisResultFen = null
+                        )
+                    }
+                }
+            }
+        }
+
+        // Observe engine ready state
+        viewModelScope.launch {
+            stockfish.isReady.collect { ready ->
+                _uiState.value = _uiState.value.copy(stockfishReady = ready)
+            }
+        }
+    }
+
+    /**
      * Automatically load the last user's most recent game and start analysis.
      * Called on app startup if there's a saved username.
      */
@@ -507,6 +585,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             currentMoveIndex = -1,
             analysisResult = null,
             flippedBoard = false,
+            userPlayedBlack = false,
             isExploringLine = false,
             exploringLineMoves = emptyList(),
             exploringLineMoveIndex = -1,
@@ -607,6 +686,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             currentBoard = initialBoard,
             currentMoveIndex = -1,
             flippedBoard = userPlayedBlack,
+            userPlayedBlack = userPlayedBlack,
             // Reset exploring state
             isExploringLine = false,
             exploringLineMoves = emptyList(),
@@ -1378,8 +1458,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     // Score adjustment: Stockfish gives score from side-to-move's perspective
                     // We want score from WHITE's perspective (positive = good for white)
                     val isWhiteToMove = board.getTurn() == com.chessreplay.chess.PieceColor.WHITE
-                    val adjustedScore = if (isWhiteToMove) -bestLine.score else bestLine.score
-                    val adjustedMateIn = if (isWhiteToMove) -bestLine.mateIn else bestLine.mateIn
+                    val adjustedScore = if (isWhiteToMove) bestLine.score else -bestLine.score
+                    val adjustedMateIn = if (isWhiteToMove) bestLine.mateIn else -bestLine.mateIn
 
                     val score = MoveScore(
                         score = adjustedScore,

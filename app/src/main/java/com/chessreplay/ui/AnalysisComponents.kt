@@ -49,9 +49,12 @@ fun EvaluationGraph(
     totalMoves: Int,
     currentMoveIndex: Int,
     currentStage: AnalysisStage,
+    userPlayedBlack: Boolean,
     onMoveSelected: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Score multiplier: invert scores when user played black so positive = good for user
+    val scorePerspective = if (userPlayedBlack) -1f else 1f
     val greenColor = Color(0xFF00E676)  // Bright green
     val redColor = Color(0xFFFF5252)    // Bright red
     val lineColor = Color(0xFF666666)
@@ -125,9 +128,10 @@ fun EvaluationGraph(
             val score = previewScores[moveIndex]
             if (score != null) {
                 val x = if (totalMoves > 1) moveIndex * pointSpacing else width / 2
-                val clampedScore = score.score.coerceIn(-maxScore, maxScore)
-                val y = centerY + (clampedScore / maxScore) * (height / 2 - 4)
-                points.add(GraphPoint(x, y, score.score))
+                val adjustedScore = score.score * scorePerspective
+                val clampedScore = adjustedScore.coerceIn(-maxScore, maxScore)
+                val y = centerY - (clampedScore / maxScore) * (height / 2 - 4)
+                points.add(GraphPoint(x, y, adjustedScore))
             }
         }
 
@@ -146,7 +150,7 @@ fun EvaluationGraph(
                 val crossX = p1.x + (p2.x - p1.x) * t
 
                 // Draw first segment (from p1 to crossing point)
-                val color1 = if (p1.score >= 0) redColor else greenColor
+                val color1 = if (p1.score >= 0) greenColor else redColor
                 val path1 = androidx.compose.ui.graphics.Path().apply {
                     moveTo(p1.x, p1.y)
                     lineTo(crossX, centerY)
@@ -156,7 +160,7 @@ fun EvaluationGraph(
                 drawPath(path1, color1.copy(alpha = 0.8f))
 
                 // Draw second segment (from crossing point to p2)
-                val color2 = if (p2.score >= 0) redColor else greenColor
+                val color2 = if (p2.score >= 0) greenColor else redColor
                 val path2 = androidx.compose.ui.graphics.Path().apply {
                     moveTo(crossX, centerY)
                     lineTo(p2.x, p2.y)
@@ -170,7 +174,7 @@ fun EvaluationGraph(
                 drawLine(color2, Offset(crossX, centerY), Offset(p2.x, p2.y), strokeWidth = 2f)
             } else {
                 // No crossing - draw single colored area
-                val color = if (p1.score >= 0) redColor else greenColor
+                val color = if (p1.score >= 0) greenColor else redColor
 
                 val path = androidx.compose.ui.graphics.Path().apply {
                     moveTo(p1.x, p1.y)
@@ -192,9 +196,10 @@ fun EvaluationGraph(
             val score = analyseScores[moveIndex]
             if (score != null) {
                 val x = if (totalMoves > 1) moveIndex * pointSpacing else width / 2
-                val clampedScore = score.score.coerceIn(-maxScore, maxScore)
-                val y = centerY + (clampedScore / maxScore) * (height / 2 - 4)
-                pointsAnalyse.add(GraphPoint(x, y, score.score))
+                val adjustedScore = score.score * scorePerspective
+                val clampedScore = adjustedScore.coerceIn(-maxScore, maxScore)
+                val y = centerY - (clampedScore / maxScore) * (height / 2 - 4)
+                pointsAnalyse.add(GraphPoint(x, y, adjustedScore))
             }
         }
 
@@ -267,6 +272,7 @@ fun AnalysisPanel(
                     line = line,
                     board = uiState.currentBoard,
                     isWhiteTurn = isWhiteTurn,
+                    userPlayedBlack = uiState.userPlayedBlack,
                     onMoveClick = { moveIndex ->
                         onExploreLine(line.pv, moveIndex)
                     }
@@ -284,27 +290,31 @@ private fun PvLineRow(
     line: PvLine,
     board: ChessBoard,
     isWhiteTurn: Boolean,
+    userPlayedBlack: Boolean,
     onMoveClick: (Int) -> Unit
 ) {
-    // Score display: always from white's perspective (positive = white better, negative = black better)
-    // Convert score to WHITE's perspective (Stockfish gives score from side-to-move's view)
-    val adjustedScore = if (isWhiteTurn) -line.score else line.score
-    val adjustedMateIn = if (isWhiteTurn) -line.mateIn else line.mateIn
+    // Score display: from player's perspective (positive = good for player)
+    // First convert score to WHITE's perspective (Stockfish gives score from side-to-move's view)
+    val whiteScore = if (isWhiteTurn) line.score else -line.score
+    val whiteMateIn = if (isWhiteTurn) line.mateIn else -line.mateIn
+    // Then convert to player's perspective
+    val adjustedScore = if (userPlayedBlack) -whiteScore else whiteScore
+    val adjustedMateIn = if (userPlayedBlack) -whiteMateIn else whiteMateIn
 
     val displayScore = if (line.isMate) {
-        if (adjustedMateIn > 0) "M$adjustedMateIn" else "M${kotlin.math.abs(adjustedMateIn)}"
+        if (adjustedMateIn > 0) "+M${adjustedMateIn}" else "-M${kotlin.math.abs(adjustedMateIn)}"
     } else {
-        if (adjustedScore >= 0) "-%.1f".format(kotlin.math.abs(adjustedScore))
-        else "+%.1f".format(kotlin.math.abs(adjustedScore))
+        if (adjustedScore >= 0) "+%.1f".format(adjustedScore)
+        else "%.1f".format(adjustedScore)
     }
 
     val scoreColor = when {
-        line.isMate -> Color(0xFFFF6B6B)
+        line.isMate -> if (adjustedMateIn > 0) Color(0xFF00E676) else Color(0xFFFF5252)
         else -> {
             when {
-                adjustedScore > 0.3f -> Color.White
-                adjustedScore < -0.3f -> Color(0xFF888888)
-                else -> Color(0xFF6B9BFF)
+                adjustedScore > 0.3f -> Color(0xFF00E676)  // Green - good for player
+                adjustedScore < -0.3f -> Color(0xFFFF5252)  // Red - bad for player
+                else -> Color(0xFF6B9BFF)  // Blue - equal
             }
         }
     }

@@ -18,9 +18,18 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
+import androidx.compose.foundation.text.ClickableText
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.lifecycle.viewmodel.compose.viewModel
 import android.app.Activity
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.delay
 
 /**
  * Main game screen composable that handles game selection and display.
@@ -39,6 +48,12 @@ fun GameScreen(
         StockfishNotInstalledScreen(
             onExit = {
                 (context as? Activity)?.finish()
+            },
+            onCheckInstalled = {
+                viewModel.checkStockfishInstalled()
+            },
+            onInstalled = {
+                viewModel.initializeStockfish()
             }
         )
         return
@@ -340,11 +355,28 @@ fun GameScreen(
 /**
  * Blocking screen shown when Stockfish is not installed.
  * User must install "Stockfish 17.1 Chess Engine" from Google Play Store.
+ * Automatically checks every 2 seconds if Stockfish has been installed.
  */
 @Composable
 fun StockfishNotInstalledScreen(
-    onExit: () -> Unit
+    onExit: () -> Unit,
+    onCheckInstalled: () -> Boolean,
+    onInstalled: () -> Unit
 ) {
+    val context = LocalContext.current
+    val playStoreUrl = "https://play.google.com/store/apps/details?id=com.stockfish141"
+
+    // Check every 2 seconds if Stockfish has been installed
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(2000)
+            if (onCheckInstalled()) {
+                onInstalled()
+                break
+            }
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -373,9 +405,45 @@ fun StockfishNotInstalledScreen(
                 )
 
                 Text(
-                    text = "This app requires the Stockfish chess engine to analyze games.\n\nPlease install \"Stockfish 17.1 Chess Engine\" from the Google Play Store.",
+                    text = "This app requires the Stockfish chess engine to analyze games.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onErrorContainer,
+                    textAlign = TextAlign.Center
+                )
+
+                // Clickable link to Play Store
+                val annotatedText = buildAnnotatedString {
+                    append("Please install ")
+                    pushStringAnnotation(tag = "URL", annotation = playStoreUrl)
+                    withStyle(style = SpanStyle(
+                        color = Color(0xFF6B9BFF),
+                        textDecoration = TextDecoration.Underline
+                    )) {
+                        append("Stockfish 17.1 Chess Engine")
+                    }
+                    pop()
+                    append(" from the Google Play Store.")
+                }
+
+                ClickableText(
+                    text = annotatedText,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        textAlign = TextAlign.Center
+                    ),
+                    onClick = { offset ->
+                        annotatedText.getStringAnnotations(tag = "URL", start = offset, end = offset)
+                            .firstOrNull()?.let {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(it.item))
+                                context.startActivity(intent)
+                            }
+                    }
+                )
+
+                Text(
+                    text = "The app will start automatically once Stockfish is installed.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f),
                     textAlign = TextAlign.Center
                 )
 

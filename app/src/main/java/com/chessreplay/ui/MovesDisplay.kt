@@ -41,6 +41,7 @@ fun MovesList(
     moveScores: Map<Int, MoveScore>,
     currentStage: AnalysisStage,
     autoAnalysisIndex: Int,
+    userPlayedBlack: Boolean,
     onMoveClick: (Int) -> Unit
 ) {
     val movePairs = remember(moveDetails) { moveDetails.chunked(2) }
@@ -72,6 +73,7 @@ fun MovesList(
                         isActive = whiteIndex == currentMoveIndex,
                         isAnalyzing = isAutoAnalyzing && autoAnalysisIndex == whiteIndex,
                         score = moveScores[whiteIndex],
+                        userPlayedBlack = userPlayedBlack,
                         onClick = { onMoveClick(whiteIndex) },
                         modifier = Modifier.weight(1f)
                     )
@@ -86,6 +88,7 @@ fun MovesList(
                             isActive = blackIndex == currentMoveIndex,
                             isAnalyzing = isAutoAnalyzing && autoAnalysisIndex == blackIndex,
                             score = moveScores[blackIndex],
+                            userPlayedBlack = userPlayedBlack,
                             onClick = { onMoveClick(blackIndex) },
                             modifier = Modifier.weight(1f)
                         )
@@ -108,6 +111,7 @@ private fun MoveChip(
     isActive: Boolean,
     isAnalyzing: Boolean = false,
     score: MoveScore? = null,
+    userPlayedBlack: Boolean = false,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -155,20 +159,23 @@ private fun MoveChip(
             )
         }
 
-        // Show score if available
+        // Show score if available (from player's perspective)
         if (score != null) {
             Spacer(modifier = Modifier.width(4.dp))
+            // Convert score to player's perspective
+            val playerScore = if (userPlayedBlack) -score.score else score.score
+            val playerMateIn = if (userPlayedBlack) -score.mateIn else score.mateIn
             val scoreText = if (score.isMate) {
-                "M${kotlin.math.abs(score.mateIn)}"
+                "M${kotlin.math.abs(playerMateIn)}"
             } else {
-                "%.1f".format(kotlin.math.abs(score.score))
+                "%.1f".format(kotlin.math.abs(playerScore))
             }
             val scoreColor = when {
                 isActive -> Color.White.copy(alpha = 0.9f)
-                score.isMate && score.mateIn > 0 -> Color(0xFFFF5252) // Red for white winning mate
-                score.isMate && score.mateIn < 0 -> Color(0xFF00E676) // Green for black winning mate
-                score.score > 0.1f -> Color(0xFFFF5252) // Red for white better
-                score.score < -0.1f -> Color(0xFF00E676) // Green for black better
+                score.isMate && playerMateIn > 0 -> Color(0xFF00E676) // Green for player winning mate
+                score.isMate && playerMateIn < 0 -> Color(0xFFFF5252) // Red for player losing mate
+                playerScore > 0.1f -> Color(0xFF00E676) // Green for player better
+                playerScore < -0.1f -> Color(0xFFFF5252) // Red for player worse
                 else -> Color(0xFF2196F3) // Blue for equal (0)
             }
             Text(

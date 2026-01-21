@@ -176,36 +176,42 @@ fun GameContent(
                     )
                 }
 
-                // RIGHT: Score
+                // RIGHT: Score (from player's perspective)
                 val isCurrentlyAnalyzing = uiState.currentStage != AnalysisStage.MANUAL && uiState.autoAnalysisIndex == moveIndex
                 // Only use live result if it's for the current position (FEN matches)
                 val currentFen = uiState.currentBoard.getFen()
                 val isResultForCurrentPosition = uiState.analysisResultFen == currentFen
-                val displayScore: MoveScore? = if ((isManualMode || isCurrentlyAnalyzing) && liveResult != null && isResultForCurrentPosition) {
+                // Get score in WHITE's perspective first
+                val whiteScore: MoveScore? = if ((isManualMode || isCurrentlyAnalyzing) && liveResult != null && isResultForCurrentPosition) {
                     val bestLine = liveResult.bestLine
                     if (bestLine != null) {
                         // Convert score to WHITE's perspective (Stockfish gives score from side-to-move's view)
-                        val adjustedScore = if (isWhiteTurn) -bestLine.score else bestLine.score
-                        val adjustedMateIn = if (isWhiteTurn) -bestLine.mateIn else bestLine.mateIn
+                        val adjustedScore = if (isWhiteTurn) bestLine.score else -bestLine.score
+                        val adjustedMateIn = if (isWhiteTurn) bestLine.mateIn else -bestLine.mateIn
                         MoveScore(adjustedScore, bestLine.isMate, adjustedMateIn)
                     } else null
                 } else {
                     storedScore
                 }
+                // Convert to PLAYER's perspective
+                val displayScore: MoveScore? = if (whiteScore != null && uiState.userPlayedBlack) {
+                    MoveScore(-whiteScore.score, whiteScore.isMate, -whiteScore.mateIn)
+                } else {
+                    whiteScore
+                }
 
                 if (displayScore != null) {
                     val scoreText = if (displayScore.isMate) {
-                        "M${kotlin.math.abs(displayScore.mateIn)}"
+                        if (displayScore.mateIn > 0) "+M${displayScore.mateIn}" else "-M${kotlin.math.abs(displayScore.mateIn)}"
                     } else {
-                        val absScore = kotlin.math.abs(displayScore.score)
-                        if (displayScore.score >= 0) "-%.1f".format(absScore) else "+%.1f".format(absScore)
+                        if (displayScore.score >= 0) "+%.1f".format(displayScore.score) else "%.1f".format(displayScore.score)
                     }
                     val scoreColor = when {
-                        displayScore.isMate && displayScore.mateIn > 0 -> Color(0xFFFF5252)  // Red for white winning mate
-                        displayScore.isMate && displayScore.mateIn < 0 -> Color(0xFF00E676)  // Green for black winning mate
-                        displayScore.score > 0.1f -> Color(0xFFFF5252)  // Red for white better
-                        displayScore.score < -0.1f -> Color(0xFF00E676)  // Green for black better
-                        else -> Color(0xFF64B5F6)  // Bright blue
+                        displayScore.isMate && displayScore.mateIn > 0 -> Color(0xFF00E676)  // Green for player winning mate
+                        displayScore.isMate && displayScore.mateIn < 0 -> Color(0xFFFF5252)  // Red for player losing mate
+                        displayScore.score > 0.1f -> Color(0xFF00E676)  // Green for player better
+                        displayScore.score < -0.1f -> Color(0xFFFF5252)  // Red for player worse
+                        else -> Color(0xFF64B5F6)  // Bright blue for equal
                     }
                     Text(
                         text = scoreText,
@@ -242,6 +248,7 @@ fun GameContent(
                         totalMoves = uiState.moveDetails.size,
                         currentMoveIndex = uiState.currentMoveIndex,
                         currentStage = uiState.currentStage,
+                        userPlayedBlack = uiState.userPlayedBlack,
                         onMoveSelected = { moveIndex ->
                             when (uiState.currentStage) {
                                 AnalysisStage.PREVIEW -> { /* Not interruptible - ignore clicks */ }
@@ -513,6 +520,7 @@ fun GameContent(
                     moveScores = displayScores,
                     currentStage = uiState.currentStage,
                     autoAnalysisIndex = uiState.autoAnalysisIndex,
+                    userPlayedBlack = uiState.userPlayedBlack,
                     onMoveClick = { viewModel.goToMove(it) }
                 )
             }
