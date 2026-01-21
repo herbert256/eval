@@ -9,6 +9,7 @@ import com.chessreplay.chess.PgnParser
 import com.chessreplay.data.ChessRepository
 import com.chessreplay.data.LichessGame
 import com.chessreplay.data.Result
+import com.google.gson.Gson
 import com.chessreplay.stockfish.AnalysisResult
 import com.chessreplay.stockfish.StockfishEngine
 import kotlinx.coroutines.Job
@@ -153,6 +154,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = ChessRepository()
     private val stockfish = StockfishEngine(application)
     private val prefs = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val gson = Gson()
 
     private val _uiState = MutableStateFlow(GameUiState())
     val uiState: StateFlow<GameUiState> = _uiState.asStateFlow()
@@ -175,6 +177,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
         private const val PREFS_NAME = "chess_replay_prefs"
+        // Current game storage
+        private const val KEY_CURRENT_GAME_JSON = "current_game_json"
         // Lichess settings
         private const val KEY_LICHESS_USERNAME = "lichess_username"
         private const val KEY_LICHESS_MAX_GAMES = "lichess_max_games"
@@ -288,6 +292,27 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             .putLong(KEY_BOARD_WHITE_PIECE_COLOR, settings.whitePieceColor)
             .putLong(KEY_BOARD_BLACK_PIECE_COLOR, settings.blackPieceColor)
             .apply()
+    }
+
+    /**
+     * Save the current game to SharedPreferences as JSON.
+     */
+    private fun saveCurrentGame(game: LichessGame) {
+        val json = gson.toJson(game)
+        prefs.edit().putString(KEY_CURRENT_GAME_JSON, json).apply()
+    }
+
+    /**
+     * Load the current game from SharedPreferences.
+     * Returns null if no game is stored.
+     */
+    private fun loadCurrentGame(): LichessGame? {
+        val json = prefs.getString(KEY_CURRENT_GAME_JSON, null) ?: return null
+        return try {
+            gson.fromJson(json, LichessGame::class.java)
+        } catch (e: Exception) {
+            null
+        }
     }
 
     private fun configureForPreviewStage() {
@@ -517,10 +542,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Automatically load the last user's most recent game and start analysis.
-     * Called on app startup if there's a saved username.
+     * Automatically load a game and start analysis on app startup.
+     * First tries to load the stored current game, then falls back to fetching
+     * the most recent game from Lichess for the stored username.
      */
     private suspend fun autoLoadLastGame() {
+        // First, try to load the stored current game
+        val storedGame = loadCurrentGame()
+        if (storedGame != null) {
+            loadGame(storedGame)
+            return
+        }
+
+        // No stored game - fetch the last game from Lichess
         val username = savedLichessUsername
         if (username.isBlank()) return
 
@@ -762,6 +796,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             analyseScores = emptyMap(),
             autoAnalysisIndex = -1
         )
+
+        // Save this game as the current game for next app startup
+        saveCurrentGame(game)
 
         // Start analysis - runs Preview stage, then Analyse stage, then enters Manual stage
         startAnalysis()
