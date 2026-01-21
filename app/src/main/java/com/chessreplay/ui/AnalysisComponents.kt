@@ -212,7 +212,7 @@ fun EvaluationGraph(
                 color = analyseColor,
                 start = Offset(p1.x, p1.y),
                 end = Offset(p2.x, p2.y),
-                strokeWidth = 2f
+                strokeWidth = 4f
             )
         }
 

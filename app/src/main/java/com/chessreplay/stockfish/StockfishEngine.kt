@@ -185,7 +185,7 @@ class StockfishEngine(private val context: Context) {
         android.util.Log.d("StockfishEngine", "New game started (hash cleared)")
     }
 
-    fun configure(threads: Int, hashMb: Int, multiPv: Int) {
+    fun configure(threads: Int, hashMb: Int, multiPv: Int, useNnue: Boolean = true) {
         if (!_isReady.value) {
             android.util.Log.e("StockfishEngine", "configure called but engine not ready!")
             return
@@ -206,8 +206,9 @@ class StockfishEngine(private val context: Context) {
         sendCommand("setoption name Threads value $safeThreads")
         sendCommand("setoption name Hash value $safeHashMb")
         sendCommand("setoption name MultiPV value $multiPv")
+        sendCommand("setoption name Use NNUE value $useNnue")
 
-        android.util.Log.d("StockfishEngine", "Configured: Threads=$safeThreads, Hash=$safeHashMb, MultiPV=$multiPv")
+        android.util.Log.d("StockfishEngine", "Configured: Threads=$safeThreads, Hash=$safeHashMb, MultiPV=$multiPv, NNUE=$useNnue")
         // Note: The analysis job will send "isready" and wait for "readyok" before starting
     }
 

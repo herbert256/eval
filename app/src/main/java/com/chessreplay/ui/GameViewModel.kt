@@ -232,17 +232,17 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun configureForPreviewStage() {
         val settings = _uiState.value.stockfishSettings.previewStage
-        stockfish.configure(settings.threads, settings.hashMb, 1) // MultiPV=1 for preview stage
+        stockfish.configure(settings.threads, settings.hashMb, 1, settings.useNnue) // MultiPV=1 for preview stage
     }
 
     private fun configureForAnalyseStage() {
         val settings = _uiState.value.stockfishSettings.analyseStage
-        stockfish.configure(settings.threads, settings.hashMb, 1) // MultiPV=1 for analyse stage
+        stockfish.configure(settings.threads, settings.hashMb, 1, settings.useNnue) // MultiPV=1 for analyse stage
     }
 
     private fun configureForManualStage() {
         val settings = _uiState.value.stockfishSettings.manualStage
-        stockfish.configure(settings.threads, settings.hashMb, settings.multiPv)
+        stockfish.configure(settings.threads, settings.hashMb, settings.multiPv, settings.useNnue)
     }
 
     /**
@@ -1645,8 +1645,48 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
 
-        // Run Stockfish analysis on the new position
-        analyzeCurrentPosition()
+        // Run Stockfish analysis on the new position - use full restart similar to navigation
+        restartAnalysisForExploringLine()
+    }
+
+    /**
+     * Restart Stockfish analysis for exploring line moves.
+     * Similar to restartAnalysisAtMove but uses the current board position.
+     */
+    private fun restartAnalysisForExploringLine() {
+        // Cancel any running analysis
+        manualAnalysisJob?.cancel()
+
+        viewModelScope.launch {
+            // Stop Stockfish completely
+            stockfish.stop()
+
+            // Increment request ID to invalidate any pending results
+            analysisRequestId++
+            val thisRequestId = analysisRequestId
+
+            // Get the current board (already set by makeManualMove)
+            val board = _uiState.value.currentBoard
+            val fenToAnalyze = board.getFen()
+            currentAnalysisFen = fenToAnalyze
+
+            // Clear analysis result but keep UI stable
+            _uiState.value = _uiState.value.copy(
+                analysisResultFen = null  // Mark as stale, but keep result for UI stability
+            )
+
+            // Small delay to ensure Stockfish has stopped
+            delay(50)
+
+            // Send new game command to clear Stockfish's internal state
+            stockfish.newGame()
+            delay(50)
+
+            // Start fresh analysis
+            if (_uiState.value.currentStage == AnalysisStage.MANUAL) {
+                ensureStockfishAnalysis(fenToAnalyze, thisRequestId)
+            }
+        }
     }
 
     override fun onCleared() {
