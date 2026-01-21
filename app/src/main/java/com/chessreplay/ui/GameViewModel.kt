@@ -593,12 +593,52 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Reload the last game from the active chess server.
+     * Reload the last game from Lichess for the stored username.
      * Called when user clicks the reload button.
+     * Always fetches from Lichess (does not use stored game).
      */
     fun reloadLastGame() {
         viewModelScope.launch {
-            autoLoadLastGame()
+            fetchLastGameFromLichess()
+        }
+    }
+
+    /**
+     * Fetch the most recent game from Lichess for the stored username.
+     * Used by the reload button - always fetches fresh from Lichess.
+     */
+    private suspend fun fetchLastGameFromLichess() {
+        val username = savedLichessUsername
+        if (username.isBlank()) return
+
+        _uiState.value = _uiState.value.copy(
+            isLoading = true,
+            errorMessage = null
+        )
+
+        when (val result = repository.getRecentGames(username, 1)) {
+            is Result.Success -> {
+                val games = result.data
+                if (games.isNotEmpty()) {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        gameList = games,
+                        showGameSelection = false
+                    )
+                    loadGame(games.first())
+                } else {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        errorMessage = "No games found for $username"
+                    )
+                }
+            }
+            is Result.Error -> {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    errorMessage = result.message
+                )
+            }
         }
     }
 
