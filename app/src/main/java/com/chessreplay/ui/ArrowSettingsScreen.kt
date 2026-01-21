@@ -23,7 +23,8 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun ArrowSettingsScreen(
     stockfishSettings: StockfishSettings,
-    onBack: () -> Unit,
+    onBackToSettings: () -> Unit,
+    onBackToGame: () -> Unit,
     onSave: (StockfishSettings) -> Unit
 ) {
     var drawArrows by remember { mutableStateOf(stockfishSettings.manualStage.drawArrows) }
@@ -72,7 +73,7 @@ fun ArrowSettingsScreen(
             color = Color.White
         )
 
-        SettingsBackButton(onClick = onBack)
+        SettingsBackButtons(onBackToSettings = onBackToSettings, onBackToGame = onBackToGame)
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -233,6 +234,6 @@ fun ArrowSettingsScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        SettingsBackButton(onClick = onBack)
+        SettingsBackButtons(onBackToSettings = onBackToSettings, onBackToGame = onBackToGame)
     }
 }

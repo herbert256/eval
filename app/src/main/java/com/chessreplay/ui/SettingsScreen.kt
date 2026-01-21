@@ -54,17 +54,20 @@ fun SettingsScreen(
         )
         SettingsSubScreen.ARROW_SETTINGS -> ArrowSettingsScreen(
             stockfishSettings = stockfishSettings,
-            onBack = { currentSubScreen = SettingsSubScreen.MAIN },
+            onBackToSettings = { currentSubScreen = SettingsSubScreen.MAIN },
+            onBackToGame = onBack,
             onSave = onSaveStockfish
         )
         SettingsSubScreen.STOCKFISH -> StockfishSettingsScreen(
             stockfishSettings = stockfishSettings,
-            onBack = { currentSubScreen = SettingsSubScreen.MAIN },
+            onBackToSettings = { currentSubScreen = SettingsSubScreen.MAIN },
+            onBackToGame = onBack,
             onSave = onSaveStockfish
         )
         SettingsSubScreen.BOARD_LAYOUT -> BoardLayoutSettingsScreen(
             boardLayoutSettings = boardLayoutSettings,
-            onBack = { currentSubScreen = SettingsSubScreen.MAIN },
+            onBackToSettings = { currentSubScreen = SettingsSubScreen.MAIN },
+            onBackToGame = onBack,
             onSave = onSaveBoardLayout
         )
     }
@@ -184,14 +187,28 @@ private fun SettingsNavigationCard(
 }
 
 /**
- * Reusable back button for settings sub-screens.
+ * Reusable back buttons for settings sub-screens.
  */
 @Composable
-fun SettingsBackButton(onClick: () -> Unit) {
-    Button(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth()
+fun SettingsBackButtons(
+    onBackToSettings: () -> Unit,
+    onBackToGame: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text("Back to settings")
+        Button(
+            onClick = onBackToSettings,
+            modifier = Modifier.weight(1f)
+        ) {
+            Text("Back to settings")
+        }
+        Button(
+            onClick = onBackToGame,
+            modifier = Modifier.weight(1f)
+        ) {
+            Text("Back to game")
+        }
     }
 }

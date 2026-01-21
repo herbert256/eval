@@ -19,7 +19,8 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun StockfishSettingsScreen(
     stockfishSettings: StockfishSettings,
-    onBack: () -> Unit,
+    onBackToSettings: () -> Unit,
+    onBackToGame: () -> Unit,
     onSave: (StockfishSettings) -> Unit
 ) {
     // Preview Stage state
@@ -106,7 +107,7 @@ fun StockfishSettingsScreen(
             color = Color.White
         )
 
-        SettingsBackButton(onClick = onBack)
+        SettingsBackButtons(onBackToSettings = onBackToSettings, onBackToGame = onBackToGame)
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -490,6 +491,6 @@ fun StockfishSettingsScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        SettingsBackButton(onClick = onBack)
+        SettingsBackButtons(onBackToSettings = onBackToSettings, onBackToGame = onBackToGame)
     }
 }

@@ -23,7 +23,8 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun BoardLayoutSettingsScreen(
     boardLayoutSettings: BoardLayoutSettings,
-    onBack: () -> Unit,
+    onBackToSettings: () -> Unit,
+    onBackToGame: () -> Unit,
     onSave: (BoardLayoutSettings) -> Unit
 ) {
     var showCoordinates by remember { mutableStateOf(boardLayoutSettings.showCoordinates) }
@@ -73,7 +74,7 @@ fun BoardLayoutSettingsScreen(
             color = Color.White
         )
 
-        SettingsBackButton(onClick = onBack)
+        SettingsBackButtons(onBackToSettings = onBackToSettings, onBackToGame = onBackToGame)
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -200,7 +201,7 @@ fun BoardLayoutSettingsScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        SettingsBackButton(onClick = onBack)
+        SettingsBackButtons(onBackToSettings = onBackToSettings, onBackToGame = onBackToGame)
     }
 
     // Color picker dialogs
