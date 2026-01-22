@@ -45,18 +45,20 @@ fun InterfaceSettingsScreen(
     onSave: (InterfaceVisibilitySettings) -> Unit
 ) {
     // Preview Stage visibility state
-    var previewShowMoveList by remember { mutableStateOf(interfaceVisibility.previewStage.showMoveList) }
+    var previewShowScoreBarsGraph by remember { mutableStateOf(interfaceVisibility.previewStage.showScoreBarsGraph) }
+    var previewShowResultBar by remember { mutableStateOf(interfaceVisibility.previewStage.showResultBar) }
     var previewShowBoard by remember { mutableStateOf(interfaceVisibility.previewStage.showBoard) }
-    var previewShowGameInfo by remember { mutableStateOf(interfaceVisibility.previewStage.showGameInfo) }
+    var previewShowMoveList by remember { mutableStateOf(interfaceVisibility.previewStage.showMoveList) }
     var previewShowPgn by remember { mutableStateOf(interfaceVisibility.previewStage.showPgn) }
 
     // Analyse Stage visibility state
-    var analyseShowMoveList by remember { mutableStateOf(interfaceVisibility.analyseStage.showMoveList) }
     var analyseShowScoreLineGraph by remember { mutableStateOf(interfaceVisibility.analyseStage.showScoreLineGraph) }
     var analyseShowScoreBarsGraph by remember { mutableStateOf(interfaceVisibility.analyseStage.showScoreBarsGraph) }
-    var analyseShowResultBar by remember { mutableStateOf(interfaceVisibility.analyseStage.showResultBar) }
-    var analyseShowGameInfo by remember { mutableStateOf(interfaceVisibility.analyseStage.showGameInfo) }
     var analyseShowBoard by remember { mutableStateOf(interfaceVisibility.analyseStage.showBoard) }
+    var analyseShowStockfishAnalyse by remember { mutableStateOf(interfaceVisibility.analyseStage.showStockfishAnalyse) }
+    var analyseShowResultBar by remember { mutableStateOf(interfaceVisibility.analyseStage.showResultBar) }
+    var analyseShowMoveList by remember { mutableStateOf(interfaceVisibility.analyseStage.showMoveList) }
+    var analyseShowGameInfo by remember { mutableStateOf(interfaceVisibility.analyseStage.showGameInfo) }
     var analyseShowPgn by remember { mutableStateOf(interfaceVisibility.analyseStage.showPgn) }
 
     // Manual Stage visibility state
@@ -70,18 +72,20 @@ fun InterfaceSettingsScreen(
     fun saveAllSettings() {
         onSave(InterfaceVisibilitySettings(
             previewStage = PreviewStageVisibility(
-                showMoveList = previewShowMoveList,
+                showScoreBarsGraph = previewShowScoreBarsGraph,
+                showResultBar = previewShowResultBar,
                 showBoard = previewShowBoard,
-                showGameInfo = previewShowGameInfo,
+                showMoveList = previewShowMoveList,
                 showPgn = previewShowPgn
             ),
             analyseStage = AnalyseStageVisibility(
-                showMoveList = analyseShowMoveList,
                 showScoreLineGraph = analyseShowScoreLineGraph,
                 showScoreBarsGraph = analyseShowScoreBarsGraph,
-                showResultBar = analyseShowResultBar,
-                showGameInfo = analyseShowGameInfo,
                 showBoard = analyseShowBoard,
+                showStockfishAnalyse = analyseShowStockfishAnalyse,
+                showResultBar = analyseShowResultBar,
+                showMoveList = analyseShowMoveList,
+                showGameInfo = analyseShowGameInfo,
                 showPgn = analyseShowPgn
             ),
             manualStage = ManualStageVisibility(
@@ -132,17 +136,32 @@ fun InterfaceSettingsScreen(
                     color = Color.White
                 )
 
+                Text(
+                    text = "Always shown: Score Line graph, Game Information",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray
+                )
+
                 VisibilityToggle(
-                    label = "Show move list",
-                    checked = previewShowMoveList,
+                    label = "Score Bars graph",
+                    checked = previewShowScoreBarsGraph,
                     onCheckedChange = {
-                        previewShowMoveList = it
+                        previewShowScoreBarsGraph = it
                         saveAllSettings()
                     }
                 )
 
                 VisibilityToggle(
-                    label = "Show board",
+                    label = "Result bar",
+                    checked = previewShowResultBar,
+                    onCheckedChange = {
+                        previewShowResultBar = it
+                        saveAllSettings()
+                    }
+                )
+
+                VisibilityToggle(
+                    label = "Board",
                     checked = previewShowBoard,
                     onCheckedChange = {
                         previewShowBoard = it
@@ -151,16 +170,16 @@ fun InterfaceSettingsScreen(
                 )
 
                 VisibilityToggle(
-                    label = "Show game info",
-                    checked = previewShowGameInfo,
+                    label = "Move list",
+                    checked = previewShowMoveList,
                     onCheckedChange = {
-                        previewShowGameInfo = it
+                        previewShowMoveList = it
                         saveAllSettings()
                     }
                 )
 
                 VisibilityToggle(
-                    label = "Show PGN",
+                    label = "PGN",
                     checked = previewShowPgn,
                     onCheckedChange = {
                         previewShowPgn = it
@@ -189,16 +208,7 @@ fun InterfaceSettingsScreen(
                 )
 
                 VisibilityToggle(
-                    label = "Show move list",
-                    checked = analyseShowMoveList,
-                    onCheckedChange = {
-                        analyseShowMoveList = it
-                        saveAllSettings()
-                    }
-                )
-
-                VisibilityToggle(
-                    label = "Show score line graph",
+                    label = "Score Line graph",
                     checked = analyseShowScoreLineGraph,
                     onCheckedChange = {
                         analyseShowScoreLineGraph = it
@@ -207,7 +217,7 @@ fun InterfaceSettingsScreen(
                 )
 
                 VisibilityToggle(
-                    label = "Show score bars graph",
+                    label = "Score Bars graph",
                     checked = analyseShowScoreBarsGraph,
                     onCheckedChange = {
                         analyseShowScoreBarsGraph = it
@@ -216,25 +226,7 @@ fun InterfaceSettingsScreen(
                 )
 
                 VisibilityToggle(
-                    label = "Show result bar",
-                    checked = analyseShowResultBar,
-                    onCheckedChange = {
-                        analyseShowResultBar = it
-                        saveAllSettings()
-                    }
-                )
-
-                VisibilityToggle(
-                    label = "Show game info",
-                    checked = analyseShowGameInfo,
-                    onCheckedChange = {
-                        analyseShowGameInfo = it
-                        saveAllSettings()
-                    }
-                )
-
-                VisibilityToggle(
-                    label = "Show board",
+                    label = "Board",
                     checked = analyseShowBoard,
                     onCheckedChange = {
                         analyseShowBoard = it
@@ -243,7 +235,43 @@ fun InterfaceSettingsScreen(
                 )
 
                 VisibilityToggle(
-                    label = "Show PGN",
+                    label = "Stockfish Analyse",
+                    checked = analyseShowStockfishAnalyse,
+                    onCheckedChange = {
+                        analyseShowStockfishAnalyse = it
+                        saveAllSettings()
+                    }
+                )
+
+                VisibilityToggle(
+                    label = "Result bar",
+                    checked = analyseShowResultBar,
+                    onCheckedChange = {
+                        analyseShowResultBar = it
+                        saveAllSettings()
+                    }
+                )
+
+                VisibilityToggle(
+                    label = "Move list",
+                    checked = analyseShowMoveList,
+                    onCheckedChange = {
+                        analyseShowMoveList = it
+                        saveAllSettings()
+                    }
+                )
+
+                VisibilityToggle(
+                    label = "Game Information",
+                    checked = analyseShowGameInfo,
+                    onCheckedChange = {
+                        analyseShowGameInfo = it
+                        saveAllSettings()
+                    }
+                )
+
+                VisibilityToggle(
+                    label = "PGN",
                     checked = analyseShowPgn,
                     onCheckedChange = {
                         analyseShowPgn = it
@@ -271,8 +299,14 @@ fun InterfaceSettingsScreen(
                     color = Color.White
                 )
 
+                Text(
+                    text = "Always shown: Board, Navigation bar, Stockfish",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray
+                )
+
                 VisibilityToggle(
-                    label = "Show result bar",
+                    label = "Result bar",
                     checked = manualShowResultBar,
                     onCheckedChange = {
                         manualShowResultBar = it
@@ -281,7 +315,7 @@ fun InterfaceSettingsScreen(
                 )
 
                 VisibilityToggle(
-                    label = "Show score line graph",
+                    label = "Score Line graph",
                     checked = manualShowScoreLineGraph,
                     onCheckedChange = {
                         manualShowScoreLineGraph = it
@@ -290,7 +324,7 @@ fun InterfaceSettingsScreen(
                 )
 
                 VisibilityToggle(
-                    label = "Show score bars graph",
+                    label = "Score Bars graph",
                     checked = manualShowScoreBarsGraph,
                     onCheckedChange = {
                         manualShowScoreBarsGraph = it
@@ -299,7 +333,7 @@ fun InterfaceSettingsScreen(
                 )
 
                 VisibilityToggle(
-                    label = "Show move list",
+                    label = "Move list",
                     checked = manualShowMoveList,
                     onCheckedChange = {
                         manualShowMoveList = it
@@ -308,7 +342,7 @@ fun InterfaceSettingsScreen(
                 )
 
                 VisibilityToggle(
-                    label = "Show game info",
+                    label = "Game Information",
                     checked = manualShowGameInfo,
                     onCheckedChange = {
                         manualShowGameInfo = it
@@ -317,7 +351,7 @@ fun InterfaceSettingsScreen(
                 )
 
                 VisibilityToggle(
-                    label = "Show PGN",
+                    label = "PGN",
                     checked = manualShowPgn,
                     onCheckedChange = {
                         manualShowPgn = it

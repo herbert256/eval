@@ -141,25 +141,29 @@ data class BoardLayoutSettings(
 )
 
 // Interface visibility settings for Preview stage
+// Note: Score Line graph and Game Information are always shown in Preview
 data class PreviewStageVisibility(
-    val showMoveList: Boolean = false,
+    val showScoreBarsGraph: Boolean = false,
+    val showResultBar: Boolean = false,
     val showBoard: Boolean = false,
-    val showGameInfo: Boolean = true,
+    val showMoveList: Boolean = false,
     val showPgn: Boolean = false
 )
 
 // Interface visibility settings for Analyse stage
 data class AnalyseStageVisibility(
-    val showMoveList: Boolean = false,
     val showScoreLineGraph: Boolean = true,
     val showScoreBarsGraph: Boolean = true,
+    val showBoard: Boolean = true,
+    val showStockfishAnalyse: Boolean = true,
     val showResultBar: Boolean = false,
-    val showGameInfo: Boolean = true,
-    val showBoard: Boolean = false,
+    val showMoveList: Boolean = false,
+    val showGameInfo: Boolean = false,
     val showPgn: Boolean = false
 )
 
 // Interface visibility settings for Manual stage
+// Note: Board, Navigation bar, and Stockfish panel are always shown in Manual
 data class ManualStageVisibility(
     val showResultBar: Boolean = true,
     val showScoreLineGraph: Boolean = true,
@@ -279,7 +283,9 @@ data class GameUiState(
     // Analysed games
     val hasAnalysedGames: Boolean = false,
     val showAnalysedGamesSelection: Boolean = false,
-    val analysedGamesList: List<AnalysedGame> = emptyList()
+    val analysedGamesList: List<AnalysedGame> = emptyList(),
+    // Retrieve screen navigation
+    val showRetrieveScreen: Boolean = false
 )
 
 class GameViewModel(application: Application) : AndroidViewModel(application) {
@@ -388,17 +394,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         private const val KEY_GRAPH_LINE_RANGE = "graph_line_range"
         private const val KEY_GRAPH_BAR_RANGE = "graph_bar_range"
         // Interface visibility settings - Preview stage
-        private const val KEY_PREVIEW_VIS_MOVELIST = "preview_vis_movelist"
+        private const val KEY_PREVIEW_VIS_SCOREBARSGRAPH = "preview_vis_scorebarsgraph"
+        private const val KEY_PREVIEW_VIS_RESULTBAR = "preview_vis_resultbar"
         private const val KEY_PREVIEW_VIS_BOARD = "preview_vis_board"
-        private const val KEY_PREVIEW_VIS_GAMEINFO = "preview_vis_gameinfo"
+        private const val KEY_PREVIEW_VIS_MOVELIST = "preview_vis_movelist"
         private const val KEY_PREVIEW_VIS_PGN = "preview_vis_pgn"
         // Interface visibility settings - Analyse stage
-        private const val KEY_ANALYSE_VIS_MOVELIST = "analyse_vis_movelist"
         private const val KEY_ANALYSE_VIS_SCORELINEGRAPH = "analyse_vis_scorelinegraph"
         private const val KEY_ANALYSE_VIS_SCOREBARSGRAPH = "analyse_vis_scorebarsgraph"
-        private const val KEY_ANALYSE_VIS_RESULTBAR = "analyse_vis_resultbar"
-        private const val KEY_ANALYSE_VIS_GAMEINFO = "analyse_vis_gameinfo"
         private const val KEY_ANALYSE_VIS_BOARD = "analyse_vis_board"
+        private const val KEY_ANALYSE_VIS_STOCKFISHANALYSE = "analyse_vis_stockfishanalyse"
+        private const val KEY_ANALYSE_VIS_RESULTBAR = "analyse_vis_resultbar"
+        private const val KEY_ANALYSE_VIS_MOVELIST = "analyse_vis_movelist"
+        private const val KEY_ANALYSE_VIS_GAMEINFO = "analyse_vis_gameinfo"
         private const val KEY_ANALYSE_VIS_PGN = "analyse_vis_pgn"
         // Interface visibility settings - Manual stage
         private const val KEY_MANUAL_VIS_RESULTBAR = "manual_vis_resultbar"
@@ -533,18 +541,20 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private fun loadInterfaceVisibilitySettings(): InterfaceVisibilitySettings {
         return InterfaceVisibilitySettings(
             previewStage = PreviewStageVisibility(
-                showMoveList = prefs.getBoolean(KEY_PREVIEW_VIS_MOVELIST, false),
+                showScoreBarsGraph = prefs.getBoolean(KEY_PREVIEW_VIS_SCOREBARSGRAPH, false),
+                showResultBar = prefs.getBoolean(KEY_PREVIEW_VIS_RESULTBAR, false),
                 showBoard = prefs.getBoolean(KEY_PREVIEW_VIS_BOARD, false),
-                showGameInfo = prefs.getBoolean(KEY_PREVIEW_VIS_GAMEINFO, true),
+                showMoveList = prefs.getBoolean(KEY_PREVIEW_VIS_MOVELIST, false),
                 showPgn = prefs.getBoolean(KEY_PREVIEW_VIS_PGN, false)
             ),
             analyseStage = AnalyseStageVisibility(
-                showMoveList = prefs.getBoolean(KEY_ANALYSE_VIS_MOVELIST, false),
                 showScoreLineGraph = prefs.getBoolean(KEY_ANALYSE_VIS_SCORELINEGRAPH, true),
                 showScoreBarsGraph = prefs.getBoolean(KEY_ANALYSE_VIS_SCOREBARSGRAPH, true),
+                showBoard = prefs.getBoolean(KEY_ANALYSE_VIS_BOARD, true),
+                showStockfishAnalyse = prefs.getBoolean(KEY_ANALYSE_VIS_STOCKFISHANALYSE, true),
                 showResultBar = prefs.getBoolean(KEY_ANALYSE_VIS_RESULTBAR, false),
-                showGameInfo = prefs.getBoolean(KEY_ANALYSE_VIS_GAMEINFO, true),
-                showBoard = prefs.getBoolean(KEY_ANALYSE_VIS_BOARD, false),
+                showMoveList = prefs.getBoolean(KEY_ANALYSE_VIS_MOVELIST, false),
+                showGameInfo = prefs.getBoolean(KEY_ANALYSE_VIS_GAMEINFO, false),
                 showPgn = prefs.getBoolean(KEY_ANALYSE_VIS_PGN, false)
             ),
             manualStage = ManualStageVisibility(
@@ -561,17 +571,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private fun saveInterfaceVisibilitySettings(settings: InterfaceVisibilitySettings) {
         prefs.edit()
             // Preview stage
-            .putBoolean(KEY_PREVIEW_VIS_MOVELIST, settings.previewStage.showMoveList)
+            .putBoolean(KEY_PREVIEW_VIS_SCOREBARSGRAPH, settings.previewStage.showScoreBarsGraph)
+            .putBoolean(KEY_PREVIEW_VIS_RESULTBAR, settings.previewStage.showResultBar)
             .putBoolean(KEY_PREVIEW_VIS_BOARD, settings.previewStage.showBoard)
-            .putBoolean(KEY_PREVIEW_VIS_GAMEINFO, settings.previewStage.showGameInfo)
+            .putBoolean(KEY_PREVIEW_VIS_MOVELIST, settings.previewStage.showMoveList)
             .putBoolean(KEY_PREVIEW_VIS_PGN, settings.previewStage.showPgn)
             // Analyse stage
-            .putBoolean(KEY_ANALYSE_VIS_MOVELIST, settings.analyseStage.showMoveList)
             .putBoolean(KEY_ANALYSE_VIS_SCORELINEGRAPH, settings.analyseStage.showScoreLineGraph)
             .putBoolean(KEY_ANALYSE_VIS_SCOREBARSGRAPH, settings.analyseStage.showScoreBarsGraph)
-            .putBoolean(KEY_ANALYSE_VIS_RESULTBAR, settings.analyseStage.showResultBar)
-            .putBoolean(KEY_ANALYSE_VIS_GAMEINFO, settings.analyseStage.showGameInfo)
             .putBoolean(KEY_ANALYSE_VIS_BOARD, settings.analyseStage.showBoard)
+            .putBoolean(KEY_ANALYSE_VIS_STOCKFISHANALYSE, settings.analyseStage.showStockfishAnalyse)
+            .putBoolean(KEY_ANALYSE_VIS_RESULTBAR, settings.analyseStage.showResultBar)
+            .putBoolean(KEY_ANALYSE_VIS_MOVELIST, settings.analyseStage.showMoveList)
+            .putBoolean(KEY_ANALYSE_VIS_GAMEINFO, settings.analyseStage.showGameInfo)
             .putBoolean(KEY_ANALYSE_VIS_PGN, settings.analyseStage.showPgn)
             // Manual stage
             .putBoolean(KEY_MANUAL_VIS_RESULTBAR, settings.manualStage.showResultBar)
@@ -933,40 +945,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        // No stored game - fetch the last game from Lichess (default: DrNykterstein)
-        val username = "DrNykterstein"
-
-        _uiState.value = _uiState.value.copy(
-            isLoading = true,
-            errorMessage = null
-        )
-
-        // Fetch only 1 game (the most recent)
-        when (val result = repository.getLichessGames(username, 1)) {
-            is Result.Success -> {
-                val games = result.data
-                if (games.isNotEmpty()) {
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        gameList = games,
-                        showGameSelection = false
-                    )
-                    loadGame(games.first(), ChessServer.LICHESS, username)
-                } else {
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        errorMessage = null // No error, just no game to auto-load
-                    )
-                }
-            }
-            is Result.Error -> {
-                // Don't show error on auto-load failure, just continue to manual mode
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    errorMessage = null
-                )
-            }
+        // No stored game - check if we have an Active player/server stored
+        val server = savedActiveServer
+        val username = savedActivePlayer
+        if (server == null || username == null) {
+            // No Active stored, show the First card (nothing to auto-load)
+            return
         }
+
+        // Fetch the last game from Active player/server
+        fetchLastGameFromServer(server, username)
     }
 
     /**
@@ -1247,6 +1235,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val entry = _uiState.value.selectedRetrieveEntry ?: return
         _uiState.value = _uiState.value.copy(
             showSelectedRetrieveGames = false,
+            showRetrieveScreen = false,
             selectedRetrieveEntry = null,
             selectedRetrieveGames = emptyList()
         )
@@ -1341,7 +1330,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun selectAnalysedGame(game: AnalysedGame) {
-        _uiState.value = _uiState.value.copy(showAnalysedGamesSelection = false)
+        _uiState.value = _uiState.value.copy(showAnalysedGamesSelection = false, showRetrieveScreen = false)
         loadAnalysedGameDirectly(game)
     }
 
@@ -1492,7 +1481,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private var pendingGameSelectionUsername: String? = null
 
     fun selectGame(game: LichessGame) {
-        _uiState.value = _uiState.value.copy(showGameSelection = false)
+        _uiState.value = _uiState.value.copy(showGameSelection = false, showRetrieveScreen = false)
         val server = pendingGameSelectionServer
         val username = pendingGameSelectionUsername
         pendingGameSelectionServer = null
@@ -1509,13 +1498,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         autoAnalysisJob?.cancel()
         stockfish.stop()
 
-        // Clear game state and return to search screen
+        // Clear game state and show retrieve screen
         boardHistory.clear()
         exploringLineHistory.clear()
         _uiState.value = _uiState.value.copy(
             game = null,
             gameList = emptyList(),
             showGameSelection = false,
+            showRetrieveScreen = true,
             currentBoard = ChessBoard(),
             moves = emptyList(),
             moveDetails = emptyList(),
@@ -1637,6 +1627,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             activePlayer = activePlayerName,
             activeServer = server,
             activePlayerError = null,
+            showRetrieveScreen = false,
             // Reset exploring state
             isExploringLine = false,
             exploringLineMoves = emptyList(),
@@ -2044,6 +2035,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     fun hideHelpScreen() {
         _uiState.value = _uiState.value.copy(showHelpScreen = false)
+    }
+
+    fun showRetrieveScreen() {
+        _uiState.value = _uiState.value.copy(showRetrieveScreen = true)
+    }
+
+    fun hideRetrieveScreen() {
+        _uiState.value = _uiState.value.copy(showRetrieveScreen = false)
     }
 
     fun updateStockfishSettings(settings: StockfishSettings) {

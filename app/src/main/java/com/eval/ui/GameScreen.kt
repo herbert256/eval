@@ -3,21 +3,16 @@ package com.eval.ui
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
@@ -25,19 +20,15 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.lifecycle.viewmodel.compose.viewModel
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
-import android.view.View
-import android.view.WindowManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.delay
-import com.eval.data.ChessServer
 
 /**
  * Main game screen composable that handles game selection and display.
@@ -66,12 +57,6 @@ fun GameScreen(
         )
         return
     }
-
-    var lichessUsername by remember { mutableStateOf(viewModel.savedLichessUsername) }
-    var lichessGamesCount by remember { mutableStateOf(uiState.lichessMaxGames.toString()) }
-    var chessComUsername by remember { mutableStateOf(viewModel.savedChessComUsername) }
-    var chessComGamesCount by remember { mutableStateOf(uiState.chessComMaxGames.toString()) }
-    val focusManager = LocalFocusManager.current
 
     // Calculate background color based on game result
     val backgroundColor = remember(uiState.game) {
@@ -167,6 +152,16 @@ fun GameScreen(
     if (uiState.showHelpScreen) {
         HelpScreen(
             onBack = { viewModel.hideHelpScreen() }
+        )
+        return
+    }
+
+    // Show retrieve screen
+    if (uiState.showRetrieveScreen) {
+        RetrieveScreen(
+            viewModel = viewModel,
+            uiState = uiState,
+            onBack = { viewModel.hideRetrieveScreen() }
         )
         return
     }
@@ -277,37 +272,41 @@ fun GameScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    if (uiState.game != null) {
-                        // Reload last game from Active player/server (only if we have a stored Active)
-                        if (uiState.hasActive) {
-                            Box(
-                                modifier = Modifier
-                                    .size(52.dp)
-                                    .clickable { viewModel.reloadLastGame() },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("↻", fontSize = 44.sp, color = Color.White, modifier = Modifier.offset(y = (-12).dp))
-                            }
+                    // Reload last game from Active player/server (only when game loaded and Active stored)
+                    if (uiState.game != null && uiState.hasActive) {
+                        Box(
+                            modifier = Modifier
+                                .size(52.dp)
+                                .clickable { viewModel.reloadLastGame() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("↻", fontSize = 44.sp, color = Color.White, modifier = Modifier.offset(y = (-12).dp))
                         }
-                        // Show retrieve games view
+                    }
+                    // Show retrieve games view - always visible
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clickable {
+                                if (uiState.game != null) {
+                                    viewModel.clearGame()
+                                } else {
+                                    viewModel.showRetrieveScreen()
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("≡", fontSize = 44.sp, color = Color.White, modifier = Modifier.offset(y = (-12).dp))
+                    }
+                    // Arrow mode toggle - only show in Manual stage when game loaded
+                    if (uiState.game != null && uiState.currentStage == AnalysisStage.MANUAL) {
                         Box(
                             modifier = Modifier
                                 .size(44.dp)
-                                .clickable { viewModel.clearGame() },
+                                .clickable { viewModel.cycleArrowMode() },
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("≡", fontSize = 44.sp, color = Color.White, modifier = Modifier.offset(y = (-12).dp))
-                        }
-                        // Arrow mode toggle - only show in Manual stage
-                        if (uiState.currentStage == AnalysisStage.MANUAL) {
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clickable { viewModel.cycleArrowMode() },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("↗", fontSize = 40.sp, color = Color.White, modifier = Modifier.offset(y = (-11).dp))
-                            }
+                            Text("↗", fontSize = 40.sp, color = Color.White, modifier = Modifier.offset(y = (-11).dp))
                         }
                     }
                     // Settings and help icons
@@ -386,42 +385,10 @@ fun GameScreen(
             }
         }
 
-        // Search section - only show when no game is loaded
+        // Main view when no game is loaded - show logo and conditional First card
         if (uiState.game == null) {
-            // Subtitle
-            Text(
-                text = "Get chess game",
-                style = MaterialTheme.typography.titleMedium,
-                color = Color(0xFFAAAAAA),
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 12.dp)
-            )
-
-            // Button to select from previous retrieves
-            if (uiState.hasPreviousRetrieves) {
-                Button(
-                    onClick = { viewModel.showPreviousRetrieves() },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 12.dp)
-                ) {
-                    Text("Select from a previous retrieve")
-                }
-            }
-
-            // Button to select from previous analysed games
-            if (uiState.hasAnalysedGames) {
-                Button(
-                    onClick = { viewModel.showAnalysedGames() },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 12.dp)
-                ) {
-                    Text("Select from previous analysed games")
-                }
-            }
+            // Logo
+            EvalLogo()
 
             // Error message
             if (uiState.errorMessage != null) {
@@ -442,198 +409,32 @@ fun GameScreen(
                 }
             }
 
-            // ===== LICHESS CARD =====
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 12.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = "lichess.org",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFFE0E0E0)
-                    )
-
-                    // Username field
-                    OutlinedTextField(
-                        value = lichessUsername,
-                        onValueChange = { lichessUsername = it },
-                        placeholder = { Text("Enter username") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedBorderColor = Color(0xFF555555),
-                            focusedBorderColor = MaterialTheme.colorScheme.primary
-                        )
-                    )
-
-                    // Games count field
-                    OutlinedTextField(
-                        value = lichessGamesCount,
-                        onValueChange = { newValue ->
-                            val filtered = newValue.filter { it.isDigit() }
-                            lichessGamesCount = filtered
-                            filtered.toIntOrNull()?.let { count ->
-                                viewModel.setLichessMaxGames(count)
-                            }
-                        },
-                        label = { Text("Number of games") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedBorderColor = Color(0xFF555555),
-                            focusedBorderColor = MaterialTheme.colorScheme.primary
-                        )
-                    )
-
-                    // Buttons row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        val lichessCount = lichessGamesCount.toIntOrNull() ?: uiState.lichessMaxGames
-                        Button(
-                            onClick = {
-                                focusManager.clearFocus()
-                                if (lichessUsername.isNotBlank()) {
-                                    viewModel.fetchGames(ChessServer.LICHESS, lichessUsername, lichessCount)
-                                }
-                            },
-                            enabled = !uiState.isLoading && lichessUsername.isNotBlank(),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Retrieve last $lichessCount games")
-                        }
-                        Button(
-                            onClick = {
-                                focusManager.clearFocus()
-                                if (lichessUsername.isNotBlank()) {
-                                    viewModel.fetchGames(ChessServer.LICHESS, lichessUsername, 1)
-                                }
-                            },
-                            enabled = !uiState.isLoading && lichessUsername.isNotBlank(),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Retrieve last game")
-                        }
-                    }
-                }
-            }
-
-            // ===== CHESS.COM CARD =====
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 12.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = "chess.com",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFFE0E0E0)
-                    )
-
-                    // Username field
-                    OutlinedTextField(
-                        value = chessComUsername,
-                        onValueChange = { chessComUsername = it },
-                        placeholder = { Text("Enter username") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedBorderColor = Color(0xFF555555),
-                            focusedBorderColor = MaterialTheme.colorScheme.primary
-                        )
-                    )
-
-                    // Games count field
-                    OutlinedTextField(
-                        value = chessComGamesCount,
-                        onValueChange = { newValue ->
-                            val filtered = newValue.filter { it.isDigit() }
-                            chessComGamesCount = filtered
-                            filtered.toIntOrNull()?.let { count ->
-                                viewModel.setChessComMaxGames(count)
-                            }
-                        },
-                        label = { Text("Number of games") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedBorderColor = Color(0xFF555555),
-                            focusedBorderColor = MaterialTheme.colorScheme.primary
-                        )
-                    )
-
-                    // Buttons row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        val chessComCount = chessComGamesCount.toIntOrNull() ?: uiState.chessComMaxGames
-                        Button(
-                            onClick = {
-                                focusManager.clearFocus()
-                                if (chessComUsername.isNotBlank()) {
-                                    viewModel.fetchGames(ChessServer.CHESS_COM, chessComUsername, chessComCount)
-                                }
-                            },
-                            enabled = !uiState.isLoading && chessComUsername.isNotBlank(),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Retrieve last $chessComCount games")
-                        }
-                        Button(
-                            onClick = {
-                                focusManager.clearFocus()
-                                if (chessComUsername.isNotBlank()) {
-                                    viewModel.fetchGames(ChessServer.CHESS_COM, chessComUsername, 1)
-                                }
-                            },
-                            enabled = !uiState.isLoading && chessComUsername.isNotBlank(),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Retrieve last game")
-                        }
-                    }
-                }
-            }
-
-            // Loading indicator
-            if (uiState.isLoading) {
-                Box(
+            // First card - only shown when no Active is stored
+            if (!uiState.hasActive) {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    ),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(40.dp),
-                    contentAlignment = Alignment.Center
+                        .padding(top = 16.dp)
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                        Spacer(modifier = Modifier.height(16.dp))
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
                         Text(
-                            text = "Fetching games...",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = "First",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Please select a game to analyse, use the \u2261 icon at the top left for this",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFFCCCCCC),
+                            textAlign = TextAlign.Center
                         )
                     }
                 }
@@ -754,5 +555,56 @@ fun StockfishNotInstalledScreen(
                 }
             }
         }
+    }
+}
+
+/**
+ * Eval logo displayed on the main screen when no game is loaded.
+ * Features a stylized chess-themed design.
+ */
+@Composable
+fun EvalLogo() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Chess pieces decoration
+        Text(
+            text = "\u265A \u265B \u265C",
+            fontSize = 36.sp,
+            color = Color(0xFF6B9BFF),
+            letterSpacing = 8.sp
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Main title
+        Text(
+            text = "Eval",
+            fontSize = 64.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.White,
+            letterSpacing = 4.sp
+        )
+
+        // Subtitle
+        Text(
+            text = "Chess Game Analyser",
+            fontSize = 16.sp,
+            color = Color(0xFF888888),
+            letterSpacing = 2.sp
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // More chess pieces
+        Text(
+            text = "\u265D \u265E \u265F",
+            fontSize = 36.sp,
+            color = Color(0xFF6B9BFF),
+            letterSpacing = 8.sp
+        )
     }
 }

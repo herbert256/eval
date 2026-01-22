@@ -234,12 +234,12 @@ fun GameContent(
     // Get visibility settings for current stage
     val visibilitySettings = uiState.interfaceVisibility
     val showScoreLineGraph = when (uiState.currentStage) {
-        AnalysisStage.PREVIEW -> true  // Always show line graph in preview (it's the main feedback)
+        AnalysisStage.PREVIEW -> true  // Always show line graph in preview
         AnalysisStage.ANALYSE -> visibilitySettings.analyseStage.showScoreLineGraph
         AnalysisStage.MANUAL -> visibilitySettings.manualStage.showScoreLineGraph
     }
     val showScoreBarsGraph = when (uiState.currentStage) {
-        AnalysisStage.PREVIEW -> false  // Never show bars graph in preview
+        AnalysisStage.PREVIEW -> visibilitySettings.previewStage.showScoreBarsGraph
         AnalysisStage.ANALYSE -> visibilitySettings.analyseStage.showScoreBarsGraph
         AnalysisStage.MANUAL -> visibilitySettings.manualStage.showScoreBarsGraph
     }
@@ -254,7 +254,7 @@ fun GameContent(
         AnalysisStage.MANUAL -> visibilitySettings.manualStage.showMoveList
     }
     val showGameInfo = when (uiState.currentStage) {
-        AnalysisStage.PREVIEW -> visibilitySettings.previewStage.showGameInfo
+        AnalysisStage.PREVIEW -> true  // Always show game info in preview
         AnalysisStage.ANALYSE -> visibilitySettings.analyseStage.showGameInfo
         AnalysisStage.MANUAL -> visibilitySettings.manualStage.showGameInfo
     }
@@ -264,9 +264,14 @@ fun GameContent(
         AnalysisStage.MANUAL -> visibilitySettings.manualStage.showPgn
     }
     val showResultBar = when (uiState.currentStage) {
-        AnalysisStage.PREVIEW -> false  // Never show result bar in preview
+        AnalysisStage.PREVIEW -> visibilitySettings.previewStage.showResultBar
         AnalysisStage.ANALYSE -> visibilitySettings.analyseStage.showResultBar
         AnalysisStage.MANUAL -> visibilitySettings.manualStage.showResultBar
+    }
+    val showStockfishAnalyse = when (uiState.currentStage) {
+        AnalysisStage.PREVIEW -> false  // Never show in preview
+        AnalysisStage.ANALYSE -> visibilitySettings.analyseStage.showStockfishAnalyse
+        AnalysisStage.MANUAL -> false  // Not used in manual (Stockfish panel always shown)
     }
     // Player bars visibility: never in preview, always in analyse/manual (actual display controlled by playerBarMode)
     val showPlayersBarsFromVisibility = uiState.currentStage != AnalysisStage.PREVIEW
@@ -349,8 +354,8 @@ fun GameContent(
         Spacer(modifier = Modifier.height(8.dp))
     }
 
-    // Stockfish Analyse card - only shown during Analyse stage
-    if (uiState.currentStage == AnalysisStage.ANALYSE) {
+    // Stockfish Analyse card - only shown during Analyse stage based on visibility setting
+    if (uiState.currentStage == AnalysisStage.ANALYSE && showStockfishAnalyse) {
         StockfishAnalyseCard(uiState = uiState)
         Spacer(modifier = Modifier.height(8.dp))
     }
