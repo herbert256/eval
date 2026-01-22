@@ -1,4 +1,4 @@
-package com.chessreplay.stockfish
+package com.eval.stockfish
 
 import android.content.Context
 import kotlinx.coroutines.*

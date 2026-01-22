@@ -1,4 +1,4 @@
-package com.chessreplay.ui
+package com.eval.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -14,8 +14,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.chessreplay.data.ChessServer
-import com.chessreplay.data.LichessGame
+import com.eval.data.ChessServer
+import com.eval.data.LichessGame
 
 /**
  * Full screen game selection view.

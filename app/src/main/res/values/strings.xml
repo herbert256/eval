@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Chess Replay</string>
+    <string name="app_name">Eval</string>
     <string name="enter_username">Enter username</string>
     <string name="fetch_game">Fetch Games</string>
     <string name="loading">Loading...</string>

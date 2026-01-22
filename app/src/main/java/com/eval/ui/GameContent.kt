@@ -1,4 +1,4 @@
-package com.chessreplay.ui
+package com.eval.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -13,8 +13,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.chessreplay.chess.PieceColor
-import com.chessreplay.chess.Square
+import com.eval.chess.PieceColor
+import com.eval.chess.Square
 
 // Chess piece Unicode symbols for game display
 private const val WHITE_KING = "♔"

@@ -1,4 +1,4 @@
-package com.chessreplay.data
+package com.eval.data
 
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -68,7 +68,7 @@ interface ChessComApi {
                 .addInterceptor(loggingInterceptor)
                 .addInterceptor { chain ->
                     val request = chain.request().newBuilder()
-                        .header("User-Agent", "ChessReplay/1.0")
+                        .header("User-Agent", "Eval/1.0")
                         .build()
                     chain.proceed(request)
                 }

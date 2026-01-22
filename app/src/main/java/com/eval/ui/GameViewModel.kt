@@ -1,19 +1,19 @@
-package com.chessreplay.ui
+package com.eval.ui
 
 import android.app.Application
 import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.chessreplay.chess.ChessBoard
-import com.chessreplay.chess.PgnParser
-import com.chessreplay.data.ChessRepository
-import com.chessreplay.data.ChessServer
-import com.chessreplay.data.LichessGame
-import com.chessreplay.data.Result
+import com.eval.chess.ChessBoard
+import com.eval.chess.PgnParser
+import com.eval.data.ChessRepository
+import com.eval.data.ChessServer
+import com.eval.data.LichessGame
+import com.eval.data.Result
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
-import com.chessreplay.stockfish.AnalysisResult
-import com.chessreplay.stockfish.StockfishEngine
+import com.eval.stockfish.AnalysisResult
+import com.eval.stockfish.StockfishEngine
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -310,7 +310,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         get() = prefs.getString(KEY_LAST_USERNAME, null)
 
     companion object {
-        private const val PREFS_NAME = "chess_replay_prefs"
+        private const val PREFS_NAME = "eval_prefs"
         // Current game storage
         private const val KEY_CURRENT_GAME_JSON = "current_game_json"
         // Lichess settings
@@ -1213,14 +1213,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 "0-1" -> "black"
                 else -> null
             },
-            players = com.chessreplay.data.Players(
-                white = com.chessreplay.data.Player(
-                    user = com.chessreplay.data.User(name = analysedGame.whiteName, id = analysedGame.whiteName.lowercase()),
+            players = com.eval.data.Players(
+                white = com.eval.data.Player(
+                    user = com.eval.data.User(name = analysedGame.whiteName, id = analysedGame.whiteName.lowercase()),
                     rating = null,
                     aiLevel = null
                 ),
-                black = com.chessreplay.data.Player(
-                    user = com.chessreplay.data.User(name = analysedGame.blackName, id = analysedGame.blackName.lowercase()),
+                black = com.eval.data.Player(
+                    user = com.eval.data.User(name = analysedGame.blackName, id = analysedGame.blackName.lowercase()),
                     rating = null,
                     aiLevel = null
                 )
@@ -1417,12 +1417,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 val capturedPiece = boardBeforeMove.getPiece(lastMove.to)
                 val movedPiece = tempBoard.getPiece(lastMove.to)
                 val pieceType = when (movedPiece?.type) {
-                    com.chessreplay.chess.PieceType.KING -> "K"
-                    com.chessreplay.chess.PieceType.QUEEN -> "Q"
-                    com.chessreplay.chess.PieceType.ROOK -> "R"
-                    com.chessreplay.chess.PieceType.BISHOP -> "B"
-                    com.chessreplay.chess.PieceType.KNIGHT -> "N"
-                    com.chessreplay.chess.PieceType.PAWN -> "P"
+                    com.eval.chess.PieceType.KING -> "K"
+                    com.eval.chess.PieceType.QUEEN -> "Q"
+                    com.eval.chess.PieceType.ROOK -> "R"
+                    com.eval.chess.PieceType.BISHOP -> "B"
+                    com.eval.chess.PieceType.KNIGHT -> "N"
+                    com.eval.chess.PieceType.PAWN -> "P"
                     else -> "P"
                 }
                 // Check for en passant capture (pawn capture but no piece on target square)
@@ -2332,7 +2332,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     analyzedCount++
                     // Score adjustment: Stockfish gives score from side-to-move's perspective
                     // We want score from WHITE's perspective (positive = good for white)
-                    val isWhiteToMove = board.getTurn() == com.chessreplay.chess.PieceColor.WHITE
+                    val isWhiteToMove = board.getTurn() == com.eval.chess.PieceColor.WHITE
                     val adjustedScore = if (isWhiteToMove) bestLine.score else -bestLine.score
                     val adjustedMateIn = if (isWhiteToMove) bestLine.mateIn else -bestLine.mateIn
 
@@ -2458,7 +2458,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
      * Make a manual move on the board (from user drag-and-drop).
      * Only allowed during Manual stage.
      */
-    fun makeManualMove(from: com.chessreplay.chess.Square, to: com.chessreplay.chess.Square) {
+    fun makeManualMove(from: com.eval.chess.Square, to: com.eval.chess.Square) {
         // Only allow moves during Manual stage
         if (_uiState.value.currentStage != AnalysisStage.MANUAL) return
 
@@ -2469,7 +2469,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         // Handle pawn promotion - default to queen for simplicity
         val promotion = if (currentBoard.needsPromotion(from, to)) {
-            com.chessreplay.chess.PieceType.QUEEN
+            com.eval.chess.PieceType.QUEEN
         } else null
 
         // Make a copy of the board and execute the move
@@ -2482,10 +2482,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val newMoveIndex = _uiState.value.exploringLineMoveIndex + 1
             val uciMove = from.toAlgebraic() + to.toAlgebraic() + (promotion?.let {
                 when (it) {
-                    com.chessreplay.chess.PieceType.QUEEN -> "q"
-                    com.chessreplay.chess.PieceType.ROOK -> "r"
-                    com.chessreplay.chess.PieceType.BISHOP -> "b"
-                    com.chessreplay.chess.PieceType.KNIGHT -> "n"
+                    com.eval.chess.PieceType.QUEEN -> "q"
+                    com.eval.chess.PieceType.ROOK -> "r"
+                    com.eval.chess.PieceType.BISHOP -> "b"
+                    com.eval.chess.PieceType.KNIGHT -> "n"
                     else -> ""
                 }
             } ?: "")
@@ -2503,10 +2503,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
             val uciMove = from.toAlgebraic() + to.toAlgebraic() + (promotion?.let {
                 when (it) {
-                    com.chessreplay.chess.PieceType.QUEEN -> "q"
-                    com.chessreplay.chess.PieceType.ROOK -> "r"
-                    com.chessreplay.chess.PieceType.BISHOP -> "b"
-                    com.chessreplay.chess.PieceType.KNIGHT -> "n"
+                    com.eval.chess.PieceType.QUEEN -> "q"
+                    com.eval.chess.PieceType.ROOK -> "r"
+                    com.eval.chess.PieceType.BISHOP -> "b"
+                    com.eval.chess.PieceType.KNIGHT -> "n"
                     else -> ""
                 }
             } ?: "")

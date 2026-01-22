@@ -1,4 +1,4 @@
-package com.chessreplay.ui.theme
+package com.eval.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
@@ -21,7 +21,7 @@ private val DarkColorScheme = darkColorScheme(
 )
 
 @Composable
-fun ChessReplayTheme(
+fun EvalTheme(
     content: @Composable () -> Unit
 ) {
     MaterialTheme(

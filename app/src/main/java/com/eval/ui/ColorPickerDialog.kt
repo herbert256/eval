@@ -1,4 +1,4 @@
-package com.chessreplay.ui
+package com.eval.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background

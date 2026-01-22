@@ -1,4 +1,4 @@
-package com.chessreplay.ui
+package com.eval.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -20,10 +20,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.chessreplay.chess.ChessBoard
-import com.chessreplay.chess.PieceColor
-import com.chessreplay.chess.Square
-import com.chessreplay.stockfish.PvLine
+import com.eval.chess.ChessBoard
+import com.eval.chess.PieceColor
+import com.eval.chess.Square
+import com.eval.stockfish.PvLine
 
 // Chess piece Unicode symbols for analysis display
 private const val WHITE_KING = "♔"
@@ -570,7 +570,7 @@ private fun formatUciMovesWithCaptures(pv: String, startBoard: ChessBoard, isWhi
         // Get the piece on the from square to determine the correct symbol
         val piece = fromSquare?.let { tempBoard.getPiece(it) }
         val symbol = if (piece != null) {
-            val isWhitePiece = piece.color == com.chessreplay.chess.PieceColor.WHITE
+            val isWhitePiece = piece.color == com.eval.chess.PieceColor.WHITE
             getPieceSymbol(piece.type, isWhitePiece)
         } else {
             // Fallback - inverted because Unicode symbols are visually inverted
@@ -579,7 +579,7 @@ private fun formatUciMovesWithCaptures(pv: String, startBoard: ChessBoard, isWhi
 
         // Check for capture: either there's a piece on target square, or it's en passant
         val targetPiece = toSquare?.let { tempBoard.getPiece(it) }
-        val isPawn = piece?.type == com.chessreplay.chess.PieceType.PAWN
+        val isPawn = piece?.type == com.eval.chess.PieceType.PAWN
         val isEnPassant = isPawn && fromSquare != null && toSquare != null &&
             fromSquare.file != toSquare.file && targetPiece == null
         val isCapture = targetPiece != null || isEnPassant
@@ -601,13 +601,13 @@ private fun formatUciMovesWithCaptures(pv: String, startBoard: ChessBoard, isWhi
  * Get the correct piece symbol based on piece type and color.
  * Note: Unicode chess symbols are inverted - "white" symbols appear filled, "black" appear hollow
  */
-private fun getPieceSymbol(pieceType: com.chessreplay.chess.PieceType, isWhite: Boolean): String {
+private fun getPieceSymbol(pieceType: com.eval.chess.PieceType, isWhite: Boolean): String {
     return when (pieceType) {
-        com.chessreplay.chess.PieceType.KING -> if (isWhite) BLACK_KING else WHITE_KING
-        com.chessreplay.chess.PieceType.QUEEN -> if (isWhite) BLACK_QUEEN else WHITE_QUEEN
-        com.chessreplay.chess.PieceType.ROOK -> if (isWhite) BLACK_ROOK else WHITE_ROOK
-        com.chessreplay.chess.PieceType.BISHOP -> if (isWhite) BLACK_BISHOP else WHITE_BISHOP
-        com.chessreplay.chess.PieceType.KNIGHT -> if (isWhite) BLACK_KNIGHT else WHITE_KNIGHT
-        com.chessreplay.chess.PieceType.PAWN -> if (isWhite) BLACK_PAWN else WHITE_PAWN
+        com.eval.chess.PieceType.KING -> if (isWhite) BLACK_KING else WHITE_KING
+        com.eval.chess.PieceType.QUEEN -> if (isWhite) BLACK_QUEEN else WHITE_QUEEN
+        com.eval.chess.PieceType.ROOK -> if (isWhite) BLACK_ROOK else WHITE_ROOK
+        com.eval.chess.PieceType.BISHOP -> if (isWhite) BLACK_BISHOP else WHITE_BISHOP
+        com.eval.chess.PieceType.KNIGHT -> if (isWhite) BLACK_KNIGHT else WHITE_KNIGHT
+        com.eval.chess.PieceType.PAWN -> if (isWhite) BLACK_PAWN else WHITE_PAWN
     }
 }

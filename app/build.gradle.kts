@@ -18,7 +18,7 @@ if (keystoreFile.exists()) {
 }
 
 android {
-    namespace = "com.chessreplay"
+    namespace = "com.eval"
     compileSdk = 34
 
     signingConfigs {
@@ -34,7 +34,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.chessreplay"
+        applicationId = "com.eval"
         minSdk = 26
         targetSdk = 34
         versionCode = 1

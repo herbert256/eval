@@ -1,4 +1,4 @@
-package com.chessreplay.ui
+package com.eval.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -54,7 +54,7 @@ fun HelpScreen(
         ) {
             // Welcome section
             HelpSection(
-                title = "Welcome to Chess Replay",
+                title = "Welcome to Eval",
                 content = "Analyze your chess games from Lichess.org and Chess.com with the powerful Stockfish 17.1 engine. " +
                     "The app automatically fetches your games and provides deep analysis to help you improve."
             )
@@ -162,7 +162,7 @@ fun HelpScreen(
             HelpSection(
                 title = "About",
                 icon = "ℹ",
-                content = "Chess Replay uses the Stockfish 17.1 chess engine for analysis. " +
+                content = "Eval uses the Stockfish 17.1 chess engine for analysis. " +
                     "Stockfish is the world's strongest open-source chess engine.\n\n" +
                     "Game data is fetched from lichess.org and chess.com via their public APIs."
             )

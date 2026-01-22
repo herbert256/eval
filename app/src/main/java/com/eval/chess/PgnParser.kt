@@ -1,4 +1,4 @@
-package com.chessreplay.chess
+package com.eval.chess
 
 data class ParsedMove(
     val san: String,

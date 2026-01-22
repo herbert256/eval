@@ -1,4 +1,4 @@
-package com.chessreplay.data
+package com.eval.data
 
 import com.google.gson.annotations.SerializedName
 

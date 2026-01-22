@@ -1,4 +1,4 @@
-package com.chessreplay.ui
+package com.eval.ui
 
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -37,7 +37,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.delay
-import com.chessreplay.data.ChessServer
+import com.eval.data.ChessServer
 
 /**
  * Main game screen composable that handles game selection and display.
@@ -272,7 +272,7 @@ fun GameScreen(
                     }
                 }
                 Text(
-                    text = "Chess Replay",
+                    text = "Eval",
                     style = MaterialTheme.typography.titleLarge,
                     color = Color.White,
                     fontWeight = FontWeight.Bold,

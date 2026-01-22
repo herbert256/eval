@@ -1,4 +1,4 @@
-package com.chessreplay.ui
+package com.eval.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -19,8 +19,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toBitmap
-import com.chessreplay.R
-import com.chessreplay.chess.*
+import com.eval.R
+import com.eval.chess.*
 
 // Default board colors (used as fallback)
 val BoardLightDefault = Color(0xFFF0D9B5)

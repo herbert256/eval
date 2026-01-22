@@ -1,4 +1,4 @@
-package com.chessreplay
+package com.eval
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -9,15 +9,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.Scaffold
 import androidx.compose.ui.Modifier
-import com.chessreplay.ui.GameScreen
-import com.chessreplay.ui.theme.ChessReplayTheme
+import com.eval.ui.GameScreen
+import com.eval.ui.theme.EvalTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            ChessReplayTheme {
+            EvalTheme {
                 Scaffold(
                     modifier = Modifier
                         .fillMaxSize()

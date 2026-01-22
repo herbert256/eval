@@ -16,13 +16,13 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@17 ./gradlew assembleRelease
 
 # Deploy to emulator (also copy to cloud folder)
 adb install -r app/build/outputs/apk/debug/app-debug.apk && \
-adb shell am start -n com.chessreplay/.MainActivity && \
+adb shell am start -n com.eval/.MainActivity && \
 cp app/build/outputs/apk/debug/app-debug.apk /Users/herbert/cloud/
 ```
 
 ## Project Overview
 
-Chess Replay is an Android app for fetching and analyzing chess games from Lichess.org and Chess.com using the Stockfish 17.1 chess engine. The app retrieves games via both APIs, parses PGN notation, and provides multi-stage computer analysis with an interactive board display.
+Eval is an Android app for fetching and analyzing chess games from Lichess.org and Chess.com using the Stockfish 17.1 chess engine. The app retrieves games via both APIs, parses PGN notation, and provides multi-stage computer analysis with an interactive board display.
 
 **Key Dependencies:**
 - External app required: "Stockfish 17.1 Chess Engine" (com.stockfish141) from Google Play Store
@@ -35,7 +35,7 @@ Chess Replay is an Android app for fetching and analyzing chess games from Liche
 ### Package Structure (23 Kotlin files, ~8,900 lines)
 
 ```
-com.chessreplay/
+com.eval/
 ├── MainActivity.kt (33 lines) - Entry point, sets up Compose theme
 ├── chess/
 │   ├── ChessBoard.kt (550 lines) - Board state, move validation, FEN generation
@@ -221,7 +221,7 @@ data class PvLine(
 
 ## Settings Persistence
 
-SharedPreferences keys in `chess_replay_prefs`:
+SharedPreferences keys in `eval_prefs`:
 
 ```
 // Lichess

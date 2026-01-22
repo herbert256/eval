@@ -1,4 +1,4 @@
-# Chess Replay
+# Eval
 
 A powerful Android application for fetching and analyzing chess games from Lichess.org and Chess.com using the Stockfish 17.1 chess engine. The app provides comprehensive game analysis through an intelligent three-stage system that automatically identifies critical positions and mistakes.
 
@@ -144,15 +144,15 @@ The Stockfish app package: `com.stockfish141`
 
 ### From APK
 1. Install "Stockfish 17.1 Chess Engine" from Google Play Store
-2. Download the Chess Replay APK
+2. Download the Eval APK
 3. Enable "Install from unknown sources" if prompted
-4. Install and launch Chess Replay
+4. Install and launch Eval
 
 ### Building from Source
 ```bash
 # Clone the repository
-git clone https://github.com/your-repo/ChessReplay.git
-cd ChessReplay
+git clone https://github.com/your-repo/Eval.git
+cd Eval
 
 # Build debug APK (requires Java 17)
 JAVA_HOME=/opt/homebrew/opt/openjdk@17 ./gradlew assembleDebug
@@ -161,7 +161,7 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@17 ./gradlew assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 # Launch the app
-adb shell am start -n com.chessreplay/.MainActivity
+adb shell am start -n com.eval/.MainActivity
 ```
 
 ## Usage Guide
@@ -210,7 +210,7 @@ adb shell am start -n com.chessreplay/.MainActivity
 
 ### Project Structure
 ```
-com.chessreplay/
+com.eval/
 ├── MainActivity.kt              # App entry point
 ├── chess/
 │   ├── ChessBoard.kt           # Board state and move validation
@@ -264,4 +264,4 @@ This project is provided as-is for personal use in analyzing chess games.
 
 ---
 
-*Chess Replay - Understand your games, improve your play.*
+*Eval - Understand your games, improve your play.*
