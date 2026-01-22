@@ -171,6 +171,41 @@ fun GameScreen(
         return
     }
 
+    // Show ActivePlayer validation error popup
+    val activePlayerError = uiState.activePlayerError
+    if (activePlayerError != null) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissActivePlayerError() },
+            title = { Text("ActivePlayer Validation Error") },
+            text = {
+                Column {
+                    Text(activePlayerError)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "ActivePlayer: ${uiState.activePlayer ?: "null"}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    val game = uiState.game
+                    if (game != null) {
+                        Text(
+                            "White: ${game.players.white.user?.name ?: "unknown"}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Text(
+                            "Black: ${game.players.black.user?.name ?: "unknown"}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.dismissActivePlayerError() }) {
+                    Text("OK")
+                }
+            }
+        )
+    }
+
     // Show game selection screen (full screen, outside scrollable column)
     if (uiState.showGameSelection && uiState.gameList.isNotEmpty()) {
         GameSelectionScreen(

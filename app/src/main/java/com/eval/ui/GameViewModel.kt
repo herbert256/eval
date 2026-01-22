@@ -228,7 +228,9 @@ data class GameUiState(
     val analysisResultFen: String? = null,  // FEN for which analysisResult is valid
     val stockfishReady: Boolean = false,
     val flippedBoard: Boolean = false,
-    val userPlayedBlack: Boolean = false,  // True if searched user played black (for score perspective)
+    val userPlayedBlack: Boolean = false,  // True if active player played black (for score perspective)
+    val activePlayer: String? = null,      // Username of the active player (for score perspective)
+    val activePlayerError: String? = null, // Error message if activePlayer validation fails
     val stockfishSettings: StockfishSettings = StockfishSettings(),
     val boardLayoutSettings: BoardLayoutSettings = BoardLayoutSettings(),
     val graphSettings: GraphSettings = GraphSettings(),
@@ -617,6 +619,54 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private fun configureForManualStage() {
         val settings = _uiState.value.stockfishSettings.manualStage
         stockfish.configure(settings.threads, settings.hashMb, settings.multiPv, settings.useNnue)
+    }
+
+    /**
+     * Validate that activePlayer is set and matches either the white or black player.
+     * Returns an error message if validation fails, null if validation passes.
+     */
+    private fun validateActivePlayer(stage: AnalysisStage): String? {
+        val game = _uiState.value.game ?: return "No game loaded"
+        val activePlayer = _uiState.value.activePlayer
+
+        if (activePlayer.isNullOrBlank()) {
+            return "ActivePlayer not set at ${stage.name} stage"
+        }
+
+        val whiteName = game.players.white.user?.name?.lowercase()
+            ?: game.players.white.aiLevel?.let { "stockfish $it" }
+            ?: "anonymous"
+        val blackName = game.players.black.user?.name?.lowercase()
+            ?: game.players.black.aiLevel?.let { "stockfish $it" }
+            ?: "anonymous"
+        val activePlayerLower = activePlayer.lowercase()
+
+        if (activePlayerLower != whiteName && activePlayerLower != blackName) {
+            return "ActivePlayer '$activePlayer' does not match white ('$whiteName') or black ('$blackName') at ${stage.name} stage"
+        }
+
+        return null // Validation passed
+    }
+
+    /**
+     * Run activePlayer validation and set error state if it fails.
+     * Returns true if validation passed, false otherwise.
+     */
+    private fun checkActivePlayer(stage: AnalysisStage): Boolean {
+        val error = validateActivePlayer(stage)
+        if (error != null) {
+            android.util.Log.e("ActivePlayer", "VALIDATION FAILED: $error")
+            _uiState.value = _uiState.value.copy(activePlayerError = error)
+            return false
+        }
+        return true
+    }
+
+    /**
+     * Dismiss the activePlayer error popup.
+     */
+    fun dismissActivePlayerError() {
+        _uiState.value = _uiState.value.copy(activePlayerError = null)
     }
 
     /**
@@ -1129,7 +1179,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             analyseScores = analyseScores,
             openingName = _uiState.value.openingName,
             speed = game.speed,
-            activePlayer = savedLastUsername
+            activePlayer = _uiState.value.activePlayer
         )
 
         // Save as current game for next app startup
@@ -1242,8 +1292,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         // Determine if active player played black (for score perspective)
-        val activePlayer = analysedGame.activePlayer?.lowercase() ?: ""
-        val userPlayedBlack = activePlayer.isNotEmpty() && activePlayer == analysedGame.blackName.lowercase()
+        val activePlayerName = analysedGame.activePlayer ?: ""
+        val activePlayerLower = activePlayerName.lowercase()
+        val userPlayedBlack = activePlayerLower.isNotEmpty() && activePlayerLower == analysedGame.blackName.lowercase()
 
         _uiState.value = _uiState.value.copy(
             game = lichessGame,
@@ -1253,6 +1304,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             currentBoard = board.copy(),
             flippedBoard = userPlayedBlack,
             userPlayedBlack = userPlayedBlack,
+            activePlayer = activePlayerName,
+            activePlayerError = null,
             openingName = analysedGame.openingName,
             previewScores = analysedGame.previewScores,
             analyseScores = analysedGame.analyseScores,
@@ -1263,6 +1316,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             exploringLineMoveIndex = -1,
             savedGameMoveIndex = -1
         )
+
+        // Validate ActivePlayer at start of Manual stage (loaded from analysed game)
+        if (!checkActivePlayer(AnalysisStage.MANUAL)) {
+            android.util.Log.e("Analysis", "ActivePlayer validation failed at MANUAL stage (from analysed game)")
+            // Continue anyway but error will be shown to user
+        }
 
         // Start Stockfish analysis for current position
         val fenToAnalyze = board.getFen()
@@ -1442,11 +1501,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        // Flip board if the searched user played black
+        // Determine the active player - the user whose perspective we're viewing from
         // Use the username parameter if provided, otherwise fall back to saved Lichess username
-        val searchedUser = (username ?: savedLichessUsername).lowercase()
+        val activePlayerName = username ?: savedLichessUsername ?: ""
         val blackPlayerName = game.players.black.user?.name?.lowercase() ?: ""
-        val userPlayedBlack = searchedUser.isNotEmpty() && searchedUser == blackPlayerName
+        val userPlayedBlack = activePlayerName.isNotEmpty() && activePlayerName.lowercase() == blackPlayerName
 
         _uiState.value = _uiState.value.copy(
             isLoading = false,
@@ -1458,6 +1517,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             currentMoveIndex = -1,
             flippedBoard = userPlayedBlack,
             userPlayedBlack = userPlayedBlack,
+            activePlayer = activePlayerName,
+            activePlayerError = null,
             // Reset exploring state
             isExploringLine = false,
             exploringLineMoves = emptyList(),
@@ -2134,6 +2195,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
                 // ===== PREVIEW STAGE =====
                 android.util.Log.d("Analysis", "Starting PREVIEW stage")
+
+                // Validate ActivePlayer at start of Preview stage
+                if (!checkActivePlayer(AnalysisStage.PREVIEW)) {
+                    android.util.Log.e("Analysis", "ActivePlayer validation failed at PREVIEW stage")
+                    // Continue anyway but error will be shown to user
+                }
                 _uiState.value = _uiState.value.copy(
                     currentStage = AnalysisStage.PREVIEW,
                     previewScores = emptyMap(),
@@ -2177,6 +2244,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
                 // ===== ANALYSE STAGE =====
                 android.util.Log.d("Analysis", "Starting ANALYSE stage")
+
+                // Validate ActivePlayer at start of Analyse stage
+                if (!checkActivePlayer(AnalysisStage.ANALYSE)) {
+                    android.util.Log.e("Analysis", "ActivePlayer validation failed at ANALYSE stage")
+                    // Continue anyway but error will be shown to user
+                }
+
                 _uiState.value = _uiState.value.copy(
                     currentStage = AnalysisStage.ANALYSE,
                     autoAnalysisCurrentScore = null,
@@ -2385,6 +2459,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
      * Kills current Stockfish and starts a new one configured for Manual stage.
      */
     private fun enterManualStageInternal(moveIndex: Int) {
+        // Validate ActivePlayer at start of Manual stage
+        if (!checkActivePlayer(AnalysisStage.MANUAL)) {
+            android.util.Log.e("Analysis", "ActivePlayer validation failed at MANUAL stage")
+            // Continue anyway but error will be shown to user
+        }
+
         viewModelScope.launch {
             // Stop any running analysis
             autoAnalysisJob?.cancel()
