@@ -228,6 +228,28 @@ fun GameScreen(
         return
     }
 
+    // Show previous game retrieves selection screen
+    if (uiState.showPreviousRetrievesSelection && uiState.previousRetrievesList.isNotEmpty()) {
+        PreviousRetrievesScreen(
+            retrieves = uiState.previousRetrievesList,
+            onSelectRetrieve = { viewModel.selectPreviousRetrieve(it) },
+            onDismiss = { viewModel.dismissPreviousRetrievesSelection() }
+        )
+        return
+    }
+
+    // Show games from selected retrieve
+    val selectedRetrieveEntry = uiState.selectedRetrieveEntry
+    if (uiState.showSelectedRetrieveGames && selectedRetrieveEntry != null) {
+        SelectedRetrieveGamesScreen(
+            entry = selectedRetrieveEntry,
+            games = uiState.selectedRetrieveGames,
+            onSelectGame = { viewModel.selectGameFromRetrieve(it) },
+            onDismiss = { viewModel.dismissSelectedRetrieveGames() }
+        )
+        return
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -256,8 +278,8 @@ fun GameScreen(
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     if (uiState.game != null) {
-                        // Reload last game from active server (only if we have a stored last server/user)
-                        if (uiState.hasLastServerUser) {
+                        // Reload last game from Active player/server (only if we have a stored Active)
+                        if (uiState.hasActive) {
                             Box(
                                 modifier = Modifier
                                     .size(52.dp)
@@ -377,15 +399,15 @@ fun GameScreen(
                     .padding(bottom = 12.dp)
             )
 
-            // Button to select from last retrieved games
-            if (uiState.hasStoredGames) {
+            // Button to select from previous retrieves
+            if (uiState.hasPreviousRetrieves) {
                 Button(
-                    onClick = { viewModel.showStoredGames() },
+                    onClick = { viewModel.showPreviousRetrieves() },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 12.dp)
                 ) {
-                    Text("Select from last retrieved list of games")
+                    Text("Select from a previous retrieve")
                 }
             }
 

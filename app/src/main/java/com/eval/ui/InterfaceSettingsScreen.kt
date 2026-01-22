@@ -253,7 +253,7 @@ fun InterfaceSettingsScreen(
             }
         }
 
-        // ===== MANUAL ANALYSE STAGE CARD =====
+        // ===== MANUAL STAGE CARD =====
         Card(
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant
@@ -265,7 +265,7 @@ fun InterfaceSettingsScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "Manual Analyse Stage",
+                    text = "Manual Stage",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White

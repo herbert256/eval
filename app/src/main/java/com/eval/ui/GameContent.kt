@@ -349,6 +349,12 @@ fun GameContent(
         Spacer(modifier = Modifier.height(8.dp))
     }
 
+    // Stockfish Analyse card - only shown during Analyse stage
+    if (uiState.currentStage == AnalysisStage.ANALYSE) {
+        StockfishAnalyseCard(uiState = uiState)
+        Spacer(modifier = Modifier.height(8.dp))
+    }
+
     // Result bar above board in manual stage
     if (uiState.currentStage == AnalysisStage.MANUAL && showResultBar) {
         ResultBar()
@@ -1141,5 +1147,122 @@ fun EvaluationBar(
                     .background(bottomColor)
             )
         }
+    }
+}
+
+/**
+ * Stockfish Analyse card - shows live Stockfish analysis info during Analyse stage.
+ */
+@Composable
+private fun StockfishAnalyseCard(uiState: GameUiState) {
+    val totalMoves = uiState.moves.size
+    val currentMoveIndex = uiState.autoAnalysisIndex
+    val currentScore = uiState.autoAnalysisCurrentScore
+    val analyzedCount = uiState.analyseScores.size
+    val analyseSettings = uiState.stockfishSettings.analyseStage
+
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFF1A3A5A)  // Dark blue background
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            // Title
+            Text(
+                text = "Stockfish Analyse",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
+            )
+
+            // Progress row: "Analyzing move X of Y"
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = if (currentMoveIndex >= 0) "Analyzing move ${currentMoveIndex + 1} of $totalMoves" else "Starting...",
+                    color = Color(0xFFB0BEC5),
+                    fontSize = 13.sp
+                )
+                Text(
+                    text = "$analyzedCount analyzed",
+                    color = Color(0xFF90CAF9),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+
+            // Current analysis info
+            if (currentScore != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Score display
+                    val scoreText = if (currentScore.isMate) {
+                        if (currentScore.mateIn > 0) "M${currentScore.mateIn}" else "-M${kotlin.math.abs(currentScore.mateIn)}"
+                    } else {
+                        if (currentScore.score >= 0) "+%.2f".format(currentScore.score) else "%.2f".format(currentScore.score)
+                    }
+                    val scoreColor = when {
+                        currentScore.isMate && currentScore.mateIn > 0 -> Color(0xFF00E676)
+                        currentScore.isMate && currentScore.mateIn < 0 -> Color(0xFFFF5252)
+                        currentScore.score > 0.5f -> Color(0xFF00E676)
+                        currentScore.score < -0.5f -> Color(0xFFFF5252)
+                        else -> Color(0xFF64B5F6)
+                    }
+                    Text(
+                        text = "Score: $scoreText",
+                        color = scoreColor,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    // Depth and nodes
+                    Text(
+                        text = "d${currentScore.depth}  ${formatNodes(currentScore.nodes)}",
+                        color = Color(0xFF78909C),
+                        fontSize = 12.sp
+                    )
+                }
+            }
+
+            // Settings info row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Time: ${analyseSettings.secondsForMove}s/move",
+                    color = Color(0xFF607D8B),
+                    fontSize = 11.sp
+                )
+                Text(
+                    text = "Threads: ${analyseSettings.threads}  Hash: ${analyseSettings.hashMb}MB",
+                    color = Color(0xFF607D8B),
+                    fontSize = 11.sp
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Format node count for display (e.g., 1234567 -> "1.2M nodes")
+ */
+private fun formatNodes(nodes: Long): String {
+    return when {
+        nodes >= 1_000_000_000 -> "%.1fB nodes".format(nodes / 1_000_000_000.0)
+        nodes >= 1_000_000 -> "%.1fM nodes".format(nodes / 1_000_000.0)
+        nodes >= 1_000 -> "%.1fK nodes".format(nodes / 1_000.0)
+        else -> "$nodes nodes"
     }
 }

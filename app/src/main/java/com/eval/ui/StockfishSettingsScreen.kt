@@ -100,7 +100,7 @@ fun StockfishSettingsScreen(
     var analyseHash by remember { mutableStateOf(stockfishSettings.analyseStage.hashMb) }
     var analyseNnue by remember { mutableStateOf(stockfishSettings.analyseStage.useNnue) }
 
-    // Manual Analyse Stage state
+    // Manual Stage state
     var manualDepth by remember { mutableStateOf(stockfishSettings.manualStage.depth) }
     var manualThreads by remember { mutableStateOf(stockfishSettings.manualStage.threads) }
     var manualHash by remember { mutableStateOf(stockfishSettings.manualStage.hashMb) }
@@ -340,7 +340,7 @@ fun StockfishSettingsScreen(
             }
         }
 
-        // ===== MANUAL ANALYSE STAGE CARD =====
+        // ===== MANUAL STAGE CARD =====
         Card(
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant
@@ -352,7 +352,7 @@ fun StockfishSettingsScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "Manual Analyse Stage",
+                    text = "Manual Stage",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White
