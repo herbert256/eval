@@ -171,6 +171,18 @@ fun GameScreen(
         return
     }
 
+    // Show game selection screen (full screen, outside scrollable column)
+    if (uiState.showGameSelection && uiState.gameList.isNotEmpty()) {
+        GameSelectionScreen(
+            games = uiState.gameList,
+            username = uiState.gameSelectionUsername,
+            server = uiState.gameSelectionServer,
+            onSelectGame = { viewModel.selectGame(it) },
+            onDismiss = { viewModel.dismissGameSelection() }
+        )
+        return
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -319,6 +331,18 @@ fun GameScreen(
                     .fillMaxWidth()
                     .padding(bottom = 12.dp)
             )
+
+            // Button to select from last retrieved games
+            if (uiState.hasStoredGames) {
+                Button(
+                    onClick = { viewModel.showStoredGames() },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
+                ) {
+                    Text("Select from last retrieved list of games")
+                }
+            }
 
             // Error message
             if (uiState.errorMessage != null) {
@@ -535,15 +559,6 @@ fun GameScreen(
                     }
                 }
             }
-        }
-
-        // Game selection dialog
-        if (uiState.showGameSelection && uiState.gameList.isNotEmpty()) {
-            GameSelectionDialog(
-                games = uiState.gameList,
-                onSelectGame = { viewModel.selectGame(it) },
-                onDismiss = { viewModel.dismissGameSelection() }
-            )
         }
 
         // Game content

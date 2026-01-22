@@ -11,6 +11,7 @@ import com.chessreplay.data.ChessServer
 import com.chessreplay.data.LichessGame
 import com.chessreplay.data.Result
 import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.chessreplay.stockfish.AnalysisResult
 import com.chessreplay.stockfish.StockfishEngine
 import kotlinx.coroutines.Job
@@ -237,7 +238,14 @@ data class GameUiState(
     // Last server used for reload
     val hasLastServerUser: Boolean = false,
     // General settings (fullScreenMode is stored here, not persistent)
-    val generalSettings: GeneralSettings = GeneralSettings()
+    val generalSettings: GeneralSettings = GeneralSettings(),
+    // Game selection info for full screen display
+    val gameSelectionUsername: String = "",
+    val gameSelectionServer: ChessServer = ChessServer.LICHESS,
+    // Stored retrieved games
+    val hasStoredGames: Boolean = false,
+    val storedGamesUsername: String = "",
+    val storedGamesServer: ChessServer = ChessServer.LICHESS
 )
 
 class GameViewModel(application: Application) : AndroidViewModel(application) {
@@ -294,6 +302,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         // Last server/user for reload
         private const val KEY_LAST_SERVER = "last_server"
         private const val KEY_LAST_USERNAME = "last_username"
+        // Retrieved games storage
+        private const val KEY_RETRIEVED_GAMES = "retrieved_games"
+        private const val KEY_RETRIEVED_GAMES_USERNAME = "retrieved_games_username"
+        private const val KEY_RETRIEVED_GAMES_SERVER = "retrieved_games_server"
         // Preview stage settings
         private const val KEY_PREVIEW_SECONDS = "preview_seconds"
         private const val KEY_PREVIEW_THREADS = "preview_threads"
@@ -666,6 +678,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val lichessMaxGames = prefs.getInt(KEY_LICHESS_MAX_GAMES, 10)
             val chessComMaxGames = prefs.getInt(KEY_CHESSCOM_MAX_GAMES, 10)
             val hasLastServerUser = savedLastServer != null && savedLastUsername != null
+            // Check for stored retrieved games
+            val storedGamesUsername = prefs.getString(KEY_RETRIEVED_GAMES_USERNAME, null)
+            val storedGamesServerStr = prefs.getString(KEY_RETRIEVED_GAMES_SERVER, null)
+            val hasStoredGames = storedGamesUsername != null && storedGamesServerStr != null &&
+                prefs.getString(KEY_RETRIEVED_GAMES, null) != null
+            val storedGamesServer = if (storedGamesServerStr == "CHESS_COM") ChessServer.CHESS_COM else ChessServer.LICHESS
             _uiState.value = _uiState.value.copy(
                 stockfishSettings = settings,
                 boardLayoutSettings = boardSettings,
@@ -674,7 +692,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 generalSettings = generalSettings,
                 lichessMaxGames = lichessMaxGames,
                 chessComMaxGames = chessComMaxGames,
-                hasLastServerUser = hasLastServerUser
+                hasLastServerUser = hasLastServerUser,
+                hasStoredGames = hasStoredGames,
+                storedGamesUsername = storedGamesUsername ?: "",
+                storedGamesServer = storedGamesServer
             )
 
             // Initialize Stockfish with manual stage settings (default)
@@ -963,12 +984,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             when (result) {
                 is Result.Success -> {
                     val games = result.data
+                    // Store the retrieved games for later use
+                    if (games.isNotEmpty()) {
+                        storeRetrievedGames(games, username, server)
+                    }
                     if (games.size == 1) {
                         // Auto-select if only 1 game
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
                             gameList = games,
-                            showGameSelection = false
+                            showGameSelection = false,
+                            gameSelectionUsername = username,
+                            gameSelectionServer = server
                         )
                         loadGame(games.first(), server, username)
                     } else {
@@ -978,7 +1005,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
                             gameList = games,
-                            showGameSelection = true
+                            showGameSelection = true,
+                            gameSelectionUsername = username,
+                            gameSelectionServer = server
                         )
                     }
                 }
@@ -989,6 +1018,49 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
             }
+        }
+    }
+
+    private fun storeRetrievedGames(games: List<LichessGame>, username: String, server: ChessServer) {
+        val gamesJson = gson.toJson(games)
+        prefs.edit()
+            .putString(KEY_RETRIEVED_GAMES, gamesJson)
+            .putString(KEY_RETRIEVED_GAMES_USERNAME, username)
+            .putString(KEY_RETRIEVED_GAMES_SERVER, server.name)
+            .apply()
+        _uiState.value = _uiState.value.copy(
+            hasStoredGames = true,
+            storedGamesUsername = username,
+            storedGamesServer = server
+        )
+    }
+
+    fun showStoredGames() {
+        val gamesJson = prefs.getString(KEY_RETRIEVED_GAMES, null) ?: return
+        val username = prefs.getString(KEY_RETRIEVED_GAMES_USERNAME, null) ?: return
+        val serverStr = prefs.getString(KEY_RETRIEVED_GAMES_SERVER, null) ?: return
+        val server = if (serverStr == "CHESS_COM") ChessServer.CHESS_COM else ChessServer.LICHESS
+
+        try {
+            val games: List<LichessGame> = gson.fromJson(gamesJson, object : TypeToken<List<LichessGame>>() {}.type)
+            if (games.isNotEmpty()) {
+                pendingGameSelectionServer = server
+                pendingGameSelectionUsername = username
+                _uiState.value = _uiState.value.copy(
+                    gameList = games,
+                    showGameSelection = true,
+                    gameSelectionUsername = username,
+                    gameSelectionServer = server
+                )
+            }
+        } catch (e: Exception) {
+            // Invalid stored data, clear it
+            prefs.edit()
+                .remove(KEY_RETRIEVED_GAMES)
+                .remove(KEY_RETRIEVED_GAMES_USERNAME)
+                .remove(KEY_RETRIEVED_GAMES_SERVER)
+                .apply()
+            _uiState.value = _uiState.value.copy(hasStoredGames = false)
         }
     }
 
