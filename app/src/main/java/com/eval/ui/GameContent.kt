@@ -2,12 +2,15 @@ package com.eval.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -15,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.eval.chess.PieceColor
 import com.eval.chess.Square
+import com.eval.data.AiService
 
 // Chess piece Unicode symbols for game display
 private const val WHITE_KING = "♔"
@@ -379,6 +383,10 @@ fun GameContent(
         // Player bar handling based on playerBarMode
         val topIsBlack = !uiState.flippedBoard
 
+        // Calculate left padding for player bars when AI logos are visible
+        val showAiLogos = uiState.currentStage == AnalysisStage.MANUAL && uiState.aiSettings.showAiLogos
+        val playerBarStartPadding = if (showAiLogos) 32.dp else 0.dp
+
         // Show combined bar at TOP if mode is TOP
         if (showPlayersBarsFromVisibility && playerBarMode == PlayerBarMode.TOP) {
             CombinedPlayerBar(
@@ -387,7 +395,8 @@ fun GameContent(
                 whiteResult = whiteResult,
                 blackResult = blackResult,
                 isWhiteTurn = isWhiteTurn,
-                showRedBorder = showRedBorderForPlayerToMove
+                showRedBorder = showRedBorderForPlayerToMove,
+                modifier = Modifier.padding(start = playerBarStartPadding)
             )
         }
 
@@ -400,7 +409,8 @@ fun GameContent(
                 clockTime = if (topIsBlack) blackClockTime else whiteClockTime,
                 isToMove = if (topIsBlack) !isWhiteTurn else isWhiteTurn,
                 gameResult = if (topIsBlack) blackResult else whiteResult,
-                showRedBorder = showRedBorderForPlayerToMove
+                showRedBorder = showRedBorderForPlayerToMove,
+                modifier = Modifier.padding(start = playerBarStartPadding)
             )
         }
 
@@ -455,20 +465,15 @@ fun GameContent(
                                 val adjustedScore = if (uiState.userPlayedBlack) -whiteScore else whiteScore
                                 val adjustedMateIn = if (uiState.userPlayedBlack) -whiteMateIn else whiteMateIn
 
-                                // Format score for display (same as Stockfish card)
+                                // Format score for display
                                 val scoreText = if (line.isMate) {
                                     if (adjustedMateIn > 0) "+M${adjustedMateIn}" else "-M${kotlin.math.abs(adjustedMateIn)}"
                                 } else {
                                     if (adjustedScore >= 0) "+%.1f".format(adjustedScore) else "%.1f".format(adjustedScore)
                                 }
 
-                                // Use same color as Stockfish card
-                                val scoreColor = when {
-                                    line.isMate -> if (adjustedMateIn > 0) Color(0xFF00E676) else Color(0xFFFF5252)
-                                    adjustedScore > 0.3f -> Color(0xFF00E676)  // Green - good for player
-                                    adjustedScore < -0.3f -> Color(0xFFFF5252)  // Red - bad for player
-                                    else -> Color(0xFF6B9BFF)  // Blue - equal
-                                }
+                                // Gray color for multi-line arrows
+                                val arrowColor = Color(0xCC888888)
 
                                 MoveArrow(
                                     from = Square(fromFile, fromRank),
@@ -476,7 +481,7 @@ fun GameContent(
                                     isWhiteMove = isWhiteTurnNow,
                                     index = index,
                                     scoreText = scoreText,
-                                    overrideColor = scoreColor
+                                    overrideColor = arrowColor
                                 )
                             } else null
                         } else null
@@ -520,6 +525,15 @@ fun GameContent(
                 .fillMaxWidth()
                 .height(IntrinsicSize.Max)
         ) {
+            // AI logos column on the left (only in Manual stage when enabled)
+            if (uiState.currentStage == AnalysisStage.MANUAL && uiState.aiSettings.showAiLogos) {
+                AiLogosColumn(
+                    aiSettings = uiState.aiSettings,
+                    onAiSelected = { service -> viewModel.requestAiAnalysis(service) },
+                    modifier = Modifier.fillMaxHeight()
+                )
+            }
+
             // Left evaluation bar
             if (showEvalBar && evalBarPosition == EvalBarPosition.LEFT) {
                 EvaluationBar(
@@ -572,7 +586,8 @@ fun GameContent(
                 clockTime = if (topIsBlack) whiteClockTime else blackClockTime,
                 isToMove = if (topIsBlack) isWhiteTurn else !isWhiteTurn,
                 gameResult = if (topIsBlack) whiteResult else blackResult,
-                showRedBorder = showRedBorderForPlayerToMove
+                showRedBorder = showRedBorderForPlayerToMove,
+                modifier = Modifier.padding(start = playerBarStartPadding)
             )
         }
 
@@ -584,7 +599,8 @@ fun GameContent(
                 whiteResult = whiteResult,
                 blackResult = blackResult,
                 isWhiteTurn = isWhiteTurn,
-                showRedBorder = showRedBorderForPlayerToMove
+                showRedBorder = showRedBorderForPlayerToMove,
+                modifier = Modifier.padding(start = playerBarStartPadding)
             )
         }
     }
@@ -621,8 +637,8 @@ fun GameContent(
                 horizontalArrangement = Arrangement.Start,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                val buttonWidth = 52.dp
-                val spacerWidth = 6.dp
+                val buttonWidth = 44.dp
+                val spacerWidth = 2.dp
 
                 // Button 1: Go to start (hidden when exploring)
                 Box(modifier = Modifier.width(buttonWidth)) {
@@ -675,15 +691,26 @@ fun GameContent(
                         Text("Back to game", fontSize = 18.sp)
                     }
                 } else {
-                    // Flip board button - same size as nav buttons but bigger icon
+                    // Arrow mode toggle button - smaller with different background
+                    Button(
+                        onClick = { viewModel.cycleArrowMode() },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF404040)
+                        ),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        Text(text = "↗", fontSize = 18.sp)
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                    // Flip board button - smaller with different background
                     Button(
                         onClick = { viewModel.flipBoard() },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.surface
+                            containerColor = Color(0xFF404040)
                         ),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                     ) {
-                        Text(text = "↻", fontSize = 26.sp)
+                        Text(text = "↻", fontSize = 18.sp)
                     }
                 }
             }
@@ -897,9 +924,9 @@ fun ControlButton(
             disabledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.4f),
             disabledContentColor = Color.Gray
         ),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
     ) {
-        Text(text = text, fontSize = 18.sp)
+        Text(text = text, fontSize = 16.sp)
     }
 }
 
@@ -916,7 +943,8 @@ fun PlayerBar(
     clockTime: String?,
     isToMove: Boolean,
     gameResult: String? = null,
-    showRedBorder: Boolean = false
+    showRedBorder: Boolean = false,
+    modifier: Modifier = Modifier
 ) {
     val backgroundColor = if (isWhite) Color.White else Color.Black
     val textColor = if (isWhite) Color.Black else Color.White
@@ -931,7 +959,7 @@ fun PlayerBar(
     }
 
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .background(backgroundColor)
             .then(
@@ -1003,13 +1031,14 @@ fun CombinedPlayerBar(
     whiteResult: String?,
     blackResult: String?,
     isWhiteTurn: Boolean = true,
-    showRedBorder: Boolean = false
+    showRedBorder: Boolean = false,
+    modifier: Modifier = Modifier
 ) {
     val showWhiteBorder = showRedBorder && isWhiteTurn
     val showBlackBorder = showRedBorder && !isWhiteTurn
 
     Row(
-        modifier = Modifier.fillMaxWidth()
+        modifier = modifier.fillMaxWidth()
     ) {
         // Left half: White player (white background)
         Row(
@@ -1213,7 +1242,7 @@ private fun StockfishAnalyseCard(uiState: GameUiState) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     val scoreText = if (currentScore.isMate) {
-                        if (currentScore.mateIn > 0) "M${currentScore.mateIn}" else "-M${kotlin.math.abs(currentScore.mateIn)}"
+                        if (currentScore.mateIn > 0) "+M${currentScore.mateIn}" else "-M${kotlin.math.abs(currentScore.mateIn)}"
                     } else {
                         if (currentScore.score >= 0) "+%.2f".format(currentScore.score) else "%.2f".format(currentScore.score)
                     }
@@ -1228,7 +1257,8 @@ private fun StockfishAnalyseCard(uiState: GameUiState) {
                         text = "Score: $scoreText",
                         color = scoreColor,
                         fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.widthIn(min = 120.dp)
                     )
                 }
 
@@ -1303,5 +1333,95 @@ private fun formatNps(nps: Long): String {
         nps >= 1_000_000 -> "%.1fM nps".format(nps / 1_000_000.0)
         nps >= 1_000 -> "%.1fK nps".format(nps / 1_000.0)
         else -> "$nps nps"
+    }
+}
+
+/**
+ * Column of AI service logos displayed to the left of the chess board.
+ * Only shows logos for services that have API keys configured.
+ * Clicking a logo triggers AI analysis for the current position.
+ */
+@Composable
+fun AiLogosColumn(
+    aiSettings: AiSettings,
+    onAiSelected: (AiService) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    // Only show services with configured API keys, or all if showing all logos
+    val servicesToShow = if (aiSettings.hasAnyApiKey()) {
+        aiSettings.getConfiguredServices()
+    } else {
+        // Show all with placeholder appearance when no keys configured
+        AiService.entries.toList()
+    }
+
+    Column(
+        modifier = modifier
+            .padding(end = 4.dp)
+            .fillMaxHeight(),
+        verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Display logos from top to bottom: ChatGPT, Claude, Gemini, Grok, DeepSeek
+        servicesToShow.forEach { service ->
+            val hasApiKey = aiSettings.getApiKey(service).isNotBlank()
+            AiServiceLogo(
+                service = service,
+                hasApiKey = hasApiKey,
+                onClick = { onAiSelected(service) }
+            )
+        }
+    }
+}
+
+/**
+ * Individual AI service logo with click handler.
+ */
+@Composable
+private fun AiServiceLogo(
+    service: AiService,
+    hasApiKey: Boolean,
+    onClick: () -> Unit
+) {
+    val logoSize = 28.dp
+    val alpha = if (hasApiKey) 1f else 0.4f
+
+    // Use colored circles as placeholders - replace with actual logos when available
+    val backgroundColor = when (service) {
+        AiService.CHATGPT -> Color(0xFF10A37F)  // OpenAI green
+        AiService.CLAUDE -> Color(0xFFD97757)   // Anthropic orange/coral
+        AiService.GEMINI -> Color(0xFF4285F4)   // Google blue
+        AiService.GROK -> Color(0xFF000000)     // X/Twitter black
+        AiService.DEEPSEEK -> Color(0xFF0066FF) // DeepSeek blue
+    }
+
+    val textColor = when (service) {
+        AiService.GROK -> Color.White
+        else -> Color.White
+    }
+
+    // First letter of service name as placeholder
+    val letter = when (service) {
+        AiService.CHATGPT -> "G"
+        AiService.CLAUDE -> "C"
+        AiService.GEMINI -> "G"
+        AiService.GROK -> "X"
+        AiService.DEEPSEEK -> "D"
+    }
+
+    Box(
+        modifier = Modifier
+            .size(logoSize)
+            .clip(CircleShape)
+            .background(backgroundColor.copy(alpha = alpha))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = letter,
+            color = textColor.copy(alpha = alpha),
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold
+        )
     }
 }

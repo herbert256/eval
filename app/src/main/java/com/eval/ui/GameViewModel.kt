@@ -6,6 +6,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.eval.chess.ChessBoard
 import com.eval.chess.PgnParser
+import com.eval.data.AiAnalysisRepository
+import com.eval.data.AiAnalysisResponse
+import com.eval.data.AiService
 import com.eval.data.ChessRepository
 import com.eval.data.ChessServer
 import com.eval.data.LichessGame
@@ -286,12 +289,31 @@ data class GameUiState(
     val showAnalysedGamesSelection: Boolean = false,
     val analysedGamesList: List<AnalysedGame> = emptyList(),
     // Retrieve screen navigation
-    val showRetrieveScreen: Boolean = false
+    val showRetrieveScreen: Boolean = false,
+    // AI Analysis settings and state
+    val aiSettings: AiSettings = AiSettings(),
+    val showAiAnalysisDialog: Boolean = false,
+    val aiAnalysisResult: AiAnalysisResponse? = null,
+    val aiAnalysisLoading: Boolean = false,
+    val aiAnalysisServiceName: String = "",
+    // ChatGPT model selection
+    val availableChatGptModels: List<String> = emptyList(),
+    val isLoadingChatGptModels: Boolean = false,
+    // Gemini model selection
+    val availableGeminiModels: List<String> = emptyList(),
+    val isLoadingGeminiModels: Boolean = false,
+    // Grok model selection
+    val availableGrokModels: List<String> = emptyList(),
+    val isLoadingGrokModels: Boolean = false,
+    // DeepSeek model selection
+    val availableDeepSeekModels: List<String> = emptyList(),
+    val isLoadingDeepSeekModels: Boolean = false
 )
 
 class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = ChessRepository()
     private val stockfish = StockfishEngine(application)
+    private val aiAnalysisRepository = AiAnalysisRepository()
     private val prefs = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val gson = Gson()
 
@@ -418,6 +440,24 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         private const val KEY_MANUAL_VIS_PGN = "manual_vis_pgn"
         // First run tracking - stores the app version code when user first made a choice
         private const val KEY_FIRST_GAME_RETRIEVED_VERSION = "first_game_retrieved_version"
+        // AI Analysis settings
+        private const val KEY_AI_SHOW_LOGOS = "ai_show_logos"
+        private const val KEY_AI_CHATGPT_API_KEY = "ai_chatgpt_api_key"
+        private const val KEY_AI_CHATGPT_MODEL = "ai_chatgpt_model"
+        private const val KEY_AI_CLAUDE_API_KEY = "ai_claude_api_key"
+        private const val KEY_AI_CLAUDE_MODEL = "ai_claude_model"
+        private const val KEY_AI_GEMINI_API_KEY = "ai_gemini_api_key"
+        private const val KEY_AI_GEMINI_MODEL = "ai_gemini_model"
+        private const val KEY_AI_GROK_API_KEY = "ai_grok_api_key"
+        private const val KEY_AI_GROK_MODEL = "ai_grok_model"
+        private const val KEY_AI_DEEPSEEK_API_KEY = "ai_deepseek_api_key"
+        private const val KEY_AI_DEEPSEEK_MODEL = "ai_deepseek_model"
+        // AI prompts
+        private const val KEY_AI_CHATGPT_PROMPT = "ai_chatgpt_prompt"
+        private const val KEY_AI_CLAUDE_PROMPT = "ai_claude_prompt"
+        private const val KEY_AI_GEMINI_PROMPT = "ai_gemini_prompt"
+        private const val KEY_AI_GROK_PROMPT = "ai_grok_prompt"
+        private const val KEY_AI_DEEPSEEK_PROMPT = "ai_deepseek_prompt"
     }
 
     private fun loadStockfishSettings(): StockfishSettings {
@@ -609,6 +649,48 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         // Just update the UI state
     }
 
+    private fun loadAiSettings(): AiSettings {
+        return AiSettings(
+            showAiLogos = prefs.getBoolean(KEY_AI_SHOW_LOGOS, true),
+            chatGptApiKey = prefs.getString(KEY_AI_CHATGPT_API_KEY, "") ?: "",
+            chatGptModel = prefs.getString(KEY_AI_CHATGPT_MODEL, "gpt-4o-mini") ?: "gpt-4o-mini",
+            chatGptPrompt = prefs.getString(KEY_AI_CHATGPT_PROMPT, DEFAULT_AI_PROMPT) ?: DEFAULT_AI_PROMPT,
+            claudeApiKey = prefs.getString(KEY_AI_CLAUDE_API_KEY, "") ?: "",
+            claudeModel = prefs.getString(KEY_AI_CLAUDE_MODEL, "claude-sonnet-4-20250514") ?: "claude-sonnet-4-20250514",
+            claudePrompt = prefs.getString(KEY_AI_CLAUDE_PROMPT, DEFAULT_AI_PROMPT) ?: DEFAULT_AI_PROMPT,
+            geminiApiKey = prefs.getString(KEY_AI_GEMINI_API_KEY, "") ?: "",
+            geminiModel = prefs.getString(KEY_AI_GEMINI_MODEL, "gemini-2.0-flash") ?: "gemini-2.0-flash",
+            geminiPrompt = prefs.getString(KEY_AI_GEMINI_PROMPT, DEFAULT_AI_PROMPT) ?: DEFAULT_AI_PROMPT,
+            grokApiKey = prefs.getString(KEY_AI_GROK_API_KEY, "") ?: "",
+            grokModel = prefs.getString(KEY_AI_GROK_MODEL, "grok-3-mini") ?: "grok-3-mini",
+            grokPrompt = prefs.getString(KEY_AI_GROK_PROMPT, DEFAULT_AI_PROMPT) ?: DEFAULT_AI_PROMPT,
+            deepSeekApiKey = prefs.getString(KEY_AI_DEEPSEEK_API_KEY, "") ?: "",
+            deepSeekModel = prefs.getString(KEY_AI_DEEPSEEK_MODEL, "deepseek-chat") ?: "deepseek-chat",
+            deepSeekPrompt = prefs.getString(KEY_AI_DEEPSEEK_PROMPT, DEFAULT_AI_PROMPT) ?: DEFAULT_AI_PROMPT
+        )
+    }
+
+    private fun saveAiSettings(settings: AiSettings) {
+        prefs.edit()
+            .putBoolean(KEY_AI_SHOW_LOGOS, settings.showAiLogos)
+            .putString(KEY_AI_CHATGPT_API_KEY, settings.chatGptApiKey)
+            .putString(KEY_AI_CHATGPT_MODEL, settings.chatGptModel)
+            .putString(KEY_AI_CHATGPT_PROMPT, settings.chatGptPrompt)
+            .putString(KEY_AI_CLAUDE_API_KEY, settings.claudeApiKey)
+            .putString(KEY_AI_CLAUDE_MODEL, settings.claudeModel)
+            .putString(KEY_AI_CLAUDE_PROMPT, settings.claudePrompt)
+            .putString(KEY_AI_GEMINI_API_KEY, settings.geminiApiKey)
+            .putString(KEY_AI_GEMINI_MODEL, settings.geminiModel)
+            .putString(KEY_AI_GEMINI_PROMPT, settings.geminiPrompt)
+            .putString(KEY_AI_GROK_API_KEY, settings.grokApiKey)
+            .putString(KEY_AI_GROK_MODEL, settings.grokModel)
+            .putString(KEY_AI_GROK_PROMPT, settings.grokPrompt)
+            .putString(KEY_AI_DEEPSEEK_API_KEY, settings.deepSeekApiKey)
+            .putString(KEY_AI_DEEPSEEK_MODEL, settings.deepSeekModel)
+            .putString(KEY_AI_DEEPSEEK_PROMPT, settings.deepSeekPrompt)
+            .apply()
+    }
+
     /**
      * Save the current analysed game to SharedPreferences as JSON.
      * Called when entering Manual stage.
@@ -774,6 +856,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val graphSettings = loadGraphSettings()
             val interfaceVisibility = loadInterfaceVisibilitySettings()
             val generalSettings = loadGeneralSettings()
+            val aiSettings = loadAiSettings()
             val lichessMaxGames = prefs.getInt(KEY_LICHESS_MAX_GAMES, 10)
             val chessComMaxGames = prefs.getInt(KEY_CHESSCOM_MAX_GAMES, 10)
             val hasActive = savedActiveServer != null && savedActivePlayer != null
@@ -788,6 +871,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 graphSettings = graphSettings,
                 interfaceVisibility = interfaceVisibility,
                 generalSettings = generalSettings,
+                aiSettings = aiSettings,
                 lichessMaxGames = lichessMaxGames,
                 chessComMaxGames = chessComMaxGames,
                 hasActive = hasActive,
@@ -872,6 +956,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val graphSettings = loadGraphSettings()
         val interfaceVisibility = loadInterfaceVisibilitySettings()
         val generalSettings = loadGeneralSettings()
+        val aiSettings = loadAiSettings()
         val lichessMaxGames = prefs.getInt(KEY_LICHESS_MAX_GAMES, 10)
         val chessComMaxGames = prefs.getInt(KEY_CHESSCOM_MAX_GAMES, 10)
         val hasActive = savedActiveServer != null && savedActivePlayer != null
@@ -881,6 +966,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             graphSettings = graphSettings,
             interfaceVisibility = interfaceVisibility,
             generalSettings = generalSettings,
+            aiSettings = aiSettings,
             lichessMaxGames = lichessMaxGames,
             chessComMaxGames = chessComMaxGames,
             hasActive = hasActive
@@ -1442,6 +1528,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (activePlayerName.isNotEmpty() && activeServer != null) {
             storeActive(activePlayerName, activeServer)
         }
+
+        // Save as current game
+        saveCurrentAnalysedGame(analysedGame)
 
         // Validate ActivePlayer at start of Manual stage (loaded from analysed game)
         if (!checkActivePlayer(AnalysisStage.MANUAL)) {
@@ -2138,6 +2227,141 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(
             generalSettings = settings
         )
+    }
+
+    fun updateAiSettings(settings: AiSettings) {
+        saveAiSettings(settings)
+        _uiState.value = _uiState.value.copy(
+            aiSettings = settings
+        )
+    }
+
+    /**
+     * Request AI analysis for the current position using the specified AI service.
+     */
+    fun requestAiAnalysis(service: AiService) {
+        val apiKey = _uiState.value.aiSettings.getApiKey(service)
+        if (apiKey.isBlank()) {
+            _uiState.value = _uiState.value.copy(
+                showAiAnalysisDialog = true,
+                aiAnalysisLoading = false,
+                aiAnalysisServiceName = service.displayName,
+                aiAnalysisResult = AiAnalysisResponse(
+                    service = service,
+                    analysis = null,
+                    error = "API key not configured for ${service.displayName}. Please configure it in Settings > AI Analysis."
+                )
+            )
+            return
+        }
+
+        val fen = _uiState.value.currentBoard.getFen()
+
+        _uiState.value = _uiState.value.copy(
+            showAiAnalysisDialog = true,
+            aiAnalysisLoading = true,
+            aiAnalysisServiceName = service.displayName,
+            aiAnalysisResult = null
+        )
+
+        viewModelScope.launch {
+            val aiSettings = _uiState.value.aiSettings
+            val prompt = when (service) {
+                AiService.CHATGPT -> aiSettings.chatGptPrompt
+                AiService.CLAUDE -> aiSettings.claudePrompt
+                AiService.GEMINI -> aiSettings.geminiPrompt
+                AiService.GROK -> aiSettings.grokPrompt
+                AiService.DEEPSEEK -> aiSettings.deepSeekPrompt
+            }
+            val result = aiAnalysisRepository.analyzePosition(
+                service = service,
+                fen = fen,
+                apiKey = apiKey,
+                prompt = prompt,
+                chatGptModel = aiSettings.chatGptModel,
+                claudeModel = aiSettings.claudeModel,
+                geminiModel = aiSettings.geminiModel,
+                grokModel = aiSettings.grokModel,
+                deepSeekModel = aiSettings.deepSeekModel
+            )
+            _uiState.value = _uiState.value.copy(
+                aiAnalysisLoading = false,
+                aiAnalysisResult = result
+            )
+        }
+    }
+
+    /**
+     * Dismiss the AI analysis dialog.
+     */
+    fun dismissAiAnalysisDialog() {
+        _uiState.value = _uiState.value.copy(
+            showAiAnalysisDialog = false,
+            aiAnalysisResult = null,
+            aiAnalysisLoading = false
+        )
+    }
+
+    /**
+     * Fetch available Gemini models using the provided API key.
+     */
+    fun fetchChatGptModels(apiKey: String) {
+        if (apiKey.isBlank()) return
+
+        _uiState.value = _uiState.value.copy(isLoadingChatGptModels = true)
+
+        viewModelScope.launch {
+            val models = aiAnalysisRepository.fetchChatGptModels(apiKey)
+            _uiState.value = _uiState.value.copy(
+                availableChatGptModels = models,
+                isLoadingChatGptModels = false
+            )
+        }
+    }
+
+    fun fetchGeminiModels(apiKey: String) {
+        if (apiKey.isBlank()) return
+
+        _uiState.value = _uiState.value.copy(isLoadingGeminiModels = true)
+
+        viewModelScope.launch {
+            val models = aiAnalysisRepository.fetchGeminiModels(apiKey)
+            _uiState.value = _uiState.value.copy(
+                availableGeminiModels = models,
+                isLoadingGeminiModels = false
+            )
+        }
+    }
+
+    /**
+     * Fetch available Grok models using the provided API key.
+     */
+    fun fetchGrokModels(apiKey: String) {
+        if (apiKey.isBlank()) return
+
+        _uiState.value = _uiState.value.copy(isLoadingGrokModels = true)
+
+        viewModelScope.launch {
+            val models = aiAnalysisRepository.fetchGrokModels(apiKey)
+            _uiState.value = _uiState.value.copy(
+                availableGrokModels = models,
+                isLoadingGrokModels = false
+            )
+        }
+    }
+
+    fun fetchDeepSeekModels(apiKey: String) {
+        if (apiKey.isBlank()) return
+
+        _uiState.value = _uiState.value.copy(isLoadingDeepSeekModels = true)
+
+        viewModelScope.launch {
+            val models = aiAnalysisRepository.fetchDeepSeekModels(apiKey)
+            _uiState.value = _uiState.value.copy(
+                availableDeepSeekModels = models,
+                isLoadingDeepSeekModels = false
+            )
+        }
     }
 
     /**

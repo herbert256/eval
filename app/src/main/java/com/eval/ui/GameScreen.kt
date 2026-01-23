@@ -24,6 +24,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
+import com.eval.data.AiAnalysisResponse
+import dev.jeziellago.compose.markdowntext.MarkdownText
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -138,12 +140,26 @@ fun GameScreen(
             graphSettings = uiState.graphSettings,
             interfaceVisibility = uiState.interfaceVisibility,
             generalSettings = uiState.generalSettings,
+            aiSettings = uiState.aiSettings,
+            availableChatGptModels = uiState.availableChatGptModels,
+            isLoadingChatGptModels = uiState.isLoadingChatGptModels,
+            availableGeminiModels = uiState.availableGeminiModels,
+            isLoadingGeminiModels = uiState.isLoadingGeminiModels,
+            availableGrokModels = uiState.availableGrokModels,
+            isLoadingGrokModels = uiState.isLoadingGrokModels,
+            availableDeepSeekModels = uiState.availableDeepSeekModels,
+            isLoadingDeepSeekModels = uiState.isLoadingDeepSeekModels,
             onBack = { viewModel.hideSettingsDialog() },
             onSaveStockfish = { viewModel.updateStockfishSettings(it) },
             onSaveBoardLayout = { viewModel.updateBoardLayoutSettings(it) },
             onSaveGraph = { viewModel.updateGraphSettings(it) },
             onSaveInterfaceVisibility = { viewModel.updateInterfaceVisibilitySettings(it) },
-            onSaveGeneral = { viewModel.updateGeneralSettings(it) }
+            onSaveGeneral = { viewModel.updateGeneralSettings(it) },
+            onSaveAi = { viewModel.updateAiSettings(it) },
+            onFetchChatGptModels = { viewModel.fetchChatGptModels(it) },
+            onFetchGeminiModels = { viewModel.fetchGeminiModels(it) },
+            onFetchGrokModels = { viewModel.fetchGrokModels(it) },
+            onFetchDeepSeekModels = { viewModel.fetchDeepSeekModels(it) }
         )
         return
     }
@@ -198,6 +214,16 @@ fun GameScreen(
                     Text("OK")
                 }
             }
+        )
+    }
+
+    // Show AI analysis dialog
+    if (uiState.showAiAnalysisDialog) {
+        AiAnalysisDialog(
+            serviceName = uiState.aiAnalysisServiceName,
+            result = uiState.aiAnalysisResult,
+            isLoading = uiState.aiAnalysisLoading,
+            onDismiss = { viewModel.dismissAiAnalysisDialog() }
         )
     }
 
@@ -296,17 +322,6 @@ fun GameScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text("↻", fontSize = 44.sp, color = Color.White, modifier = Modifier.offset(y = (-12).dp))
-                        }
-                    }
-                    // Arrow mode toggle - only show in Manual stage when game loaded
-                    if (uiState.game != null && uiState.currentStage == AnalysisStage.MANUAL) {
-                        Box(
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clickable { viewModel.cycleArrowMode() },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("↗", fontSize = 40.sp, color = Color.White, modifier = Modifier.offset(y = (-11).dp))
                         }
                     }
                     // Settings and help icons
@@ -616,4 +631,239 @@ fun EvalLogo() {
             letterSpacing = 8.sp
         )
     }
+}
+
+/**
+ * Dialog displaying AI analysis results for the current chess position.
+ */
+@Composable
+fun AiAnalysisDialog(
+    serviceName: String,
+    result: AiAnalysisResponse?,
+    isLoading: Boolean,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "$serviceName Analysis",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        text = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 150.dp, max = 400.dp)
+            ) {
+                when {
+                    isLoading -> {
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            CircularProgressIndicator(
+                                color = Color(0xFF6B9BFF)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "Analyzing position...",
+                                color = Color(0xFFAAAAAA)
+                            )
+                        }
+                    }
+                    result?.error != null -> {
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = "Error",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = result.error,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    result?.analysis != null -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                        ) {
+                            MarkdownText(
+                                markdown = result.analysis,
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            )
+                        }
+                    }
+                    else -> {
+                        Text(
+                            text = "No analysis available",
+                            color = Color(0xFFAAAAAA)
+                        )
+                    }
+                }
+            }
+        },
+        dismissButton = {
+            if (result?.analysis != null) {
+                TextButton(onClick = {
+                    openAnalysisInChrome(context, serviceName, result.analysis)
+                }) {
+                    Text("View in Chrome")
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
+}
+
+/**
+ * Converts markdown to HTML and opens it in Chrome.
+ */
+private fun openAnalysisInChrome(context: android.content.Context, serviceName: String, markdown: String) {
+    try {
+        // Convert markdown to HTML
+        val html = convertMarkdownToHtml(serviceName, markdown)
+
+        // Create cache directory for AI analysis files
+        val cacheDir = java.io.File(context.cacheDir, "ai_analysis")
+        if (!cacheDir.exists()) {
+            cacheDir.mkdirs()
+        }
+
+        // Write HTML to file
+        val htmlFile = java.io.File(cacheDir, "analysis.html")
+        htmlFile.writeText(html)
+
+        // Get content URI using FileProvider
+        val contentUri = androidx.core.content.FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            htmlFile
+        )
+
+        // Create intent to open in Chrome
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(contentUri, "text/html")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            // Try to open specifically in Chrome
+            setPackage("com.android.chrome")
+        }
+
+        try {
+            context.startActivity(intent)
+        } catch (e: android.content.ActivityNotFoundException) {
+            // Chrome not installed, try any browser
+            intent.setPackage(null)
+            context.startActivity(intent)
+        }
+    } catch (e: Exception) {
+        android.widget.Toast.makeText(
+            context,
+            "Failed to open in browser: ${e.message}",
+            android.widget.Toast.LENGTH_SHORT
+        ).show()
+    }
+}
+
+/**
+ * Converts markdown text to a styled HTML document.
+ */
+private fun convertMarkdownToHtml(serviceName: String, markdown: String): String {
+    // Basic markdown to HTML conversion
+    var html = markdown
+        // Escape HTML entities first
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        // Headers
+        .replace(Regex("^### (.+)$", RegexOption.MULTILINE), "<h3>$1</h3>")
+        .replace(Regex("^## (.+)$", RegexOption.MULTILINE), "<h2>$1</h2>")
+        .replace(Regex("^# (.+)$", RegexOption.MULTILINE), "<h1>$1</h1>")
+        // Bold
+        .replace(Regex("\\*\\*(.+?)\\*\\*"), "<strong>$1</strong>")
+        // Italic
+        .replace(Regex("\\*(.+?)\\*"), "<em>$1</em>")
+        // Bullet points
+        .replace(Regex("^- (.+)$", RegexOption.MULTILINE), "<li>$1</li>")
+        .replace(Regex("^\\* (.+)$", RegexOption.MULTILINE), "<li>$1</li>")
+        // Numbered lists
+        .replace(Regex("^\\d+\\. (.+)$", RegexOption.MULTILINE), "<li>$1</li>")
+        // Line breaks
+        .replace("\n\n", "</p><p>")
+        .replace("\n", "<br>")
+
+    // Wrap consecutive <li> items in <ul>
+    html = html.replace(Regex("(<li>.*?</li>)+")) { match ->
+        "<ul>${match.value}</ul>"
+    }
+
+    return """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>$serviceName Analysis</title>
+            <style>
+                body {
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                    line-height: 1.6;
+                    padding: 16px;
+                    max-width: 800px;
+                    margin: 0 auto;
+                    background-color: #1a1a1a;
+                    color: #e0e0e0;
+                }
+                h1, h2, h3 {
+                    color: #ffffff;
+                    margin-top: 1.5em;
+                    margin-bottom: 0.5em;
+                }
+                h1 { font-size: 1.8em; border-bottom: 2px solid #6B9BFF; padding-bottom: 8px; }
+                h2 { font-size: 1.4em; color: #6B9BFF; }
+                h3 { font-size: 1.2em; color: #8BB8FF; }
+                p { margin: 1em 0; }
+                ul { padding-left: 20px; }
+                li { margin: 0.5em 0; }
+                strong { color: #ffffff; }
+                em { color: #b0b0b0; }
+                code {
+                    background-color: #2d2d2d;
+                    padding: 2px 6px;
+                    border-radius: 4px;
+                    font-family: monospace;
+                }
+            </style>
+        </head>
+        <body>
+            <h1>$serviceName Analysis</h1>
+            <p>$html</p>
+        </body>
+        </html>
+    """.trimIndent()
 }

@@ -24,7 +24,13 @@ enum class SettingsSubScreen {
     STOCKFISH,
     BOARD_LAYOUT,
     GRAPH_SETTINGS,
-    INTERFACE_VISIBILITY
+    INTERFACE_VISIBILITY,
+    AI_SETTINGS,
+    AI_CHATGPT,
+    AI_CLAUDE,
+    AI_GEMINI,
+    AI_GROK,
+    AI_DEEPSEEK
 }
 
 /**
@@ -38,21 +44,39 @@ fun SettingsScreen(
     graphSettings: GraphSettings,
     interfaceVisibility: InterfaceVisibilitySettings,
     generalSettings: GeneralSettings,
+    aiSettings: AiSettings,
+    availableChatGptModels: List<String>,
+    isLoadingChatGptModels: Boolean,
+    availableGeminiModels: List<String>,
+    isLoadingGeminiModels: Boolean,
+    availableGrokModels: List<String>,
+    isLoadingGrokModels: Boolean,
+    availableDeepSeekModels: List<String>,
+    isLoadingDeepSeekModels: Boolean,
     onBack: () -> Unit,
     onSaveStockfish: (StockfishSettings) -> Unit,
     onSaveBoardLayout: (BoardLayoutSettings) -> Unit,
     onSaveGraph: (GraphSettings) -> Unit,
     onSaveInterfaceVisibility: (InterfaceVisibilitySettings) -> Unit,
-    onSaveGeneral: (GeneralSettings) -> Unit
+    onSaveGeneral: (GeneralSettings) -> Unit,
+    onSaveAi: (AiSettings) -> Unit,
+    onFetchChatGptModels: (String) -> Unit,
+    onFetchGeminiModels: (String) -> Unit,
+    onFetchGrokModels: (String) -> Unit,
+    onFetchDeepSeekModels: (String) -> Unit
 ) {
     var currentSubScreen by remember { mutableStateOf(SettingsSubScreen.MAIN) }
 
     // Handle Android back button
     BackHandler {
-        if (currentSubScreen == SettingsSubScreen.MAIN) {
-            onBack()
-        } else {
-            currentSubScreen = SettingsSubScreen.MAIN
+        when (currentSubScreen) {
+            SettingsSubScreen.MAIN -> onBack()
+            SettingsSubScreen.AI_CHATGPT,
+            SettingsSubScreen.AI_CLAUDE,
+            SettingsSubScreen.AI_GEMINI,
+            SettingsSubScreen.AI_GROK,
+            SettingsSubScreen.AI_DEEPSEEK -> currentSubScreen = SettingsSubScreen.AI_SETTINGS
+            else -> currentSubScreen = SettingsSubScreen.MAIN
         }
     }
 
@@ -96,6 +120,55 @@ fun SettingsScreen(
             onBackToSettings = { currentSubScreen = SettingsSubScreen.MAIN },
             onBackToGame = onBack,
             onSave = onSaveInterfaceVisibility
+        )
+        SettingsSubScreen.AI_SETTINGS -> AiSettingsScreen(
+            aiSettings = aiSettings,
+            onBackToSettings = { currentSubScreen = SettingsSubScreen.MAIN },
+            onBackToGame = onBack,
+            onNavigate = { currentSubScreen = it },
+            onSave = onSaveAi
+        )
+        SettingsSubScreen.AI_CHATGPT -> ChatGptSettingsScreen(
+            aiSettings = aiSettings,
+            availableModels = availableChatGptModels,
+            isLoadingModels = isLoadingChatGptModels,
+            onBackToAiSettings = { currentSubScreen = SettingsSubScreen.AI_SETTINGS },
+            onBackToGame = onBack,
+            onSave = onSaveAi,
+            onFetchModels = onFetchChatGptModels
+        )
+        SettingsSubScreen.AI_CLAUDE -> ClaudeSettingsScreen(
+            aiSettings = aiSettings,
+            onBackToAiSettings = { currentSubScreen = SettingsSubScreen.AI_SETTINGS },
+            onBackToGame = onBack,
+            onSave = onSaveAi
+        )
+        SettingsSubScreen.AI_GEMINI -> GeminiSettingsScreen(
+            aiSettings = aiSettings,
+            availableModels = availableGeminiModels,
+            isLoadingModels = isLoadingGeminiModels,
+            onBackToAiSettings = { currentSubScreen = SettingsSubScreen.AI_SETTINGS },
+            onBackToGame = onBack,
+            onSave = onSaveAi,
+            onFetchModels = onFetchGeminiModels
+        )
+        SettingsSubScreen.AI_GROK -> GrokSettingsScreen(
+            aiSettings = aiSettings,
+            availableModels = availableGrokModels,
+            isLoadingModels = isLoadingGrokModels,
+            onBackToAiSettings = { currentSubScreen = SettingsSubScreen.AI_SETTINGS },
+            onBackToGame = onBack,
+            onSave = onSaveAi,
+            onFetchModels = onFetchGrokModels
+        )
+        SettingsSubScreen.AI_DEEPSEEK -> DeepSeekSettingsScreen(
+            aiSettings = aiSettings,
+            availableModels = availableDeepSeekModels,
+            isLoadingModels = isLoadingDeepSeekModels,
+            onBackToAiSettings = { currentSubScreen = SettingsSubScreen.AI_SETTINGS },
+            onBackToGame = onBack,
+            onSave = onSaveAi,
+            onFetchModels = onFetchDeepSeekModels
         )
     }
 }
@@ -175,6 +248,13 @@ private fun SettingsMainScreen(
             title = "Show interface elements",
             description = "Configure visible UI elements per stage",
             onClick = { onNavigate(SettingsSubScreen.INTERFACE_VISIBILITY) }
+        )
+
+        // AI Analysis settings card
+        SettingsNavigationCard(
+            title = "AI analysis",
+            description = "Configure AI service API keys",
+            onClick = { onNavigate(SettingsSubScreen.AI_SETTINGS) }
         )
 
         Spacer(modifier = Modifier.height(8.dp))

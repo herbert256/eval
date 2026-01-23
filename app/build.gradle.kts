@@ -101,5 +101,8 @@ dependencies {
     implementation(libs.coroutines.core)
     implementation(libs.coroutines.android)
 
+    // Markdown rendering
+    implementation(libs.compose.markdown)
+
     debugImplementation(libs.androidx.ui.tooling)
 }
