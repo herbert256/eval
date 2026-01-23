@@ -1507,7 +1507,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 AiService.GROK -> aiSettings.grokPrompt
                 AiService.DEEPSEEK -> aiSettings.deepSeekPrompt
                 AiService.MISTRAL -> aiSettings.mistralPrompt
-                AiService.COHERE -> aiSettings.coherePrompt
                 AiService.DUMMY -> ""  // Dummy doesn't use prompt
             }
             val result = aiAnalysisRepository.analyzePosition(
@@ -1520,8 +1519,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 geminiModel = aiSettings.geminiModel,
                 grokModel = aiSettings.grokModel,
                 deepSeekModel = aiSettings.deepSeekModel,
-                mistralModel = aiSettings.mistralModel,
-                cohereModel = aiSettings.cohereModel
+                mistralModel = aiSettings.mistralModel
             )
             _uiState.value = _uiState.value.copy(
                 aiAnalysisLoading = false,
@@ -1538,6 +1536,168 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             showAiAnalysisDialog = false,
             aiAnalysisResult = null,
             aiAnalysisLoading = false
+        )
+    }
+
+    /**
+     * Show player info for the specified username.
+     * Determines the server from the current game context.
+     */
+    fun showPlayerInfo(username: String) {
+        val server = _uiState.value.activeServer ?: ChessServer.LICHESS
+
+        _uiState.value = _uiState.value.copy(
+            showPlayerInfoScreen = true,
+            playerInfoLoading = true,
+            playerInfo = null,
+            playerInfoError = null,
+            playerGames = emptyList(),
+            playerGamesLoading = true,
+            playerGamesPage = 0,
+            playerGamesHasMore = true
+        )
+
+        viewModelScope.launch {
+            // Fetch player info
+            val result = repository.getPlayerInfo(username, server)
+            when (result) {
+                is Result.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        playerInfoLoading = false,
+                        playerInfo = result.data,
+                        playerInfoError = null
+                    )
+                }
+                is Result.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        playerInfoLoading = false,
+                        playerInfo = null,
+                        playerInfoError = result.message
+                    )
+                }
+            }
+
+            // Fetch first batch of games (25)
+            fetchPlayerGames(username, server, 25)
+        }
+    }
+
+    /**
+     * Fetch games for the player info screen.
+     */
+    private suspend fun fetchPlayerGames(username: String, server: ChessServer, count: Int) {
+        val gamesResult = when (server) {
+            ChessServer.LICHESS -> repository.getLichessGames(username, count)
+            ChessServer.CHESS_COM -> repository.getChessComGames(username, count)
+        }
+        when (gamesResult) {
+            is Result.Success -> {
+                val fetchedGames = gamesResult.data
+                _uiState.value = _uiState.value.copy(
+                    playerGames = fetchedGames,
+                    playerGamesLoading = false,
+                    playerGamesHasMore = fetchedGames.size >= count
+                )
+            }
+            is Result.Error -> {
+                _uiState.value = _uiState.value.copy(
+                    playerGames = emptyList(),
+                    playerGamesLoading = false,
+                    playerGamesHasMore = false
+                )
+            }
+        }
+    }
+
+    /**
+     * Navigate to next page of player games.
+     * Fetches more games if needed.
+     */
+    fun nextPlayerGamesPage() {
+        val currentPage = _uiState.value.playerGamesPage
+        val pageSize = _uiState.value.playerGamesPageSize
+        val currentGames = _uiState.value.playerGames
+        val hasMore = _uiState.value.playerGamesHasMore
+        val playerInfo = _uiState.value.playerInfo ?: return
+
+        val nextPageStartIndex = (currentPage + 1) * pageSize
+
+        // Check if we need to fetch more games
+        if (nextPageStartIndex >= currentGames.size && hasMore) {
+            // Need to fetch more games
+            _uiState.value = _uiState.value.copy(playerGamesLoading = true)
+
+            viewModelScope.launch {
+                val newCount = currentGames.size + pageSize
+                val gamesResult = when (playerInfo.server) {
+                    ChessServer.LICHESS -> repository.getLichessGames(playerInfo.username, newCount)
+                    ChessServer.CHESS_COM -> repository.getChessComGames(playerInfo.username, newCount)
+                }
+                when (gamesResult) {
+                    is Result.Success -> {
+                        val fetchedGames = gamesResult.data
+                        val gotMoreGames = fetchedGames.size > currentGames.size
+                        _uiState.value = _uiState.value.copy(
+                            playerGames = fetchedGames,
+                            playerGamesLoading = false,
+                            playerGamesPage = if (gotMoreGames) currentPage + 1 else currentPage,
+                            playerGamesHasMore = fetchedGames.size >= newCount
+                        )
+                    }
+                    is Result.Error -> {
+                        _uiState.value = _uiState.value.copy(
+                            playerGamesLoading = false,
+                            playerGamesHasMore = false
+                        )
+                    }
+                }
+            }
+        } else if (nextPageStartIndex < currentGames.size) {
+            // We already have the games, just change page
+            _uiState.value = _uiState.value.copy(playerGamesPage = currentPage + 1)
+        }
+    }
+
+    /**
+     * Navigate to previous page of player games.
+     * No fetch needed since we keep the history.
+     */
+    fun previousPlayerGamesPage() {
+        val currentPage = _uiState.value.playerGamesPage
+        if (currentPage > 0) {
+            _uiState.value = _uiState.value.copy(playerGamesPage = currentPage - 1)
+        }
+    }
+
+    /**
+     * Select a game from the player info screen and start analysis.
+     */
+    fun selectGameFromPlayerInfo(game: LichessGame) {
+        val playerInfo = _uiState.value.playerInfo ?: return
+        val server = playerInfo.server
+
+        // Dismiss player info screen
+        _uiState.value = _uiState.value.copy(
+            showPlayerInfoScreen = false,
+            playerInfo = null,
+            playerGames = emptyList(),
+            playerGamesPage = 0,
+            playerGamesHasMore = true
+        )
+
+        // Load the game and start analysis
+        loadGame(game, server, playerInfo.username)
+    }
+
+    /**
+     * Dismiss the player info screen.
+     */
+    fun dismissPlayerInfo() {
+        _uiState.value = _uiState.value.copy(
+            showPlayerInfoScreen = false,
+            playerInfo = null,
+            playerInfoLoading = false,
+            playerInfoError = null
         )
     }
 
@@ -1613,20 +1773,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.value = _uiState.value.copy(
                 availableMistralModels = models,
                 isLoadingMistralModels = false
-            )
-        }
-    }
-
-    fun fetchCohereModels(apiKey: String) {
-        if (apiKey.isBlank()) return
-
-        _uiState.value = _uiState.value.copy(isLoadingCohereModels = true)
-
-        viewModelScope.launch {
-            val models = aiAnalysisRepository.fetchCohereModels(apiKey)
-            _uiState.value = _uiState.value.copy(
-                availableCohereModels = models,
-                isLoadingCohereModels = false
             )
         }
     }

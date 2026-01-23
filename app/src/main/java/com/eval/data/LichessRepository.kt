@@ -17,6 +17,39 @@ enum class ChessServer {
     CHESS_COM
 }
 
+/**
+ * Unified player info from either Lichess or Chess.com
+ */
+data class PlayerInfo(
+    val username: String,
+    val server: ChessServer,
+    val title: String?,
+    val name: String?,
+    val country: String?,
+    val location: String?,
+    val bio: String?,
+    val online: Boolean?,
+    val createdAt: Long?,
+    val lastOnline: Long?,
+    val profileUrl: String?,
+    // Ratings by time control
+    val bulletRating: Int?,
+    val blitzRating: Int?,
+    val rapidRating: Int?,
+    val classicalRating: Int?,
+    val dailyRating: Int?,
+    // Game counts
+    val totalGames: Int?,
+    val wins: Int?,
+    val losses: Int?,
+    val draws: Int?,
+    // Play time in seconds
+    val playTimeSeconds: Long?,
+    // Additional info
+    val followers: Int?,
+    val isStreamer: Boolean?
+)
+
 class ChessRepository(
     private val lichessApi: LichessApi = LichessApi.create(),
     private val chessComApi: ChessComApi = ChessComApi.create()
@@ -203,4 +236,130 @@ class ChessRepository(
         username: String,
         maxGames: Int
     ): Result<List<LichessGame>> = getLichessGames(username, maxGames)
+
+    /**
+     * Get player info from Lichess
+     */
+    suspend fun getLichessPlayerInfo(username: String): Result<PlayerInfo> = withContext(Dispatchers.IO) {
+        try {
+            val response = lichessApi.getUser(username)
+
+            if (!response.isSuccessful) {
+                return@withContext when (response.code()) {
+                    404 -> Result.Error("User not found on Lichess")
+                    else -> Result.Error("Failed to fetch user data from Lichess")
+                }
+            }
+
+            val user = response.body() ?: return@withContext Result.Error("No user data received")
+
+            val perfs = user.perfs ?: emptyMap()
+            val count = user.count
+
+            Result.Success(PlayerInfo(
+                username = user.username,
+                server = ChessServer.LICHESS,
+                title = user.title,
+                name = listOfNotNull(user.profile?.firstName, user.profile?.lastName)
+                    .takeIf { it.isNotEmpty() }?.joinToString(" "),
+                country = user.profile?.country,
+                location = user.profile?.location,
+                bio = user.profile?.bio,
+                online = user.online,
+                createdAt = user.createdAt,
+                lastOnline = user.seenAt,
+                profileUrl = user.url ?: "https://lichess.org/@/${user.username}",
+                bulletRating = perfs["bullet"]?.rating,
+                blitzRating = perfs["blitz"]?.rating,
+                rapidRating = perfs["rapid"]?.rating,
+                classicalRating = perfs["classical"]?.rating,
+                dailyRating = perfs["correspondence"]?.rating,
+                totalGames = count?.all,
+                wins = count?.win,
+                losses = count?.loss,
+                draws = count?.draw,
+                playTimeSeconds = user.playTime?.total,
+                followers = null,
+                isStreamer = user.streaming
+            ))
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Unknown error occurred")
+        }
+    }
+
+    /**
+     * Get player info from Chess.com
+     */
+    suspend fun getChessComPlayerInfo(username: String): Result<PlayerInfo> = withContext(Dispatchers.IO) {
+        try {
+            // Fetch both profile and stats
+            val profileResponse = chessComApi.getUser(username.lowercase())
+            val statsResponse = chessComApi.getUserStats(username.lowercase())
+
+            if (!profileResponse.isSuccessful) {
+                return@withContext when (profileResponse.code()) {
+                    404 -> Result.Error("User not found on Chess.com")
+                    else -> Result.Error("Failed to fetch user data from Chess.com")
+                }
+            }
+
+            val profile = profileResponse.body() ?: return@withContext Result.Error("No user data received")
+            val stats = statsResponse.body()
+
+            // Calculate totals from stats
+            var totalWins = 0
+            var totalLosses = 0
+            var totalDraws = 0
+
+            stats?.let { s ->
+                listOfNotNull(s.chess_daily, s.chess_rapid, s.chess_bullet, s.chess_blitz).forEach { cat ->
+                    cat.record?.let { rec ->
+                        totalWins += rec.win ?: 0
+                        totalLosses += rec.loss ?: 0
+                        totalDraws += rec.draw ?: 0
+                    }
+                }
+            }
+
+            val totalGames = totalWins + totalLosses + totalDraws
+
+            Result.Success(PlayerInfo(
+                username = profile.username ?: username,
+                server = ChessServer.CHESS_COM,
+                title = profile.title,
+                name = profile.name,
+                country = profile.country?.substringAfterLast("/"),
+                location = profile.location,
+                bio = null,
+                online = profile.status == "online",
+                createdAt = profile.joined?.times(1000),
+                lastOnline = profile.last_online?.times(1000),
+                profileUrl = profile.url ?: "https://www.chess.com/member/${profile.username}",
+                bulletRating = stats?.chess_bullet?.last?.rating,
+                blitzRating = stats?.chess_blitz?.last?.rating,
+                rapidRating = stats?.chess_rapid?.last?.rating,
+                classicalRating = null,
+                dailyRating = stats?.chess_daily?.last?.rating,
+                totalGames = if (totalGames > 0) totalGames else null,
+                wins = if (totalWins > 0) totalWins else null,
+                losses = if (totalLosses > 0) totalLosses else null,
+                draws = if (totalDraws > 0) totalDraws else null,
+                playTimeSeconds = null,
+                followers = profile.followers,
+                isStreamer = profile.is_streamer
+            ))
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Unknown error occurred")
+        }
+    }
+
+    /**
+     * Get player info from the appropriate server
+     */
+    suspend fun getPlayerInfo(username: String, server: ChessServer): Result<PlayerInfo> {
+        return when (server) {
+            ChessServer.LICHESS -> getLichessPlayerInfo(username)
+            ChessServer.CHESS_COM -> getChessComPlayerInfo(username)
+        }
+    }
 }

@@ -297,9 +297,6 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             mistralApiKey = prefs.getString(KEY_AI_MISTRAL_API_KEY, "") ?: "",
             mistralModel = prefs.getString(KEY_AI_MISTRAL_MODEL, "mistral-small-latest") ?: "mistral-small-latest",
             mistralPrompt = prefs.getString(KEY_AI_MISTRAL_PROMPT, DEFAULT_AI_PROMPT) ?: DEFAULT_AI_PROMPT,
-            cohereApiKey = prefs.getString(KEY_AI_COHERE_API_KEY, "") ?: "",
-            cohereModel = prefs.getString(KEY_AI_COHERE_MODEL, "command-r") ?: "command-r",
-            coherePrompt = prefs.getString(KEY_AI_COHERE_PROMPT, DEFAULT_AI_PROMPT) ?: DEFAULT_AI_PROMPT,
             dummyEnabled = prefs.getBoolean(KEY_AI_DUMMY_ENABLED, false)
         )
     }
@@ -325,9 +322,6 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             .putString(KEY_AI_MISTRAL_API_KEY, settings.mistralApiKey)
             .putString(KEY_AI_MISTRAL_MODEL, settings.mistralModel)
             .putString(KEY_AI_MISTRAL_PROMPT, settings.mistralPrompt)
-            .putString(KEY_AI_COHERE_API_KEY, settings.cohereApiKey)
-            .putString(KEY_AI_COHERE_MODEL, settings.cohereModel)
-            .putString(KEY_AI_COHERE_PROMPT, settings.coherePrompt)
             .putBoolean(KEY_AI_DUMMY_ENABLED, settings.dummyEnabled)
             .apply()
     }
@@ -486,9 +480,6 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         private const val KEY_AI_MISTRAL_API_KEY = "ai_mistral_api_key"
         private const val KEY_AI_MISTRAL_MODEL = "ai_mistral_model"
         private const val KEY_AI_MISTRAL_PROMPT = "ai_mistral_prompt"
-        private const val KEY_AI_COHERE_API_KEY = "ai_cohere_api_key"
-        private const val KEY_AI_COHERE_MODEL = "ai_cohere_model"
-        private const val KEY_AI_COHERE_PROMPT = "ai_cohere_prompt"
         private const val KEY_AI_DUMMY_ENABLED = "ai_dummy_enabled"
 
         // AI report email

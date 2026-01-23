@@ -4,6 +4,7 @@ import com.eval.chess.ChessBoard
 import com.eval.data.AiAnalysisResponse
 import com.eval.data.ChessServer
 import com.eval.data.LichessGame
+import com.eval.data.PlayerInfo
 import com.eval.stockfish.AnalysisResult
 
 // Analysis stage - the 3 sequential stages of game analysis
@@ -298,7 +299,14 @@ data class GameUiState(
     // Mistral model selection
     val availableMistralModels: List<String> = emptyList(),
     val isLoadingMistralModels: Boolean = false,
-    // Cohere model selection
-    val availableCohereModels: List<String> = emptyList(),
-    val isLoadingCohereModels: Boolean = false
+    // Player info screen
+    val showPlayerInfoScreen: Boolean = false,
+    val playerInfo: PlayerInfo? = null,
+    val playerInfoLoading: Boolean = false,
+    val playerInfoError: String? = null,
+    val playerGames: List<LichessGame> = emptyList(),
+    val playerGamesLoading: Boolean = false,
+    val playerGamesPage: Int = 0,
+    val playerGamesPageSize: Int = 25,
+    val playerGamesHasMore: Boolean = true,  // Whether there might be more games to fetch
 )

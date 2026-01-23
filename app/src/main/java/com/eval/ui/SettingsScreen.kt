@@ -32,7 +32,6 @@ enum class SettingsSubScreen {
     AI_GROK,
     AI_DEEPSEEK,
     AI_MISTRAL,
-    AI_COHERE,
     AI_DUMMY
 }
 
@@ -58,8 +57,6 @@ fun SettingsScreen(
     isLoadingDeepSeekModels: Boolean,
     availableMistralModels: List<String>,
     isLoadingMistralModels: Boolean,
-    availableCohereModels: List<String>,
-    isLoadingCohereModels: Boolean,
     onBack: () -> Unit,
     onSaveStockfish: (StockfishSettings) -> Unit,
     onSaveBoardLayout: (BoardLayoutSettings) -> Unit,
@@ -71,8 +68,7 @@ fun SettingsScreen(
     onFetchGeminiModels: (String) -> Unit,
     onFetchGrokModels: (String) -> Unit,
     onFetchDeepSeekModels: (String) -> Unit,
-    onFetchMistralModels: (String) -> Unit,
-    onFetchCohereModels: (String) -> Unit
+    onFetchMistralModels: (String) -> Unit
 ) {
     var currentSubScreen by remember { mutableStateOf(SettingsSubScreen.MAIN) }
 
@@ -86,7 +82,6 @@ fun SettingsScreen(
             SettingsSubScreen.AI_GROK,
             SettingsSubScreen.AI_DEEPSEEK,
             SettingsSubScreen.AI_MISTRAL,
-            SettingsSubScreen.AI_COHERE,
             SettingsSubScreen.AI_DUMMY -> currentSubScreen = SettingsSubScreen.AI_SETTINGS
             else -> currentSubScreen = SettingsSubScreen.MAIN
         }
@@ -190,15 +185,6 @@ fun SettingsScreen(
             onBackToGame = onBack,
             onSave = onSaveAi,
             onFetchModels = onFetchMistralModels
-        )
-        SettingsSubScreen.AI_COHERE -> CohereSettingsScreen(
-            aiSettings = aiSettings,
-            availableModels = availableCohereModels,
-            isLoadingModels = isLoadingCohereModels,
-            onBackToAiSettings = { currentSubScreen = SettingsSubScreen.AI_SETTINGS },
-            onBackToGame = onBack,
-            onSave = onSaveAi,
-            onFetchModels = onFetchCohereModels
         )
         SettingsSubScreen.AI_DUMMY -> DummySettingsScreen(
             aiSettings = aiSettings,

@@ -12,6 +12,69 @@ import java.util.concurrent.TimeUnit
 /**
  * Chess.com API response models
  */
+
+// User profile models
+data class ChessComUserProfile(
+    val player_id: Int?,
+    val url: String?,
+    val name: String?,
+    val username: String?,
+    val title: String?,
+    val followers: Int?,
+    val country: String?,
+    val location: String?,
+    val last_online: Long?,
+    val joined: Long?,
+    val status: String?,
+    val is_streamer: Boolean?,
+    val verified: Boolean?,
+    val league: String?,
+    val streaming_platforms: List<String>?
+)
+
+data class ChessComUserStats(
+    val chess_daily: ChessComStatCategory?,
+    val chess_rapid: ChessComStatCategory?,
+    val chess_bullet: ChessComStatCategory?,
+    val chess_blitz: ChessComStatCategory?,
+    val tactics: ChessComTactics?,
+    val puzzle_rush: ChessComPuzzleRush?
+)
+
+data class ChessComStatCategory(
+    val last: ChessComRating?,
+    val best: ChessComRating?,
+    val record: ChessComRecord?
+)
+
+data class ChessComRating(
+    val rating: Int?,
+    val date: Long?,
+    val rd: Int?
+)
+
+data class ChessComRecord(
+    val win: Int?,
+    val loss: Int?,
+    val draw: Int?,
+    val time_per_move: Int?,
+    val timeout_percent: Float?
+)
+
+data class ChessComTactics(
+    val highest: ChessComRating?,
+    val lowest: ChessComRating?
+)
+
+data class ChessComPuzzleRush(
+    val best: ChessComPuzzleRushBest?
+)
+
+data class ChessComPuzzleRushBest(
+    val total_attempts: Int?,
+    val score: Int?
+)
+
 data class ChessComArchives(
     val archives: List<String>
 )
@@ -44,6 +107,16 @@ data class ChessComPlayer(
 )
 
 interface ChessComApi {
+    @GET("pub/player/{username}")
+    suspend fun getUser(
+        @Path("username") username: String
+    ): Response<ChessComUserProfile>
+
+    @GET("pub/player/{username}/stats")
+    suspend fun getUserStats(
+        @Path("username") username: String
+    ): Response<ChessComUserStats>
+
     @GET("pub/player/{username}/games/archives")
     suspend fun getArchives(
         @Path("username") username: String

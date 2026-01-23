@@ -396,6 +396,7 @@ fun GameContent(
                 blackResult = blackResult,
                 isWhiteTurn = isWhiteTurn,
                 showRedBorder = showRedBorderForPlayerToMove,
+                onPlayerClick = { playerName -> viewModel.showPlayerInfo(playerName) },
                 modifier = Modifier.padding(start = playerBarStartPadding)
             )
         }
@@ -410,6 +411,7 @@ fun GameContent(
                 isToMove = if (topIsBlack) !isWhiteTurn else isWhiteTurn,
                 gameResult = if (topIsBlack) blackResult else whiteResult,
                 showRedBorder = showRedBorderForPlayerToMove,
+                onPlayerClick = { playerName -> viewModel.showPlayerInfo(playerName) },
                 modifier = Modifier.padding(start = playerBarStartPadding)
             )
         }
@@ -587,6 +589,7 @@ fun GameContent(
                 isToMove = if (topIsBlack) isWhiteTurn else !isWhiteTurn,
                 gameResult = if (topIsBlack) whiteResult else blackResult,
                 showRedBorder = showRedBorderForPlayerToMove,
+                onPlayerClick = { playerName -> viewModel.showPlayerInfo(playerName) },
                 modifier = Modifier.padding(start = playerBarStartPadding)
             )
         }
@@ -600,6 +603,7 @@ fun GameContent(
                 blackResult = blackResult,
                 isWhiteTurn = isWhiteTurn,
                 showRedBorder = showRedBorderForPlayerToMove,
+                onPlayerClick = { playerName -> viewModel.showPlayerInfo(playerName) },
                 modifier = Modifier.padding(start = playerBarStartPadding)
             )
         }
@@ -934,6 +938,7 @@ fun ControlButton(
  * Player bar showing player name, rating, clock time, and game result.
  * @param gameResult "won", "lost", "draw", or null if game not finished
  * @param showRedBorder if true and isToMove is true, show red border around the bar
+ * @param onPlayerClick callback when player name is tapped, receives the player name
  */
 @Composable
 fun PlayerBar(
@@ -944,6 +949,7 @@ fun PlayerBar(
     isToMove: Boolean,
     gameResult: String? = null,
     showRedBorder: Boolean = false,
+    onPlayerClick: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val backgroundColor = if (isWhite) Color.White else Color.Black
@@ -1000,7 +1006,12 @@ fun PlayerBar(
                 text = playerText,
                 color = textColor,
                 fontWeight = FontWeight.Medium,
-                fontSize = 14.sp
+                fontSize = 14.sp,
+                modifier = if (onPlayerClick != null) {
+                    Modifier.clickable { onPlayerClick(playerName) }
+                } else {
+                    Modifier
+                }
             )
         }
 
@@ -1023,6 +1034,7 @@ fun PlayerBar(
  * No ELO rating or clocks shown.
  * @param isWhiteTurn true if it's white's turn to move
  * @param showRedBorder if true, show red border around the half of the player to move
+ * @param onPlayerClick callback when player name is tapped, receives the player name
  */
 @Composable
 fun CombinedPlayerBar(
@@ -1032,6 +1044,7 @@ fun CombinedPlayerBar(
     blackResult: String?,
     isWhiteTurn: Boolean = true,
     showRedBorder: Boolean = false,
+    onPlayerClick: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val showWhiteBorder = showRedBorder && isWhiteTurn
@@ -1080,7 +1093,12 @@ fun CombinedPlayerBar(
                 fontWeight = FontWeight.Medium,
                 fontSize = 12.sp,
                 maxLines = 1,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = if (onPlayerClick != null) {
+                    Modifier.clickable { onPlayerClick(whiteName) }
+                } else {
+                    Modifier
+                }
             )
         }
 
@@ -1106,7 +1124,12 @@ fun CombinedPlayerBar(
                 fontWeight = FontWeight.Medium,
                 fontSize = 12.sp,
                 maxLines = 1,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = if (onPlayerClick != null) {
+                    Modifier.clickable { onPlayerClick(blackName) }
+                } else {
+                    Modifier
+                }
             )
             // Score after name for black
             if (blackResult != null) {
@@ -1394,7 +1417,6 @@ private fun AiServiceLogo(
         AiService.GROK -> Color(0xFF000000)     // X/Twitter black
         AiService.DEEPSEEK -> Color(0xFF0066FF) // DeepSeek blue
         AiService.MISTRAL -> Color(0xFFFF7000)  // Mistral orange
-        AiService.COHERE -> Color(0xFF39594D)   // Cohere green
         AiService.DUMMY -> Color(0xFF888888)    // Gray for testing
     }
 
@@ -1411,7 +1433,6 @@ private fun AiServiceLogo(
         AiService.GROK -> "X"
         AiService.DEEPSEEK -> "D"
         AiService.MISTRAL -> "M"
-        AiService.COHERE -> "C"
         AiService.DUMMY -> "?"
     }
 
