@@ -10,6 +10,7 @@ class PgnParser {
         /**
          * Parse moves with clock times from PGN.
          * Clock times are extracted from comments like {[%clk 0:10:00]} or {[%clk 1:30]}
+         * Supports both SAN notation (e4, Nf3) and UCI notation (e2e4, g1f3)
          */
         fun parseMovesWithClock(pgn: String): List<ParsedMove> {
             // Remove headers (lines starting with [)
@@ -19,6 +20,17 @@ class PgnParser {
                 .trim()
 
             val result = mutableListOf<ParsedMove>()
+
+            // Check if this looks like UCI format (moves like e2e4, g1f3)
+            val uciPattern = Regex("""[a-h][1-8][a-h][1-8][qrbn]?""")
+            val firstMoves = movesSection.split(Regex("""\s+""")).take(5).filter {
+                it.matches(Regex("""^\d+\.""")) == false && it != "*"
+            }
+            val looksLikeUci = firstMoves.any { uciPattern.matches(it) }
+
+            if (looksLikeUci) {
+                return parseUciMoves(movesSection)
+            }
 
             // Regex to match a move followed by optional clock comment
             // Matches: e4 {[%clk 0:10:00]} or Nf3 {[%clk 1:30]} or just e4
@@ -44,6 +56,24 @@ class PgnParser {
                 }
 
                 result.add(ParsedMove(san, clockTime))
+            }
+
+            return result
+        }
+
+        /**
+         * Parse UCI format moves (e2e4, g1f3, etc.)
+         */
+        private fun parseUciMoves(movesSection: String): List<ParsedMove> {
+            val result = mutableListOf<ParsedMove>()
+            val uciPattern = Regex("""[a-h][1-8][a-h][1-8][qrbn]?""")
+
+            // Split by whitespace and filter for UCI moves
+            for (token in movesSection.split(Regex("""\s+"""))) {
+                val cleaned = token.replace(Regex("""^\d+\."""), "") // Remove move numbers
+                if (uciPattern.matches(cleaned)) {
+                    result.add(ParsedMove(cleaned, null))
+                }
             }
 
             return result

@@ -757,7 +757,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         boardHistory.add(tempBoard.copy())
 
         for (move in parsedMoves) {
-            val moveSuccess = tempBoard.makeMove(move)
+            // Try SAN first, then UCI format (for streamed live games)
+            val moveSuccess = tempBoard.makeMove(move) || tempBoard.makeUciMove(move)
             if (moveSuccess) {
                 boardHistory.add(tempBoard.copy())
             }
@@ -978,7 +979,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val isWhite = index % 2 == 0
             // Check if this move is a capture (target square has a piece before the move)
             val boardBeforeMove = tempBoard.copy()
-            val moveSuccess = tempBoard.makeMove(move)
+            // Try SAN first, then UCI format (for streamed live games)
+            val moveSuccess = tempBoard.makeMove(move) || tempBoard.makeUciMove(move)
             if (!moveSuccess) {
                 // Skip invalid moves (e.g., malformed PGN artifacts)
                 val prefix = if (isWhite) "$moveNum." else "$moveNum..."
@@ -2061,19 +2063,26 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         )
 
         viewModelScope.launch {
-            when (val result = repository.getLichessTvChannels()) {
-                is Result.Success -> {
-                    _uiState.value = _uiState.value.copy(
-                        tvLoading = false,
-                        tvChannels = result.data
-                    )
+            try {
+                when (val result = repository.getLichessTvChannels()) {
+                    is Result.Success -> {
+                        _uiState.value = _uiState.value.copy(
+                            tvLoading = false,
+                            tvChannels = result.data
+                        )
+                    }
+                    is Result.Error -> {
+                        _uiState.value = _uiState.value.copy(
+                            tvLoading = false,
+                            tvError = result.message
+                        )
+                    }
                 }
-                is Result.Error -> {
-                    _uiState.value = _uiState.value.copy(
-                        tvLoading = false,
-                        tvError = result.message
-                    )
-                }
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    tvLoading = false,
+                    tvError = "Exception: ${e.message}"
+                )
             }
         }
     }
@@ -2089,8 +2098,27 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             when (val result = repository.getLichessGame(channel.gameId)) {
                 is Result.Success -> {
-                    dismissLichessTv()
                     val game = result.data
+                    // Check if game has PGN (live games don't have PGN)
+                    if (game.pgn == null) {
+                        // Try streaming the game to get moves
+                        when (val streamResult = repository.streamLichessGame(channel.gameId)) {
+                            is Result.Success -> {
+                                dismissLichessTv()
+                                val streamedGame = streamResult.data
+                                val whiteName = streamedGame.players.white.user?.name ?: "White"
+                                loadGame(streamedGame, ChessServer.LICHESS, whiteName)
+                            }
+                            is Result.Error -> {
+                                _uiState.value = _uiState.value.copy(
+                                    tvLoading = false,
+                                    tvError = "Live game: ${streamResult.message}"
+                                )
+                            }
+                        }
+                        return@launch
+                    }
+                    dismissLichessTv()
                     val whiteName = game.players.white.user?.name ?: "White"
                     loadGame(game, ChessServer.LICHESS, whiteName)
                 }
@@ -2110,6 +2138,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun dismissLichessTv() {
         _uiState.value = _uiState.value.copy(
             showTvScreen = false,
+            tvLoading = false,
             tvChannels = emptyList(),
             tvError = null
         )

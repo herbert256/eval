@@ -10,6 +10,7 @@ import retrofit2.http.GET
 import retrofit2.http.Headers
 import retrofit2.http.Path
 import retrofit2.http.Query
+import retrofit2.http.Streaming
 import java.util.concurrent.TimeUnit
 
 /**
@@ -200,7 +201,7 @@ data class LichessTvChannels(
     val crazyhouse: LichessTvGame?,
     val chess960: LichessTvGame?,
     val kingOfTheHill: LichessTvGame?,
-    val topRated: LichessTvGame?
+    val best: LichessTvGame?  // "best" is the top rated game
 )
 
 data class LichessTvGame(
@@ -259,7 +260,8 @@ interface LichessApi {
 
     // TV endpoints
     @GET("api/tv/channels")
-    suspend fun getTvChannels(): Response<LichessTvChannels>
+    @Headers("Accept: application/json")
+    suspend fun getTvChannels(): Response<String>
 
     @GET("api/game/{gameId}")
     @Headers("Accept: application/json")
@@ -268,6 +270,17 @@ interface LichessApi {
         @Query("pgnInJson") pgnInJson: Boolean = true,
         @Query("clocks") clocks: Boolean = true
     ): Response<String>
+
+    /**
+     * Stream a game - returns NDJSON with all moves from the start.
+     * Each line after the first contains: fen, lm (last move in UCI), wc/bc (clocks)
+     */
+    @GET("api/stream/game/{gameId}")
+    @Headers("Accept: application/x-ndjson")
+    @Streaming
+    suspend fun streamGame(
+        @Path("gameId") gameId: String
+    ): Response<okhttp3.ResponseBody>
 
     companion object {
         private const val BASE_URL = "https://lichess.org/"

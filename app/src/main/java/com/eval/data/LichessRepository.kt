@@ -729,17 +729,30 @@ class ChessRepository(
             val response = lichessApi.getTvChannels()
 
             if (!response.isSuccessful) {
-                return@withContext Result.Error("Failed to fetch Lichess TV channels")
+                return@withContext Result.Error("Failed to fetch Lichess TV channels: ${response.code()}")
             }
 
-            val channels = response.body() ?: return@withContext Result.Error("No TV data received")
+            val body = response.body()
+            if (body.isNullOrBlank()) {
+                return@withContext Result.Error("No TV data received")
+            }
+
+            val channels = try {
+                gson.fromJson(body, LichessTvChannels::class.java)
+            } catch (e: Exception) {
+                return@withContext Result.Error("Error parsing TV data: ${e.message}")
+            }
+
+            if (channels == null) {
+                return@withContext Result.Error("Failed to parse TV data")
+            }
 
             val result = mutableListOf<TvChannelInfo>()
 
-            channels.topRated?.let { game ->
+            channels.best?.let { game ->
                 if (game.gameId != null) {
                     result.add(TvChannelInfo(
-                        channelName = "Top Rated",
+                        channelName = "Best",
                         gameId = game.gameId,
                         playerName = game.user?.name ?: "Unknown",
                         playerTitle = game.user?.title,
@@ -809,8 +822,10 @@ class ChessRepository(
                 }
             }
 
+            android.util.Log.d("ChessRepository", "getLichessTvChannels: returning ${result.size} channels")
             Result.Success(result)
         } catch (e: Exception) {
+            android.util.Log.e("ChessRepository", "getLichessTvChannels: Exception: ${e.message}", e)
             Result.Error(e.message ?: "Unknown error occurred")
         }
     }
@@ -836,6 +851,143 @@ class ChessRepository(
         } catch (e: Exception) {
             Result.Error(e.message ?: "Unknown error occurred")
         }
+    }
+
+    /**
+     * Stream a live Lichess game to get all moves.
+     * This works for ongoing games that don't have PGN yet.
+     */
+    suspend fun streamLichessGame(gameId: String): Result<LichessGame> = withContext(Dispatchers.IO) {
+        try {
+            val response = lichessApi.streamGame(gameId)
+
+            if (!response.isSuccessful) {
+                return@withContext Result.Error("Failed to stream game: ${response.code()}")
+            }
+
+            val responseBody = response.body()
+                ?: return@withContext Result.Error("No stream data received")
+
+            val reader = responseBody.source()
+            val lines = mutableListOf<String>()
+
+            // Set a timeout for reading - the stream sends historical moves quickly,
+            // then waits for new moves (which would block forever)
+            reader.timeout().timeout(2, java.util.concurrent.TimeUnit.SECONDS)
+
+            try {
+                // Read lines until timeout (meaning no more historical moves)
+                while (true) {
+                    val line = reader.readUtf8Line() ?: break
+                    if (line.isNotBlank()) {
+                        lines.add(line)
+                    }
+                    // Safety limit - don't read forever
+                    if (lines.size > 500) break
+                }
+            } catch (e: java.io.InterruptedIOException) {
+                // Timeout expected - we've read all available data
+            } catch (e: java.net.SocketTimeoutException) {
+                // Timeout expected - we've read all available data
+            }
+
+            responseBody.close()
+
+            if (lines.isEmpty()) {
+                return@withContext Result.Error("No game data in stream")
+            }
+
+            // First line is game metadata
+            val gameInfo = try {
+                gson.fromJson(lines[0], StreamGameInfo::class.java)
+            } catch (e: Exception) {
+                return@withContext Result.Error("Failed to parse game info: ${e.message}")
+            }
+
+            // Remaining lines contain moves (skip line 1 which is starting position)
+            val moves = mutableListOf<String>()
+            for (i in 2 until lines.size) {
+                try {
+                    val moveData = gson.fromJson(lines[i], StreamMoveData::class.java)
+                    moveData.lm?.let { moves.add(it) }
+                } catch (e: Exception) {
+                    // Skip malformed lines
+                }
+            }
+
+            // Build a pseudo-PGN from the moves
+            val pgn = buildPgnFromMoves(moves, gameInfo)
+
+            // Create LichessGame from streamed data
+            val game = LichessGame(
+                id = gameInfo.id ?: gameId,
+                rated = gameInfo.rated ?: false,
+                variant = gameInfo.variant?.key ?: "standard",
+                speed = gameInfo.speed ?: "rapid",
+                perf = gameInfo.perf,
+                status = "started",
+                winner = null,
+                players = Players(
+                    white = Player(
+                        user = gameInfo.players?.white?.user?.let {
+                            User(name = it.name ?: "White", id = it.id ?: "white")
+                        },
+                        rating = gameInfo.players?.white?.rating,
+                        aiLevel = null
+                    ),
+                    black = Player(
+                        user = gameInfo.players?.black?.user?.let {
+                            User(name = it.name ?: "Black", id = it.id ?: "black")
+                        },
+                        rating = gameInfo.players?.black?.rating,
+                        aiLevel = null
+                    )
+                ),
+                pgn = pgn,
+                moves = moves.joinToString(" "),
+                clock = null,
+                createdAt = gameInfo.createdAt,
+                lastMoveAt = null
+            )
+
+            Result.Success(game)
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Unknown error streaming game")
+        }
+    }
+
+    /**
+     * Build a minimal PGN from UCI moves
+     */
+    private fun buildPgnFromMoves(moves: List<String>, gameInfo: StreamGameInfo): String {
+        val whiteName = gameInfo.players?.white?.user?.name ?: "White"
+        val blackName = gameInfo.players?.black?.user?.name ?: "Black"
+        val whiteRating = gameInfo.players?.white?.rating
+        val blackRating = gameInfo.players?.black?.rating
+
+        val headers = buildString {
+            appendLine("[Event \"Live Game\"]")
+            appendLine("[Site \"lichess.org\"]")
+            appendLine("[White \"$whiteName\"]")
+            appendLine("[Black \"$blackName\"]")
+            whiteRating?.let { appendLine("[WhiteElo \"$it\"]") }
+            blackRating?.let { appendLine("[BlackElo \"$it\"]") }
+            appendLine("[Result \"*\"]")
+            appendLine()
+        }
+
+        // Convert UCI moves to numbered format (not SAN, but loadGame uses UCI internally)
+        val moveText = buildString {
+            moves.forEachIndexed { index, move ->
+                if (index % 2 == 0) {
+                    append("${(index / 2) + 1}. ")
+                }
+                append("$move ")
+            }
+            append("*")
+        }
+
+        return headers + moveText
     }
 
     /**
@@ -973,4 +1125,48 @@ data class StreamerInfo(
     val twitchUrl: String?,
     val profileUrl: String?,
     val server: ChessServer
+)
+
+/**
+ * Stream game info (first line of /api/stream/game/{id})
+ */
+data class StreamGameInfo(
+    val id: String?,
+    val variant: StreamVariant?,
+    val speed: String?,
+    val perf: String?,
+    val rated: Boolean?,
+    val createdAt: Long?,
+    val players: StreamPlayers?
+)
+
+data class StreamVariant(
+    val key: String?,
+    val name: String?
+)
+
+data class StreamPlayers(
+    val white: StreamPlayer?,
+    val black: StreamPlayer?
+)
+
+data class StreamPlayer(
+    val user: StreamUser?,
+    val rating: Int?
+)
+
+data class StreamUser(
+    val name: String?,
+    val id: String?,
+    val title: String?
+)
+
+/**
+ * Stream move data (subsequent lines of /api/stream/game/{id})
+ */
+data class StreamMoveData(
+    val fen: String?,
+    val lm: String?,  // Last move in UCI format
+    val wc: Int?,     // White clock in seconds
+    val bc: Int?      // Black clock in seconds
 )
