@@ -43,7 +43,8 @@ private enum class RetrieveSubScreen {
     LICHESS_TV,
     DAILY_PUZZLE,
     STREAMERS,
-    PGN_FILE
+    PGN_FILE,
+    OPENING_SELECTION
 }
 
 /**
@@ -106,6 +107,7 @@ fun RetrieveScreen(
                     currentScreen = RetrieveSubScreen.MAIN
                 }
             }
+            RetrieveSubScreen.OPENING_SELECTION -> currentScreen = RetrieveSubScreen.MAIN
         }
     }
 
@@ -120,6 +122,10 @@ fun RetrieveScreen(
                 if (hasMultipleEvents) {
                     currentScreen = RetrieveSubScreen.PGN_FILE
                 }
+            },
+            onOpeningClick = {
+                viewModel.loadEcoOpenings()
+                currentScreen = RetrieveSubScreen.OPENING_SELECTION
             }
         )
         RetrieveSubScreen.LICHESS -> LichessRetrieveScreen(
@@ -230,6 +236,11 @@ fun RetrieveScreen(
                 currentScreen = RetrieveSubScreen.MAIN
             }
         )
+        RetrieveSubScreen.OPENING_SELECTION -> OpeningSelectionScreen(
+            viewModel = viewModel,
+            uiState = uiState,
+            onBack = { currentScreen = RetrieveSubScreen.MAIN }
+        )
     }
 }
 
@@ -243,7 +254,8 @@ private fun RetrieveMainScreen(
     onBack: () -> Unit,
     onLichessClick: () -> Unit,
     onChessComClick: () -> Unit,
-    onPgnFileLoaded: (hasMultipleEvents: Boolean) -> Unit
+    onPgnFileLoaded: (hasMultipleEvents: Boolean) -> Unit,
+    onOpeningClick: () -> Unit
 ) {
     val context = LocalContext.current
 
@@ -354,6 +366,17 @@ private fun RetrieveMainScreen(
                 )
             ) {
                 Text("Select from a PGN file")
+            }
+
+            // Button to start with opening
+            Button(
+                onClick = onOpeningClick,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF6B8E23)
+                )
+            ) {
+                Text("Start with opening")
             }
 
             HorizontalDivider(color = Color(0xFF404040), modifier = Modifier.padding(vertical = 8.dp))
@@ -2149,4 +2172,140 @@ private fun extractPgnFromZip(inputStream: java.io.InputStream): String? {
     }
 
     return if (pgnContent.isNotEmpty()) pgnContent.toString() else null
+}
+
+/**
+ * Opening selection screen with search functionality.
+ */
+@Composable
+private fun OpeningSelectionScreen(
+    viewModel: GameViewModel,
+    uiState: GameUiState,
+    onBack: () -> Unit
+) {
+    var searchQuery by remember { mutableStateOf("") }
+
+    // Filter openings based on search query (searches in ECO code and name)
+    val filteredOpenings = remember(searchQuery, uiState.ecoOpenings) {
+        if (searchQuery.isBlank()) {
+            uiState.ecoOpenings
+        } else {
+            val query = searchQuery.lowercase()
+            uiState.ecoOpenings.filter { opening ->
+                opening.eco.lowercase().contains(query) ||
+                opening.name.lowercase().contains(query)
+            }
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF1A1A2E))
+            .padding(16.dp)
+    ) {
+        // Header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(onClick = onBack) {
+                Text("< Back", color = Color.White)
+            }
+            Text(
+                text = "Start with opening",
+                style = MaterialTheme.typography.titleLarge,
+                color = Color.White,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Search input
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            label = { Text("Search openings...", color = Color.Gray) },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White,
+                focusedBorderColor = Color(0xFF6B8E23),
+                unfocusedBorderColor = Color(0xFF404040),
+                cursorColor = Color.White
+            )
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Results count
+        Text(
+            text = "${filteredOpenings.size} openings",
+            color = Color.Gray,
+            fontSize = 14.sp
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Loading indicator or list
+        if (uiState.ecoOpeningsLoading) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = Color(0xFF6B8E23))
+            }
+        } else {
+            // Opening list
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                items(filteredOpenings) { opening ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                viewModel.startWithOpening(opening)
+                            },
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFF2A2A3E)
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = opening.eco,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF6B8E23),
+                                    fontSize = 14.sp
+                                )
+                                Text(
+                                    text = opening.moves,
+                                    color = Color.Gray,
+                                    fontSize = 12.sp
+                                )
+                            }
+                            Text(
+                                text = opening.name,
+                                color = Color.White,
+                                fontSize = 16.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

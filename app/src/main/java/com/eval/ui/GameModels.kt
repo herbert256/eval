@@ -13,6 +13,14 @@ import com.eval.data.LichessGame
 import com.eval.data.PlayerInfo
 import com.eval.stockfish.AnalysisResult
 
+// ECO Opening entry from eco_codes.json
+data class EcoOpening(
+    val fen: String,
+    val eco: String,
+    val name: String,
+    val moves: String
+)
+
 // Analysis stage - the 3 sequential stages of game analysis
 enum class AnalysisStage {
     PREVIEW,        // Quick analysis pass - not interruptible
@@ -162,6 +170,7 @@ data class ManualStageVisibility(
     val showScoreBarsGraph: Boolean = true,
     val showTimeGraph: Boolean = false,
     val showOpeningExplorer: Boolean = false,
+    val showOpeningName: Boolean = false,
     val showMoveList: Boolean = true,
     val showGameInfo: Boolean = false,
     val showPgn: Boolean = false
@@ -410,5 +419,9 @@ data class GameUiState(
     val showAiReportsDialog: Boolean = false,
     val aiReportsProgress: Int = 0,  // Number of completed calls
     val aiReportsTotal: Int = 0,     // Total number of calls to make
-    val aiReportsResults: Map<AiService, AiAnalysisResponse> = emptyMap()
+    val aiReportsResults: Map<AiService, AiAnalysisResponse> = emptyMap(),
+    // ECO Opening selection
+    val showOpeningSelection: Boolean = false,
+    val ecoOpenings: List<EcoOpening> = emptyList(),
+    val ecoOpeningsLoading: Boolean = false
 )

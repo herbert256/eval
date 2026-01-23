@@ -149,7 +149,8 @@ class GameStorageManager(
                 game.winner == "white" -> "1-0"
                 game.winner == "black" -> "0-1"
                 game.status == "draw" || game.status == "stalemate" -> "1/2-1/2"
-                game.winner == null && game.status != null -> "1/2-1/2"
+                // For ongoing games (status "*", "started", etc.), keep the result as ongoing
+                game.status == "*" || game.status == "started" || game.status == "unknown" -> "*"
                 else -> "*"
             },
             pgn = game.pgn ?: "",

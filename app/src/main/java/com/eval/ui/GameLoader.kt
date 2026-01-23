@@ -404,7 +404,16 @@ internal class GameLoader(
             variant = "standard",
             speed = analysedGame.speed ?: "unknown",
             perf = null,
-            status = if (analysedGame.result == "1/2-1/2") "draw" else "mate",
+            // For opening studies (White vs Black with no real result), treat as ongoing
+            // This also handles previously mis-stored games with "1/2-1/2"
+            status = when {
+                analysedGame.result == "*" -> "*"
+                analysedGame.result == "1-0" || analysedGame.result == "0-1" -> "mate"
+                // Check if this looks like an opening study (no real winner)
+                analysedGame.whiteName == "White" && analysedGame.blackName == "Black" -> "*"
+                analysedGame.result == "1/2-1/2" -> "draw"
+                else -> "*"  // Default to ongoing for unknown cases
+            },
             winner = when (analysedGame.result) {
                 "1-0" -> "white"
                 "0-1" -> "black"

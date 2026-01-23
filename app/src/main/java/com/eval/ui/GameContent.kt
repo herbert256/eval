@@ -122,6 +122,7 @@ fun GameContent(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .background(Color(0xFF555555), RoundedCornerShape(8.dp))
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -385,31 +386,48 @@ fun GameContent(
         Spacer(modifier = Modifier.height(8.dp))
     }
 
-    // Opening name display (Manual stage only, when available)
-    val displayOpeningName = uiState.currentOpeningName ?: uiState.openingName
-    if (uiState.currentStage == AnalysisStage.MANUAL && displayOpeningName != null) {
-        Text(
-            text = displayOpeningName,
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color(0xFFAAAAAA),
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp, vertical = 2.dp)
-        )
-        Spacer(modifier = Modifier.height(4.dp))
+    // Opening name display (Manual stage only, when enabled in settings)
+    val showOpeningName = uiState.interfaceVisibility.manualStage.showOpeningName
+    if (uiState.currentStage == AnalysisStage.MANUAL && showOpeningName) {
+        // Prefer opening explorer data (has ECO code + full name)
+        val explorerOpening = uiState.openingExplorerData?.opening
+        val displayOpeningText = if (explorerOpening != null) {
+            "${explorerOpening.eco}: ${explorerOpening.name}"
+        } else {
+            // Fall back to currentOpeningName (from OpeningBook) or openingName (from PGN)
+            val baseName = uiState.currentOpeningName ?: uiState.openingName
+            // Expand common abbreviations
+            baseName?.let { expandOpeningAbbreviation(it) }
+        }
+
+        if (displayOpeningText != null) {
+            Text(
+                text = displayOpeningText,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFFAAAAAA),
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp, vertical = 2.dp)
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+        }
     }
 
     // Show the board based on visibility settings
     if (showBoard) {
         // Calculate game results for each player
-        val whiteResult = when (game.winner) {
+        // Don't show results for ongoing games (status "*", "started", "unknown", etc.)
+        val isOngoingGame = game.status == "*" || game.status == "started" ||
+            game.status == "unknown" || game.status.isNullOrBlank()
+        val whiteResult = if (isOngoingGame) null else when (game.winner) {
             "white" -> "won"
             "black" -> "lost"
             null -> if (game.status == "draw" || game.status == "stalemate") "draw" else null
             else -> null
         }
-        val blackResult = when (game.winner) {
+        val blackResult = if (isOngoingGame) null else when (game.winner) {
             "black" -> "won"
             "white" -> "lost"
             null -> if (game.status == "draw" || game.status == "stalemate") "draw" else null
@@ -673,7 +691,10 @@ fun GameContent(
             }
 
             // Left part: Navigation buttons with fixed positions (slots maintain size even when hidden)
+            // Add padding when AI logos are shown to align with the board
+            val navButtonsPadding = if (uiState.currentStage == AnalysisStage.MANUAL && uiState.aiSettings.showAiLogos) 32.dp else 0.dp
             Row(
+                modifier = Modifier.padding(start = navButtonsPadding),
                 horizontalArrangement = Arrangement.Start,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -764,37 +785,37 @@ fun GameContent(
                         }
                         Spacer(modifier = Modifier.width(6.dp))
                     }
-                    // Share button - smaller with different background
-                    Button(
-                        onClick = { viewModel.showSharePositionDialog() },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF404040)
-                        ),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                    // Share button - circular with bold icon
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(Color(0xFF404040), CircleShape)
+                            .clickable { viewModel.showSharePositionDialog() },
+                        contentAlignment = Alignment.Center
                     ) {
-                        Text(text = "⤴", fontSize = 18.sp)
+                        Text(text = "⤴", fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.offset(y = (-2).dp))
                     }
                     Spacer(modifier = Modifier.width(6.dp))
-                    // Arrow mode toggle button - smaller with different background
-                    Button(
-                        onClick = { viewModel.cycleArrowMode() },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF404040)
-                        ),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                    // Arrow mode toggle button - circular with bold icon
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(Color(0xFF404040), CircleShape)
+                            .clickable { viewModel.cycleArrowMode() },
+                        contentAlignment = Alignment.Center
                     ) {
-                        Text(text = "↗", fontSize = 18.sp)
+                        Text(text = "↗", fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.offset(y = (-2).dp))
                     }
                     Spacer(modifier = Modifier.width(6.dp))
-                    // Flip board button - smaller with different background
-                    Button(
-                        onClick = { viewModel.flipBoard() },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF404040)
-                        ),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                    // Flip board button - circular with bold icon
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(Color(0xFF404040), CircleShape)
+                            .clickable { viewModel.flipBoard() },
+                        contentAlignment = Alignment.Center
                     ) {
-                        Text(text = "↻", fontSize = 18.sp)
+                        Text(text = "↻", fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.offset(y = (-2).dp))
                     }
                 }
             }
@@ -937,15 +958,19 @@ fun GameContent(
                         Text(date, fontSize = 13.sp, color = Color.White)
                     }
                 }
-                // Result
-                val resultText = when (game.winner) {
-                    "white" -> "1-0"
-                    "black" -> "0-1"
-                    else -> if (game.status == "draw" || game.status == "stalemate") "½-½" else game.status
-                }
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    Text("Result:", fontSize = 13.sp, color = Color(0xFFAAAAAA), modifier = Modifier.width(labelWidth))
-                    Text(resultText, fontSize = 13.sp, color = Color.White)
+                // Result - don't show for ongoing games
+                val isOngoingStatus = game.status == "*" || game.status == "started" ||
+                    game.status == "unknown" || game.status.isNullOrBlank()
+                if (!isOngoingStatus) {
+                    val resultText = when (game.winner) {
+                        "white" -> "1-0"
+                        "black" -> "0-1"
+                        else -> if (game.status == "draw" || game.status == "stalemate") "½-½" else game.status
+                    }
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        Text("Result:", fontSize = 13.sp, color = Color(0xFFAAAAAA), modifier = Modifier.width(labelWidth))
+                        Text(resultText, fontSize = 13.sp, color = Color.White)
+                    }
                 }
                 // Termination - extract from PGN headers
                 game.pgn?.let { pgn ->
@@ -1545,5 +1570,176 @@ private fun AiServiceLogo(
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold
         )
+    }
+}
+
+/**
+ * Expand common chess opening abbreviations to their full names.
+ * Returns "Abbreviation: Full Name" format, or original if no expansion found.
+ */
+private fun expandOpeningAbbreviation(name: String): String {
+    val abbreviations = mapOf(
+        // Queen's Gambit variations
+        "QG" to "Queen's Gambit",
+        "QGA" to "Queen's Gambit Accepted",
+        "QGD" to "Queen's Gambit Declined",
+        "QGT" to "Queen's Gambit Tarrasch",
+
+        // Indian Defenses
+        "KID" to "King's Indian Defense",
+        "QID" to "Queen's Indian Defense",
+        "NID" to "Nimzo-Indian Defense",
+        "NI" to "Nimzo-Indian Defense",
+        "BID" to "Bogo-Indian Defense",
+        "OID" to "Old Indian Defense",
+        "GI" to "Grunfeld Indian",
+        "GR" to "Grunfeld Defense",
+        "GD" to "Grunfeld Defense",
+
+        // King's Pawn Openings
+        "KP" to "King's Pawn Opening",
+        "KPO" to "King's Pawn Opening",
+        "KGA" to "King's Gambit Accepted",
+        "KGD" to "King's Gambit Declined",
+        "KG" to "King's Gambit",
+        "KIA" to "King's Indian Attack",
+
+        // Queen's Pawn Openings
+        "QP" to "Queen's Pawn Opening",
+        "QPO" to "Queen's Pawn Opening",
+        "QPG" to "Queen's Pawn Game",
+
+        // Sicilian variations
+        "SC" to "Sicilian Defense",
+        "SIC" to "Sicilian Defense",
+        "SN" to "Sicilian Najdorf",
+        "SD" to "Sicilian Dragon",
+        "SS" to "Sicilian Scheveningen",
+        "SSV" to "Sicilian Sveshnikov",
+        "SKK" to "Sicilian Kan",
+        "STA" to "Sicilian Taimanov",
+        "SAC" to "Sicilian Accelerated Dragon",
+        "SMO" to "Sicilian Moscow",
+        "SRO" to "Sicilian Rossolimo",
+
+        // French Defense variations
+        "FD" to "French Defense",
+        "FR" to "French Defense",
+        "FT" to "French Tarrasch",
+        "FW" to "French Winawer",
+        "FC" to "French Classical",
+        "FA" to "French Advance",
+        "FE" to "French Exchange",
+
+        // Caro-Kann variations
+        "CK" to "Caro-Kann Defense",
+        "CD" to "Caro-Kann Defense",
+        "CKA" to "Caro-Kann Advance",
+        "CKC" to "Caro-Kann Classical",
+        "CKE" to "Caro-Kann Exchange",
+
+        // Ruy Lopez variations
+        "RL" to "Ruy Lopez",
+        "SP" to "Spanish Game (Ruy Lopez)",
+        "RLM" to "Ruy Lopez Marshall",
+        "RLB" to "Ruy Lopez Berlin",
+
+        // Italian Game
+        "IT" to "Italian Game",
+        "IG" to "Italian Game",
+        "GP" to "Giuoco Piano",
+        "EG" to "Evans Gambit",
+        "TK" to "Two Knights Defense",
+
+        // Other 1.e4 openings
+        "SC" to "Scotch Game",
+        "SCO" to "Scotch Game",
+        "PET" to "Petroff Defense",
+        "RD" to "Russian Defense (Petroff)",
+        "PH" to "Philidor Defense",
+        "AL" to "Alekhine Defense",
+        "AD" to "Alekhine Defense",
+        "PI" to "Pirc Defense",
+        "PK" to "Pirc Defense",
+        "MO" to "Modern Defense",
+        "MD" to "Modern Defense",
+        "SCD" to "Scandinavian Defense",
+        "SD" to "Scandinavian Defense",
+        "CN" to "Center Game",
+        "VG" to "Vienna Game",
+        "BG" to "Bishop's Opening",
+
+        // Benoni variations
+        "BE" to "Benoni Defense",
+        "BD" to "Benoni Defense",
+        "MB" to "Modern Benoni",
+        "CB" to "Czech Benoni",
+
+        // Dutch Defense
+        "DU" to "Dutch Defense",
+        "DD" to "Dutch Defense",
+        "DR" to "Dutch Defense",
+        "DSW" to "Dutch Stonewall",
+        "DL" to "Dutch Leningrad",
+
+        // Slav variations
+        "SL" to "Slav Defense",
+        "SLA" to "Slav Defense",
+        "SSL" to "Semi-Slav Defense",
+        "SM" to "Slav Meran",
+
+        // English Opening
+        "EN" to "English Opening",
+        "ENG" to "English Opening",
+        "EO" to "English Opening",
+
+        // Catalan
+        "CAT" to "Catalan Opening",
+        "CA" to "Catalan Opening",
+
+        // London System
+        "LO" to "London System",
+        "LDN" to "London System",
+        "LS" to "London System",
+
+        // Other d4 openings
+        "TR" to "Trompowsky Attack",
+        "TRO" to "Trompowsky Attack",
+        "TO" to "Torre Attack",
+        "TA" to "Torre Attack",
+        "CO" to "Colle System",
+        "CS" to "Colle System",
+        "ZU" to "Zukertort Opening",
+        "BL" to "Blackmar-Diemer Gambit",
+        "BDG" to "Blackmar-Diemer Gambit",
+        "VE" to "Veresov Opening",
+        "VO" to "Veresov Opening",
+        "BA" to "Barry Attack",
+        "JO" to "Jobava London",
+
+        // Flank Openings
+        "RE" to "Reti Opening",
+        "BI" to "Bird's Opening",
+        "BO" to "Bird's Opening",
+        "LA" to "Larsen's Opening",
+        "NF" to "Nimzowitsch-Larsen Attack",
+        "SO" to "Sokolsky Opening (Polish)",
+        "PO" to "Polish Opening",
+
+        // Misc
+        "TN" to "Tarrasch Defense",
+        "TD" to "Tarrasch Defense",
+        "RG" to "Ragozin Defense",
+        "WA" to "Wade Defense",
+        "OW" to "Owen Defense",
+        "ST" to "Steinitz Defense"
+    )
+
+    val trimmed = name.trim()
+    val fullName = abbreviations[trimmed.uppercase()]
+    return if (fullName != null) {
+        "$trimmed: $fullName"
+    } else {
+        trimmed
     }
 }

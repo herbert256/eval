@@ -224,6 +224,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
                 showScoreBarsGraph = prefs.getBoolean(KEY_MANUAL_VIS_SCOREBARSGRAPH, true),
                 showTimeGraph = prefs.getBoolean(KEY_MANUAL_VIS_TIMEGRAPH, false),
                 showOpeningExplorer = prefs.getBoolean(KEY_MANUAL_VIS_OPENINGEXPLORER, false),
+                showOpeningName = prefs.getBoolean(KEY_MANUAL_VIS_OPENINGNAME, false),
                 showMoveList = prefs.getBoolean(KEY_MANUAL_VIS_MOVELIST, true),
                 showGameInfo = prefs.getBoolean(KEY_MANUAL_VIS_GAMEINFO, false),
                 showPgn = prefs.getBoolean(KEY_MANUAL_VIS_PGN, false)
@@ -254,6 +255,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             .putBoolean(KEY_MANUAL_VIS_SCOREBARSGRAPH, settings.manualStage.showScoreBarsGraph)
             .putBoolean(KEY_MANUAL_VIS_TIMEGRAPH, settings.manualStage.showTimeGraph)
             .putBoolean(KEY_MANUAL_VIS_OPENINGEXPLORER, settings.manualStage.showOpeningExplorer)
+            .putBoolean(KEY_MANUAL_VIS_OPENINGNAME, settings.manualStage.showOpeningName)
             .putBoolean(KEY_MANUAL_VIS_MOVELIST, settings.manualStage.showMoveList)
             .putBoolean(KEY_MANUAL_VIS_GAMEINFO, settings.manualStage.showGameInfo)
             .putBoolean(KEY_MANUAL_VIS_PGN, settings.manualStage.showPgn)
@@ -463,6 +465,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         private const val KEY_MANUAL_VIS_SCOREBARSGRAPH = "manual_vis_scorebarsgraph"
         private const val KEY_MANUAL_VIS_TIMEGRAPH = "manual_vis_timegraph"
         private const val KEY_MANUAL_VIS_OPENINGEXPLORER = "manual_vis_openingexplorer"
+        private const val KEY_MANUAL_VIS_OPENINGNAME = "manual_vis_openingname"
         private const val KEY_MANUAL_VIS_MOVELIST = "manual_vis_movelist"
         private const val KEY_MANUAL_VIS_GAMEINFO = "manual_vis_gameinfo"
         private const val KEY_MANUAL_VIS_PGN = "manual_vis_pgn"

@@ -20,7 +20,9 @@ import com.eval.data.StreamerInfo
 import com.eval.data.TournamentInfo
 import com.eval.data.TvChannelInfo
 import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.eval.stockfish.StockfishEngine
+import org.json.JSONObject
 import com.eval.audio.MoveSoundPlayer
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -463,7 +465,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     // ===== OPENING EXPLORER =====
     fun fetchOpeningExplorer() {
-        if (!_uiState.value.interfaceVisibility.manualStage.showOpeningExplorer) return
+        val manualSettings = _uiState.value.interfaceVisibility.manualStage
+        if (!manualSettings.showOpeningExplorer && !manualSettings.showOpeningName) return
 
         openingExplorerJob?.cancel()
         openingExplorerJob = viewModelScope.launch {
@@ -749,6 +752,75 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     fun hideRetrieveScreen() {
         _uiState.value = _uiState.value.copy(showRetrieveScreen = false)
+    }
+
+    // ===== ECO OPENING SELECTION =====
+    fun loadEcoOpenings() {
+        if (_uiState.value.ecoOpenings.isNotEmpty()) return // Already loaded
+
+        _uiState.value = _uiState.value.copy(ecoOpeningsLoading = true)
+
+        viewModelScope.launch {
+            try {
+                val context = getApplication<Application>()
+                val jsonString = context.assets.open("eco_codes.json").bufferedReader().use { it.readText() }
+                val jsonObject = JSONObject(jsonString)
+
+                val openings = mutableListOf<EcoOpening>()
+                val keys = jsonObject.keys()
+                while (keys.hasNext()) {
+                    val fen = keys.next()
+                    val entry = jsonObject.getJSONObject(fen)
+                    openings.add(
+                        EcoOpening(
+                            fen = fen,
+                            eco = entry.getString("eco"),
+                            name = entry.getString("name"),
+                            moves = entry.getString("moves")
+                        )
+                    )
+                }
+
+                // Sort by ECO code
+                openings.sortBy { it.eco }
+
+                _uiState.value = _uiState.value.copy(
+                    ecoOpenings = openings,
+                    ecoOpeningsLoading = false
+                )
+            } catch (e: Exception) {
+                android.util.Log.e("GameViewModel", "Error loading ECO openings: ${e.message}")
+                _uiState.value = _uiState.value.copy(
+                    ecoOpeningsLoading = false,
+                    errorMessage = "Failed to load openings: ${e.message}"
+                )
+            }
+        }
+    }
+
+    fun startWithOpening(opening: EcoOpening) {
+        // Create a simple PGN with the opening moves
+        val pgn = """
+[Event "Opening Study"]
+[Site "Eval App"]
+[Date "????.??.??"]
+[Round "?"]
+[White "White"]
+[Black "Black"]
+[Result "*"]
+[Opening "${opening.name}"]
+[ECO "${opening.eco}"]
+
+${opening.moves} *
+        """.trimIndent()
+
+        // Hide the retrieve screen and load the game
+        _uiState.value = _uiState.value.copy(showRetrieveScreen = false)
+
+        // Load the game from PGN content
+        gameLoader.loadGamesFromPgnContent(pgn) { _ ->
+            // No multiple events expected for a single opening
+        }
     }
 
     fun updateStockfishSettings(settings: StockfishSettings) {

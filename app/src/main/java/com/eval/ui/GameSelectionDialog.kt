@@ -615,12 +615,16 @@ private fun RetrieveGameListItem(
     }
 
     // Determine result from account's perspective
+    // Don't show results for ongoing games (status "*", "started", "unknown", etc.)
+    val isOngoingGame = game.status == "*" || game.status == "started" ||
+        game.status == "unknown" || game.status.isNullOrBlank()
     val (resultText, resultColor) = when {
+        isOngoingGame -> "" to Color.Transparent  // No result for ongoing games
         game.winner == "white" && accountPlayedWhite -> "1" to Color(0xFF4CAF50)  // Green - won
         game.winner == "black" && accountPlayedBlack -> "1" to Color(0xFF4CAF50)  // Green - won
         game.winner == "white" && accountPlayedBlack -> "0" to Color(0xFFF44336) // Red - lost
         game.winner == "black" && accountPlayedWhite -> "0" to Color(0xFFF44336) // Red - lost
-        else -> "1/2" to Color(0xFF2196F3) // Blue - draw
+        else -> "½" to Color(0xFF2196F3) // Blue - draw
     }
 
     // Row colors based on which color the account played

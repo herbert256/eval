@@ -67,6 +67,7 @@ fun InterfaceSettingsScreen(
     var manualShowScoreBarsGraph by remember { mutableStateOf(interfaceVisibility.manualStage.showScoreBarsGraph) }
     var manualShowTimeGraph by remember { mutableStateOf(interfaceVisibility.manualStage.showTimeGraph) }
     var manualShowOpeningExplorer by remember { mutableStateOf(interfaceVisibility.manualStage.showOpeningExplorer) }
+    var manualShowOpeningName by remember { mutableStateOf(interfaceVisibility.manualStage.showOpeningName) }
     var manualShowMoveList by remember { mutableStateOf(interfaceVisibility.manualStage.showMoveList) }
     var manualShowGameInfo by remember { mutableStateOf(interfaceVisibility.manualStage.showGameInfo) }
     var manualShowPgn by remember { mutableStateOf(interfaceVisibility.manualStage.showPgn) }
@@ -96,6 +97,7 @@ fun InterfaceSettingsScreen(
                 showScoreBarsGraph = manualShowScoreBarsGraph,
                 showTimeGraph = manualShowTimeGraph,
                 showOpeningExplorer = manualShowOpeningExplorer,
+                showOpeningName = manualShowOpeningName,
                 showMoveList = manualShowMoveList,
                 showGameInfo = manualShowGameInfo,
                 showPgn = manualShowPgn
@@ -350,6 +352,15 @@ fun InterfaceSettingsScreen(
                     checked = manualShowOpeningExplorer,
                     onCheckedChange = {
                         manualShowOpeningExplorer = it
+                        saveAllSettings()
+                    }
+                )
+
+                VisibilityToggle(
+                    label = "Opening Name",
+                    checked = manualShowOpeningName,
+                    onCheckedChange = {
+                        manualShowOpeningName = it
                         saveAllSettings()
                     }
                 )
