@@ -86,7 +86,7 @@ data class AiSettings(
     val mistralServerPlayerPrompt: String = DEFAULT_SERVER_PLAYER_PROMPT,
     val mistralOtherPlayerPrompt: String = DEFAULT_OTHER_PLAYER_PROMPT,
     val perplexityApiKey: String = "",
-    val perplexityModel: String = "llama-3.1-sonar-small-128k-online",
+    val perplexityModel: String = "sonar",
     val perplexityPrompt: String = DEFAULT_GAME_PROMPT,
     val perplexityServerPlayerPrompt: String = DEFAULT_SERVER_PLAYER_PROMPT,
     val perplexityOtherPlayerPrompt: String = DEFAULT_OTHER_PLAYER_PROMPT,
@@ -732,6 +732,16 @@ internal val CLAUDE_MODELS = listOf(
 )
 
 /**
+ * Available Perplexity models (hardcoded).
+ */
+internal val PERPLEXITY_MODELS = listOf(
+    "sonar",
+    "sonar-pro",
+    "sonar-reasoning-pro",
+    "sonar-deep-research"
+)
+
+/**
  * ChatGPT settings screen.
  */
 @Composable
@@ -1218,12 +1228,9 @@ fun MistralSettingsScreen(
 @Composable
 fun PerplexitySettingsScreen(
     aiSettings: AiSettings,
-    availableModels: List<String>,
-    isLoadingModels: Boolean,
     onBackToAiSettings: () -> Unit,
     onBackToGame: () -> Unit,
-    onSave: (AiSettings) -> Unit,
-    onFetchModels: (String) -> Unit
+    onSave: (AiSettings) -> Unit
 ) {
     var apiKey by remember { mutableStateOf(aiSettings.perplexityApiKey) }
     var selectedModel by remember { mutableStateOf(aiSettings.perplexityModel) }
@@ -1246,17 +1253,15 @@ fun PerplexitySettingsScreen(
         onBackToAiSettings = onBackToAiSettings,
         onBackToGame = onBackToGame
     ) {
-        // Model selection
+        // Model selection (hardcoded list)
         if (apiKey.isNotBlank()) {
-            ModelSelectionSection(
+            HardcodedModelSelectionSection(
                 selectedModel = selectedModel,
-                availableModels = availableModels,
-                isLoadingModels = isLoadingModels,
+                availableModels = PERPLEXITY_MODELS,
                 onModelChange = {
                     selectedModel = it
                     onSave(aiSettings.copy(perplexityModel = it))
-                },
-                onFetchModels = { onFetchModels(apiKey) }
+                }
             )
 
             // All prompts editing

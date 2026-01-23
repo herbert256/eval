@@ -153,7 +153,7 @@ data class MistralRequest(
 
 // Perplexity models (uses OpenAI-compatible format)
 data class PerplexityRequest(
-    val model: String = "llama-3.1-sonar-small-128k-online",
+    val model: String = "sonar",
     val messages: List<OpenAiMessage>,
     val max_tokens: Int = 1024
 )

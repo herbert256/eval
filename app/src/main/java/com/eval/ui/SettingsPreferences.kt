@@ -329,7 +329,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             mistralServerPlayerPrompt = prefs.getString(KEY_AI_MISTRAL_SERVER_PLAYER_PROMPT, DEFAULT_SERVER_PLAYER_PROMPT) ?: DEFAULT_SERVER_PLAYER_PROMPT,
             mistralOtherPlayerPrompt = prefs.getString(KEY_AI_MISTRAL_OTHER_PLAYER_PROMPT, DEFAULT_OTHER_PLAYER_PROMPT) ?: DEFAULT_OTHER_PLAYER_PROMPT,
             perplexityApiKey = prefs.getString(KEY_AI_PERPLEXITY_API_KEY, "") ?: "",
-            perplexityModel = prefs.getString(KEY_AI_PERPLEXITY_MODEL, "llama-3.1-sonar-small-128k-online") ?: "llama-3.1-sonar-small-128k-online",
+            perplexityModel = prefs.getString(KEY_AI_PERPLEXITY_MODEL, "sonar") ?: "sonar",
             perplexityPrompt = prefs.getString(KEY_AI_PERPLEXITY_PROMPT, DEFAULT_GAME_PROMPT) ?: DEFAULT_GAME_PROMPT,
             perplexityServerPlayerPrompt = prefs.getString(KEY_AI_PERPLEXITY_SERVER_PLAYER_PROMPT, DEFAULT_SERVER_PLAYER_PROMPT) ?: DEFAULT_SERVER_PLAYER_PROMPT,
             perplexityOtherPlayerPrompt = prefs.getString(KEY_AI_PERPLEXITY_OTHER_PLAYER_PROMPT, DEFAULT_OTHER_PLAYER_PROMPT) ?: DEFAULT_OTHER_PLAYER_PROMPT,

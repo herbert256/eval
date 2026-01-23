@@ -84,7 +84,7 @@ class AiAnalysisRepository {
         grokModel: String = "grok-3-mini",
         deepSeekModel: String = "deepseek-chat",
         mistralModel: String = "mistral-small-latest",
-        perplexityModel: String = "llama-3.1-sonar-small-128k-online"
+        perplexityModel: String = "sonar"
     ): AiAnalysisResponse = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) {
             return@withContext AiAnalysisResponse(
@@ -160,7 +160,7 @@ class AiAnalysisRepository {
         grokModel: String = "grok-3-mini",
         deepSeekModel: String = "deepseek-chat",
         mistralModel: String = "mistral-small-latest",
-        perplexityModel: String = "llama-3.1-sonar-small-128k-online"
+        perplexityModel: String = "sonar"
     ): AiAnalysisResponse = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) {
             return@withContext AiAnalysisResponse(
