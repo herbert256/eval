@@ -21,17 +21,20 @@ fun GeneralSettingsScreen(
     generalSettings: GeneralSettings,
     onBackToSettings: () -> Unit,
     onBackToGame: () -> Unit,
-    onSave: (GeneralSettings) -> Unit
+    onSave: (GeneralSettings) -> Unit,
+    onTrackApiCallsChanged: (Boolean) -> Unit = {}
 ) {
     var longTapForFullScreen by remember { mutableStateOf(generalSettings.longTapForFullScreen) }
     var paginationPageSize by remember { mutableFloatStateOf(generalSettings.paginationPageSize.toFloat()) }
     var moveSoundsEnabled by remember { mutableStateOf(generalSettings.moveSoundsEnabled) }
+    var trackApiCalls by remember { mutableStateOf(generalSettings.trackApiCalls) }
 
     fun saveSettings() {
         onSave(GeneralSettings(
             longTapForFullScreen = longTapForFullScreen,
             paginationPageSize = paginationPageSize.roundToInt(),
-            moveSoundsEnabled = moveSoundsEnabled
+            moveSoundsEnabled = moveSoundsEnabled,
+            trackApiCalls = trackApiCalls
         ))
     }
 
@@ -147,6 +150,39 @@ fun GeneralSettingsScreen(
                         onCheckedChange = {
                             moveSoundsEnabled = it
                             saveSettings()
+                        }
+                    )
+                }
+
+                HorizontalDivider(color = Color(0xFF404040))
+
+                Text(
+                    text = "Developer",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White
+                )
+
+                // Track API calls toggle
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Track API calls", color = Color.White)
+                        Text(
+                            text = "Log all API requests for debugging",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFFAAAAAA)
+                        )
+                    }
+                    Switch(
+                        checked = trackApiCalls,
+                        onCheckedChange = {
+                            trackApiCalls = it
+                            saveSettings()
+                            onTrackApiCallsChanged(it)
                         }
                     )
                 }

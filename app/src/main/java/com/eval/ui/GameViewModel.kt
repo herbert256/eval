@@ -9,6 +9,7 @@ import com.eval.chess.Square
 import com.eval.data.AiAnalysisRepository
 import com.eval.data.AiAnalysisResponse
 import com.eval.data.AiService
+import com.eval.data.ApiTracer
 import com.eval.data.BroadcastInfo
 import com.eval.data.BroadcastRoundInfo
 import com.eval.data.ChessRepository
@@ -187,6 +188,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             moveSoundPlayer = moveSoundPlayer
         )
 
+        // Initialize ApiTracer for debugging
+        ApiTracer.init(application)
+
         // Check if Stockfish is installed first
         val stockfishInstalled = stockfish.isStockfishInstalled()
         _uiState.value = _uiState.value.copy(stockfishInstalled = stockfishInstalled)
@@ -201,6 +205,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val graphSettings = loadGraphSettings()
             val interfaceVisibility = loadInterfaceVisibilitySettings()
             val generalSettings = loadGeneralSettings()
+
+            // Configure ApiTracer based on settings
+            ApiTracer.isTracingEnabled = generalSettings.trackApiCalls
             val aiSettings = loadAiSettings()
             val lichessMaxGames = settingsPrefs.lichessMaxGames
             val chessComMaxGames = settingsPrefs.chessComMaxGames
@@ -791,6 +798,37 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(showRetrieveScreen = false)
     }
 
+    // ===== API TRACE SCREEN =====
+    fun showTraceScreen() {
+        _uiState.value = _uiState.value.copy(showTraceScreen = true)
+    }
+
+    fun hideTraceScreen() {
+        _uiState.value = _uiState.value.copy(
+            showTraceScreen = false,
+            showTraceDetailScreen = false,
+            traceDetailFilename = null
+        )
+    }
+
+    fun showTraceDetail(filename: String) {
+        _uiState.value = _uiState.value.copy(
+            showTraceDetailScreen = true,
+            traceDetailFilename = filename
+        )
+    }
+
+    fun hideTraceDetail() {
+        _uiState.value = _uiState.value.copy(
+            showTraceDetailScreen = false,
+            traceDetailFilename = null
+        )
+    }
+
+    fun clearTraces() {
+        ApiTracer.clearTraces()
+    }
+
     // ===== ECO OPENING SELECTION =====
     fun loadEcoOpenings() {
         if (_uiState.value.ecoOpenings.isNotEmpty()) return // Already loaded
@@ -1001,6 +1039,14 @@ ${opening.moves} *
             playerGamesPageSize = settings.paginationPageSize,
             gameSelectionPageSize = settings.paginationPageSize
         )
+    }
+
+    fun updateTrackApiCalls(enabled: Boolean) {
+        ApiTracer.isTracingEnabled = enabled
+        if (!enabled) {
+            // Clear traces when tracking is disabled
+            ApiTracer.clearTraces()
+        }
     }
 
     fun updateAiSettings(settings: AiSettings) {

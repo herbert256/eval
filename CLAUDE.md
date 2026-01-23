@@ -32,7 +32,7 @@ Eval is an Android app for fetching and analyzing chess games from Lichess.org a
 
 ## Architecture
 
-### Package Structure (44 Kotlin files, ~25,900 lines)
+### Package Structure (46 Kotlin files, ~26,600 lines)
 
 ```
 com.eval/
@@ -41,14 +41,15 @@ com.eval/
 │   ├── ChessBoard.kt (643 lines) - Board state, move validation, FEN generation/parsing
 │   └── PgnParser.kt (100 lines) - PGN parsing with clock time extraction
 ├── data/
-│   ├── LichessApi.kt (307 lines) - Retrofit interface for Lichess API
-│   ├── ChessComApi.kt (334 lines) - Retrofit interface for Chess.com API
+│   ├── LichessApi.kt (308 lines) - Retrofit interface for Lichess API
+│   ├── ChessComApi.kt (335 lines) - Retrofit interface for Chess.com API
 │   ├── LichessModels.kt (40 lines) - Data classes: LichessGame, Players, Clock
-│   ├── LichessRepository.kt (1,417 lines) - Repository with ChessServer enum, dual-server support
-│   ├── AiAnalysisApi.kt (314 lines) - Retrofit interfaces for 6 AI services + DUMMY
+│   ├── LichessRepository.kt (1,420 lines) - Repository with ChessServer enum, dual-server support
+│   ├── AiAnalysisApi.kt (315 lines) - Retrofit interfaces for 6 AI services + DUMMY
 │   ├── AiAnalysisRepository.kt (422 lines) - AI position analysis with model fetching
 │   ├── OpeningBook.kt (225 lines) - ECO opening identification by move sequences
-│   └── OpeningExplorerApi.kt (61 lines) - Opening statistics API
+│   ├── OpeningExplorerApi.kt (61 lines) - Opening statistics API
+│   └── ApiTracer.kt (290 lines) - API request/response tracing and storage
 ├── stockfish/
 │   └── StockfishEngine.kt (529 lines) - UCI protocol wrapper, process management
 ├── export/
@@ -79,8 +80,9 @@ com.eval/
     ├── InterfaceSettingsScreen.kt (412 lines) - UI visibility settings per stage
     ├── GraphSettingsScreen.kt (371 lines) - Evaluation graph color and range settings
     ├── AiSettingsScreen.kt (1,465 lines) - AI service settings (keys, prompts, models, export)
-    ├── GeneralSettingsScreen.kt (160 lines) - General app settings (fullscreen, pagination, sounds)
+    ├── GeneralSettingsScreen.kt (210 lines) - General app settings (fullscreen, pagination, sounds, API tracing)
     ├── HelpScreen.kt (221 lines) - In-app help documentation
+    ├── TraceScreen.kt (445 lines) - API trace log viewer and detail screens
     ├── ColorPickerDialog.kt (254 lines) - HSV color picker for colors
     ├── GameModels.kt (430 lines) - Data classes and enums (core domain models)
     ├── SettingsPreferences.kt (647 lines) - SharedPreferences persistence layer
@@ -189,7 +191,7 @@ data class AiSettings(
 )
 
 // General settings
-data class GeneralSettings(longTapFullscreen, paginationPageSize, moveSoundsEnabled)
+data class GeneralSettings(longTapFullscreen, paginationPageSize, moveSoundsEnabled, trackApiCalls)
 
 // Game storage
 data class AnalysedGame(timestamp, whiteName, blackName, result, pgn, moves, moveDetails,
@@ -389,8 +391,46 @@ Settings (main menu)
 └── General
     ├── Long tap for fullscreen (toggle)
     ├── Pagination page size (5-50)
-    └── Move sounds (toggle)
+    ├── Move sounds (toggle)
+    └── Track API calls (toggle) - Developer debugging
 ```
+
+## API Tracing (Developer Feature)
+
+When "Track API calls" is enabled in General Settings:
+- All API requests (Lichess, Chess.com, AI services, Opening Explorer) are logged
+- Trace files stored in app's internal storage under "trace" directory
+- Filename format: `<hostname>_<timestamp>.json`
+- Debug icon (bug emoji) appears in top bar to access trace viewer
+
+### Trace File Contents
+```json
+{
+  "timestamp": 1234567890123,
+  "hostname": "api.openai.com",
+  "request": {
+    "url": "https://api.openai.com/v1/chat/completions",
+    "method": "POST",
+    "headers": {"Authorization": "Bea****key", ...},
+    "body": "{...}"
+  },
+  "response": {
+    "statusCode": 200,
+    "headers": {"Content-Type": "application/json", ...},
+    "body": "{...}"
+  }
+}
+```
+
+### Trace Viewer Features
+- List view with pagination (25 per page)
+- Columns: Hostname, Date/Time, HTTP Status Code
+- Status code color coding (green=2xx, orange=4xx, red=5xx)
+- Detail view with pretty-printed JSON
+- "Show POST data" and "Show RESPONSE data" buttons (when available)
+- "Clear trace container" button
+
+**Note**: Traces are automatically cleared when tracking is disabled.
 
 ## Stockfish Integration
 
@@ -487,7 +527,7 @@ ai_mistral_api_key, ai_mistral_model, ai_mistral_prompt
 ai_dummy_enabled
 
 // General
-general_long_tap_fullscreen, general_pagination_page_size, general_move_sounds
+general_long_tap_fullscreen, general_pagination_page_size, general_move_sounds, track_api_calls
 ```
 
 ## Common Tasks

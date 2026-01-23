@@ -63,6 +63,7 @@ fun SettingsScreen(
     onSaveGraph: (GraphSettings) -> Unit,
     onSaveInterfaceVisibility: (InterfaceVisibilitySettings) -> Unit,
     onSaveGeneral: (GeneralSettings) -> Unit,
+    onTrackApiCallsChanged: (Boolean) -> Unit = {},
     onSaveAi: (AiSettings) -> Unit,
     onFetchChatGptModels: (String) -> Unit,
     onFetchGeminiModels: (String) -> Unit,
@@ -96,7 +97,8 @@ fun SettingsScreen(
             generalSettings = generalSettings,
             onBackToSettings = { currentSubScreen = SettingsSubScreen.MAIN },
             onBackToGame = onBack,
-            onSave = onSaveGeneral
+            onSave = onSaveGeneral,
+            onTrackApiCallsChanged = onTrackApiCallsChanged
         )
         SettingsSubScreen.ARROW_SETTINGS -> ArrowSettingsScreen(
             stockfishSettings = stockfishSettings,

@@ -188,7 +188,8 @@ data class InterfaceVisibilitySettings(
 data class GeneralSettings(
     val longTapForFullScreen: Boolean = false,
     val paginationPageSize: Int = 10,
-    val moveSoundsEnabled: Boolean = true
+    val moveSoundsEnabled: Boolean = true,
+    val trackApiCalls: Boolean = false
 )
 
 // Move quality assessment based on evaluation change
@@ -426,5 +427,9 @@ data class GameUiState(
     // ECO Opening selection
     val showOpeningSelection: Boolean = false,
     val ecoOpenings: List<EcoOpening> = emptyList(),
-    val ecoOpeningsLoading: Boolean = false
+    val ecoOpeningsLoading: Boolean = false,
+    // API Trace screen
+    val showTraceScreen: Boolean = false,
+    val showTraceDetailScreen: Boolean = false,
+    val traceDetailFilename: String? = null
 )

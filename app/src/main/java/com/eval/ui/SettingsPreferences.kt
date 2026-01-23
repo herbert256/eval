@@ -277,16 +277,18 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         return GeneralSettings(
             longTapForFullScreen = false,
             paginationPageSize = prefs.getInt(KEY_PAGINATION_PAGE_SIZE, 10).coerceIn(5, 50),
-            moveSoundsEnabled = prefs.getBoolean(KEY_MOVE_SOUNDS_ENABLED, true)
+            moveSoundsEnabled = prefs.getBoolean(KEY_MOVE_SOUNDS_ENABLED, true),
+            trackApiCalls = prefs.getBoolean(KEY_TRACK_API_CALLS, false)
         )
     }
 
     fun saveGeneralSettings(settings: GeneralSettings) {
         // Full screen mode is not persistent - do not save
-        // But pagination page size and move sounds are saved
+        // But pagination page size, move sounds, and track API calls are saved
         prefs.edit()
             .putInt(KEY_PAGINATION_PAGE_SIZE, settings.paginationPageSize.coerceIn(5, 50))
             .putBoolean(KEY_MOVE_SOUNDS_ENABLED, settings.moveSoundsEnabled)
+            .putBoolean(KEY_TRACK_API_CALLS, settings.trackApiCalls)
             .apply()
     }
 
@@ -481,6 +483,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         // General settings
         private const val KEY_PAGINATION_PAGE_SIZE = "pagination_page_size"
         private const val KEY_MOVE_SOUNDS_ENABLED = "move_sounds_enabled"
+        private const val KEY_TRACK_API_CALLS = "track_api_calls"
 
         // AI Analysis settings
         private const val KEY_AI_REPORT_PROVIDERS = "ai_report_providers"

@@ -174,6 +174,7 @@ fun GameScreen(
             onSaveGraph = { viewModel.updateGraphSettings(it) },
             onSaveInterfaceVisibility = { viewModel.updateInterfaceVisibilitySettings(it) },
             onSaveGeneral = { viewModel.updateGeneralSettings(it) },
+            onTrackApiCallsChanged = { viewModel.updateTrackApiCalls(it) },
             onSaveAi = { viewModel.updateAiSettings(it) },
             onFetchChatGptModels = { viewModel.fetchChatGptModels(it) },
             onFetchGeminiModels = { viewModel.fetchGeminiModels(it) },
@@ -188,6 +189,26 @@ fun GameScreen(
     if (uiState.showHelpScreen) {
         HelpScreen(
             onBack = { viewModel.hideHelpScreen() }
+        )
+        return
+    }
+
+    // Show trace detail screen
+    val traceFilename = uiState.traceDetailFilename
+    if (uiState.showTraceDetailScreen && traceFilename != null) {
+        TraceDetailScreen(
+            filename = traceFilename,
+            onBack = { viewModel.hideTraceDetail() }
+        )
+        return
+    }
+
+    // Show trace list screen
+    if (uiState.showTraceScreen) {
+        TraceListScreen(
+            onBack = { viewModel.hideTraceScreen() },
+            onSelectTrace = { filename -> viewModel.showTraceDetail(filename) },
+            onClearTraces = { viewModel.clearTraces() }
         )
         return
     }
@@ -495,6 +516,17 @@ fun GameScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text("↻", fontSize = 44.sp, color = Color.White, modifier = Modifier.offset(y = (-12).dp))
+                        }
+                    }
+                    // Debug trace icon (only when tracking is enabled)
+                    if (uiState.generalSettings.trackApiCalls) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clickable { viewModel.showTraceScreen() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("\uD83D\uDC1B", fontSize = 24.sp, modifier = Modifier.offset(y = (-3).dp))  // Bug emoji for debug
                         }
                     }
                     // Settings and help icons

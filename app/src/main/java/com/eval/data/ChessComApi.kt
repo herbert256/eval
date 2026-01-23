@@ -319,6 +319,7 @@ interface ChessComApi {
                         .build()
                     chain.proceed(request)
                 }
+                .addInterceptor(TracingInterceptor())
                 .connectTimeout(30, TimeUnit.SECONDS)
                 .readTimeout(30, TimeUnit.SECONDS)
                 .build()
