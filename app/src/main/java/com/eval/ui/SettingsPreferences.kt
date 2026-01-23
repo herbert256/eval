@@ -469,5 +469,8 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         private const val KEY_AI_GEMINI_PROMPT = "ai_gemini_prompt"
         private const val KEY_AI_GROK_PROMPT = "ai_grok_prompt"
         private const val KEY_AI_DEEPSEEK_PROMPT = "ai_deepseek_prompt"
+
+        // AI report email
+        const val KEY_AI_REPORT_EMAIL = "ai_report_email"
     }
 }

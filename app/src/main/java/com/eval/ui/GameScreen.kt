@@ -223,6 +223,7 @@ fun GameScreen(
             serviceName = uiState.aiAnalysisServiceName,
             result = uiState.aiAnalysisResult,
             isLoading = uiState.aiAnalysisLoading,
+            uiState = uiState,
             onDismiss = { viewModel.dismissAiAnalysisDialog() }
         )
     }
@@ -641,9 +642,15 @@ fun AiAnalysisDialog(
     serviceName: String,
     result: AiAnalysisResponse?,
     isLoading: Boolean,
+    uiState: GameUiState,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    var showEmailDialog by remember { mutableStateOf(false) }
+
+    // Load saved email from SharedPreferences
+    val prefs = context.getSharedPreferences(SettingsPreferences.PREFS_NAME, android.content.Context.MODE_PRIVATE)
+    var savedEmail by remember { mutableStateOf(prefs.getString(SettingsPreferences.KEY_AI_REPORT_EMAIL, "") ?: "") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -726,10 +733,15 @@ fun AiAnalysisDialog(
         },
         dismissButton = {
             if (result?.analysis != null) {
-                TextButton(onClick = {
-                    openAnalysisInChrome(context, serviceName, result.analysis)
-                }) {
-                    Text("View in Chrome")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = {
+                        openAnalysisInChrome(context, serviceName, result.analysis, uiState)
+                    }) {
+                        Text("View in Chrome")
+                    }
+                    TextButton(onClick = { showEmailDialog = true }) {
+                        Text("Send by email")
+                    }
                 }
             }
         },
@@ -739,15 +751,162 @@ fun AiAnalysisDialog(
             }
         }
     )
+
+    // Email dialog
+    if (showEmailDialog && result?.analysis != null) {
+        SendReportEmailDialog(
+            initialEmail = savedEmail,
+            onDismiss = { showEmailDialog = false },
+            onSendEmail = { email ->
+                // Save email for next time
+                prefs.edit().putString(SettingsPreferences.KEY_AI_REPORT_EMAIL, email).apply()
+                savedEmail = email
+                // Send the report
+                sendAnalysisReportByEmail(context, serviceName, result.analysis, uiState, email)
+                showEmailDialog = false
+            }
+        )
+    }
+}
+
+/**
+ * Dialog for entering email address to send the AI analysis report.
+ */
+@Composable
+private fun SendReportEmailDialog(
+    initialEmail: String,
+    onDismiss: () -> Unit,
+    onSendEmail: (String) -> Unit
+) {
+    var email by remember { mutableStateOf(initialEmail) }
+    var emailError by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Send Report by Email",
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Enter the email address to receive the analysis report.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = {
+                        email = it
+                        emailError = null
+                    },
+                    label = { Text("Email address") },
+                    singleLine = true,
+                    isError = emailError != null,
+                    supportingText = emailError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                if (initialEmail.isNotBlank() && email == initialEmail) {
+                    Text(
+                        text = "Using previously saved email address",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF00E676)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (email.isBlank()) {
+                        emailError = "Email address is required"
+                    } else if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                        emailError = "Invalid email address"
+                    } else {
+                        onSendEmail(email.trim())
+                    }
+                }
+            ) {
+                Text("Send")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+/**
+ * Sends the AI analysis report via email as an HTML attachment.
+ */
+private fun sendAnalysisReportByEmail(
+    context: android.content.Context,
+    serviceName: String,
+    markdown: String,
+    uiState: GameUiState,
+    email: String
+) {
+    try {
+        // Generate the HTML report
+        val html = convertMarkdownToHtml(serviceName, markdown, uiState)
+
+        // Create cache directory for AI analysis files
+        val cacheDir = java.io.File(context.cacheDir, "ai_analysis")
+        if (!cacheDir.exists()) {
+            cacheDir.mkdirs()
+        }
+
+        // Write HTML to file
+        val htmlFile = java.io.File(cacheDir, "analysis_report.html")
+        htmlFile.writeText(html)
+
+        // Get content URI using FileProvider
+        val contentUri = androidx.core.content.FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            htmlFile
+        )
+
+        // Create email subject
+        val game = uiState.game
+        val whiteName = game?.players?.white?.user?.name ?: "White"
+        val blackName = game?.players?.black?.user?.name ?: "Black"
+        val subject = "Chess Analysis Report - $whiteName vs $blackName ($serviceName)"
+
+        // Create email intent with HTML attachment
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/html"
+            putExtra(Intent.EXTRA_EMAIL, arrayOf(email))
+            putExtra(Intent.EXTRA_SUBJECT, subject)
+            putExtra(Intent.EXTRA_TEXT, "Please find the $serviceName chess analysis report attached.\n\nOpen the HTML file in a browser to view the full interactive report with chessboard, evaluation graphs, and move list.")
+            putExtra(Intent.EXTRA_STREAM, contentUri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        context.startActivity(Intent.createChooser(intent, "Send report via email"))
+    } catch (e: Exception) {
+        android.widget.Toast.makeText(
+            context,
+            "Failed to send email: ${e.message}",
+            android.widget.Toast.LENGTH_SHORT
+        ).show()
+    }
 }
 
 /**
  * Converts markdown to HTML and opens it in Chrome.
  */
-private fun openAnalysisInChrome(context: android.content.Context, serviceName: String, markdown: String) {
+private fun openAnalysisInChrome(context: android.content.Context, serviceName: String, markdown: String, uiState: GameUiState) {
     try {
-        // Convert markdown to HTML
-        val html = convertMarkdownToHtml(serviceName, markdown)
+        // Convert markdown to HTML with game data
+        val html = convertMarkdownToHtml(serviceName, markdown, uiState)
 
         // Create cache directory for AI analysis files
         val cacheDir = java.io.File(context.cacheDir, "ai_analysis")
@@ -791,11 +950,11 @@ private fun openAnalysisInChrome(context: android.content.Context, serviceName: 
 }
 
 /**
- * Converts markdown text to a styled HTML document.
+ * Converts markdown text to a styled HTML document with chessboard and game data.
  */
-private fun convertMarkdownToHtml(serviceName: String, markdown: String): String {
+private fun convertMarkdownToHtml(serviceName: String, markdown: String, uiState: GameUiState): String {
     // Basic markdown to HTML conversion
-    var html = markdown
+    var analysisHtml = markdown
         // Escape HTML entities first
         .replace("&", "&amp;")
         .replace("<", "&lt;")
@@ -818,52 +977,506 @@ private fun convertMarkdownToHtml(serviceName: String, markdown: String): String
         .replace("\n", "<br>")
 
     // Wrap consecutive <li> items in <ul>
-    html = html.replace(Regex("(<li>.*?</li>)+")) { match ->
+    analysisHtml = analysisHtml.replace(Regex("(<li>.*?</li>)+")) { match ->
         "<ul>${match.value}</ul>"
     }
 
+    // Extract game data
+    val game = uiState.game
+    val whiteName = game?.players?.white?.user?.name
+        ?: game?.players?.white?.aiLevel?.let { "Stockfish $it" }
+        ?: "White"
+    val blackName = game?.players?.black?.user?.name
+        ?: game?.players?.black?.aiLevel?.let { "Stockfish $it" }
+        ?: "Black"
+    val whiteRating = game?.players?.white?.rating?.toString() ?: ""
+    val blackRating = game?.players?.black?.rating?.toString() ?: ""
+    val fen = uiState.currentBoard.getFen()
+    val currentMoveIndex = uiState.currentMoveIndex
+    val isWhiteToMove = uiState.currentBoard.getTurn() == com.eval.chess.PieceColor.WHITE
+    val flippedBoard = uiState.flippedBoard
+
+    // Get current score for eval bar
+    val currentScore = uiState.analyseScores[currentMoveIndex]
+        ?: uiState.previewScores[currentMoveIndex]
+    val evalScore = currentScore?.let {
+        if (it.isMate) {
+            if (it.mateIn > 0) "M${it.mateIn}" else "M${-it.mateIn}"
+        } else {
+            val score = it.score
+            if (score >= 0) "+%.1f".format(score) else "%.1f".format(score)
+        }
+    } ?: "0.0"
+    val evalPercent = currentScore?.let {
+        if (it.isMate) {
+            if (it.mateIn > 0) 100f else 0f
+        } else {
+            // Convert centipawns to percentage (sigmoid-like)
+            val cp = it.score * 100
+            (50 + 50 * (2 / (1 + kotlin.math.exp(-0.004 * cp)) - 1)).toFloat()
+        }
+    } ?: 50f
+
+    // Generate move list HTML
+    val moveListHtml = buildMoveListHtml(uiState)
+
+    // Generate preview scores for line graph
+    val previewScoresJson = uiState.previewScores.entries
+        .sortedBy { it.key }
+        .joinToString(",") { (idx, score) ->
+            val value = if (score.isMate) {
+                if (score.mateIn > 0) 10.0 else -10.0
+            } else {
+                score.score.toDouble().coerceIn(-10.0, 10.0)
+            }
+            """{"move":$idx,"score":$value}"""
+        }
+
+    // Generate analyse scores for line graph
+    val analyseScoresJson = uiState.analyseScores.entries
+        .sortedBy { it.key }
+        .joinToString(",") { (idx, score) ->
+            val value = if (score.isMate) {
+                if (score.mateIn > 0) 10.0 else -10.0
+            } else {
+                score.score.toDouble().coerceIn(-10.0, 10.0)
+            }
+            """{"move":$idx,"score":$value}"""
+        }
+
+    // Generate Stockfish analysis HTML
+    val stockfishHtml = buildStockfishAnalysisHtml(uiState)
+
     return """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>$serviceName Analysis</title>
-            <style>
-                body {
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                    line-height: 1.6;
-                    padding: 16px;
-                    max-width: 800px;
-                    margin: 0 auto;
-                    background-color: #1a1a1a;
-                    color: #e0e0e0;
-                }
-                h1, h2, h3 {
-                    color: #ffffff;
-                    margin-top: 1.5em;
-                    margin-bottom: 0.5em;
-                }
-                h1 { font-size: 1.8em; border-bottom: 2px solid #6B9BFF; padding-bottom: 8px; }
-                h2 { font-size: 1.4em; color: #6B9BFF; }
-                h3 { font-size: 1.2em; color: #8BB8FF; }
-                p { margin: 1em 0; }
-                ul { padding-left: 20px; }
-                li { margin: 0.5em 0; }
-                strong { color: #ffffff; }
-                em { color: #b0b0b0; }
-                code {
-                    background-color: #2d2d2d;
-                    padding: 2px 6px;
-                    border-radius: 4px;
-                    font-family: monospace;
-                }
-            </style>
-        </head>
-        <body>
-            <h1>$serviceName Analysis</h1>
-            <p>$html</p>
-        </body>
-        </html>
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>$serviceName Analysis</title>
+    <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            padding: 16px;
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+        }
+        h1, h2, h3 {
+            color: #ffffff;
+            margin-top: 1.5em;
+            margin-bottom: 0.5em;
+        }
+        h1 { font-size: 1.8em; border-bottom: 2px solid #6B9BFF; padding-bottom: 8px; }
+        h2 { font-size: 1.4em; color: #6B9BFF; margin-top: 1em; }
+        h3 { font-size: 1.2em; color: #8BB8FF; }
+        p { margin: 1em 0; }
+        ul { padding-left: 20px; }
+        li { margin: 0.5em 0; }
+        strong { color: #ffffff; }
+        em { color: #b0b0b0; }
+
+        /* Board container */
+        .board-section {
+            margin-bottom: 24px;
+        }
+        .board-container {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            align-items: stretch;
+        }
+        .board-wrapper {
+            width: 320px;
+        }
+
+        /* Player bars */
+        .player-bar {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            background: #2d2d2d;
+            border-radius: 4px;
+            margin-bottom: 4px;
+        }
+        .player-bar.bottom { margin-top: 4px; margin-bottom: 0; }
+        .player-name { font-weight: bold; color: #fff; }
+        .player-rating { color: #888; margin-left: 8px; font-size: 0.9em; }
+        .player-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .player-indicator.white { background: #fff; border: 1px solid #666; }
+        .player-indicator.black { background: #000; border: 1px solid #666; }
+        .to-move { box-shadow: 0 0 0 2px #ff4444; }
+
+        /* Eval bar */
+        .eval-bar {
+            width: 24px;
+            background: #000;
+            border-radius: 4px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+        .eval-bar-white {
+            background: #fff;
+            transition: height 0.3s;
+        }
+        .eval-bar-black {
+            background: #333;
+            flex: 1;
+        }
+        .eval-score {
+            position: absolute;
+            width: 100%;
+            text-align: center;
+            font-size: 10px;
+            font-weight: bold;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #888;
+            text-shadow: 0 0 2px #000;
+        }
+
+        /* Analysis section */
+        .analysis-section {
+            background: #242424;
+            padding: 16px;
+            border-radius: 8px;
+            margin: 16px 0;
+        }
+
+        /* Graphs */
+        .graphs-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin: 16px 0;
+        }
+        .graph-container {
+            background: #1a1a1a;
+            border-radius: 8px;
+            padding: 12px;
+            border: 1px solid #333;
+        }
+        .graph-title {
+            font-size: 0.9em;
+            color: #888;
+            margin-bottom: 8px;
+        }
+        .graph-canvas {
+            width: 100%;
+            height: 120px;
+            background: #111;
+            border-radius: 4px;
+        }
+
+        /* Move list */
+        .moves-section {
+            background: #242424;
+            padding: 16px;
+            border-radius: 8px;
+            margin: 16px 0;
+        }
+        .moves-grid {
+            display: grid;
+            grid-template-columns: 40px 1fr 1fr;
+            gap: 4px 8px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .move-number { color: #666; text-align: right; }
+        .move { padding: 2px 6px; border-radius: 3px; }
+        .move.current { background: #4a4a00; }
+        .move.white-move { color: #fff; }
+        .move.black-move { color: #ccc; }
+
+        /* Stockfish section */
+        .stockfish-section {
+            background: #242424;
+            padding: 16px;
+            border-radius: 8px;
+            margin: 16px 0;
+        }
+        .pv-line {
+            font-family: monospace;
+            padding: 8px;
+            background: #1a1a1a;
+            border-radius: 4px;
+            margin: 4px 0;
+        }
+        .pv-score {
+            display: inline-block;
+            min-width: 60px;
+            font-weight: bold;
+        }
+        .pv-score.positive { color: #4CAF50; }
+        .pv-score.negative { color: #f44336; }
+        .pv-moves { color: #aaa; }
+
+        @media (max-width: 600px) {
+            .graphs-section { grid-template-columns: 1fr; }
+            .board-wrapper { width: 280px; }
+        }
+    </style>
+</head>
+<body>
+    <h1>$serviceName Analysis</h1>
+
+    <!-- Chess Board Section -->
+    <div class="board-section">
+        <div class="board-container">
+            <!-- Eval Bar -->
+            <div class="eval-bar" id="evalBar">
+                <div class="eval-bar-white" id="evalWhite" style="height: ${evalPercent}%;"></div>
+                <div class="eval-bar-black"></div>
+                <div class="eval-score" id="evalScore">$evalScore</div>
+            </div>
+
+            <!-- Board with player bars -->
+            <div class="board-wrapper">
+                <div class="player-bar" id="topPlayer">
+                    <div class="player-indicator ${if (flippedBoard) "white" else "black"} ${if ((flippedBoard && isWhiteToMove) || (!flippedBoard && !isWhiteToMove)) "to-move" else ""}"></div>
+                    <span class="player-name">${if (flippedBoard) whiteName else blackName}</span>
+                    <span class="player-rating">${if (flippedBoard) whiteRating else blackRating}</span>
+                </div>
+                <div id="board" style="width: 320px;"></div>
+                <div class="player-bar bottom" id="bottomPlayer">
+                    <div class="player-indicator ${if (flippedBoard) "black" else "white"} ${if ((flippedBoard && !isWhiteToMove) || (!flippedBoard && isWhiteToMove)) "to-move" else ""}"></div>
+                    <span class="player-name">${if (flippedBoard) blackName else whiteName}</span>
+                    <span class="player-rating">${if (flippedBoard) blackRating else whiteRating}</span>
+                </div>
+            </div>
+        </div>
+        <p style="text-align: center; color: #666; font-size: 0.9em; margin-top: 8px;">
+            Move ${currentMoveIndex + 1} of ${uiState.moves.size} • ${if (isWhiteToMove) "White" else "Black"} to move
+        </p>
+    </div>
+
+    <!-- AI Analysis -->
+    <div class="analysis-section">
+        <h2>$serviceName Analysis</h2>
+        <p>$analysisHtml</p>
+    </div>
+
+    <!-- Graphs -->
+    <div class="graphs-section">
+        <div class="graph-container">
+            <div class="graph-title">Score Line Graph (Preview)</div>
+            <canvas id="lineGraph" class="graph-canvas"></canvas>
+        </div>
+        <div class="graph-container">
+            <div class="graph-title">Score Line Graph (Analyse)</div>
+            <canvas id="analyseGraph" class="graph-canvas"></canvas>
+        </div>
+    </div>
+
+    <!-- Move List -->
+    <div class="moves-section">
+        <h2>Move List</h2>
+        $moveListHtml
+    </div>
+
+    <!-- Stockfish Analysis -->
+    <div class="stockfish-section">
+        <h2>Stockfish Analysis</h2>
+        $stockfishHtml
+    </div>
+
+    <script>
+        // Initialize chessboard
+        var board = Chessboard('board', {
+            position: '$fen',
+            orientation: '${if (flippedBoard) "black" else "white"}',
+            pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png'
+        });
+
+        // Draw line graphs
+        function drawLineGraph(canvasId, data, currentMove) {
+            var canvas = document.getElementById(canvasId);
+            var ctx = canvas.getContext('2d');
+            var width = canvas.width = canvas.offsetWidth * 2;
+            var height = canvas.height = canvas.offsetHeight * 2;
+            ctx.scale(2, 2);
+            var w = width / 2;
+            var h = height / 2;
+
+            // Background
+            ctx.fillStyle = '#111';
+            ctx.fillRect(0, 0, w, h);
+
+            // Draw zero line
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, h/2);
+            ctx.lineTo(w, h/2);
+            ctx.stroke();
+
+            if (data.length === 0) {
+                ctx.fillStyle = '#666';
+                ctx.font = '12px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('No data', w/2, h/2);
+                return;
+            }
+
+            // Find range
+            var maxMove = Math.max(...data.map(d => d.move));
+            var range = 7; // -7 to +7
+
+            // Draw filled area
+            ctx.beginPath();
+            ctx.moveTo(0, h/2);
+            data.forEach(function(d, i) {
+                var x = (d.move / Math.max(maxMove, 1)) * w;
+                var y = h/2 - (d.score / range) * (h/2);
+                y = Math.max(0, Math.min(h, y));
+                if (i === 0) ctx.lineTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            var lastX = (data[data.length-1].move / Math.max(maxMove, 1)) * w;
+            ctx.lineTo(lastX, h/2);
+            ctx.closePath();
+
+            // Fill with gradient
+            var gradient = ctx.createLinearGradient(0, 0, 0, h);
+            gradient.addColorStop(0, 'rgba(244, 67, 54, 0.5)');
+            gradient.addColorStop(0.5, 'rgba(100, 100, 100, 0.3)');
+            gradient.addColorStop(1, 'rgba(76, 175, 80, 0.5)');
+            ctx.fillStyle = gradient;
+            ctx.fill();
+
+            // Draw line
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            data.forEach(function(d, i) {
+                var x = (d.move / Math.max(maxMove, 1)) * w;
+                var y = h/2 - (d.score / range) * (h/2);
+                y = Math.max(0, Math.min(h, y));
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+
+            // Draw current move line
+            if (currentMove >= 0) {
+                var cx = (currentMove / Math.max(maxMove, 1)) * w;
+                ctx.strokeStyle = '#2196F3';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(cx, 0);
+                ctx.lineTo(cx, h);
+                ctx.stroke();
+            }
+        }
+
+        var previewData = [$previewScoresJson];
+        var analyseData = [$analyseScoresJson];
+        var currentMove = $currentMoveIndex;
+
+        drawLineGraph('lineGraph', previewData, currentMove);
+        drawLineGraph('analyseGraph', analyseData, currentMove);
+
+        // Resize handler
+        window.addEventListener('resize', function() {
+            board.resize();
+            drawLineGraph('lineGraph', previewData, currentMove);
+            drawLineGraph('analyseGraph', analyseData, currentMove);
+        });
+    </script>
+</body>
+</html>
     """.trimIndent()
+}
+
+/**
+ * Builds HTML for the move list.
+ */
+private fun buildMoveListHtml(uiState: GameUiState): String {
+    val moves = uiState.moveDetails
+    if (moves.isEmpty()) return "<p>No moves available</p>"
+
+    val sb = StringBuilder()
+    sb.append("<div class=\"moves-grid\">")
+
+    for (i in moves.indices step 2) {
+        val moveNum = (i / 2) + 1
+        val whiteMove = moves[i]
+        val blackMove = moves.getOrNull(i + 1)
+
+        val whiteCurrent = if (i == uiState.currentMoveIndex) "current" else ""
+        val blackCurrent = if (i + 1 == uiState.currentMoveIndex) "current" else ""
+
+        sb.append("<div class=\"move-number\">$moveNum.</div>")
+        sb.append("<div class=\"move white-move $whiteCurrent\">${whiteMove.san}</div>")
+        if (blackMove != null) {
+            sb.append("<div class=\"move black-move $blackCurrent\">${blackMove.san}</div>")
+        } else {
+            sb.append("<div></div>")
+        }
+    }
+
+    sb.append("</div>")
+    return sb.toString()
+}
+
+/**
+ * Builds HTML for the Stockfish analysis.
+ */
+private fun buildStockfishAnalysisHtml(uiState: GameUiState): String {
+    val result = uiState.analysisResult
+    if (result == null) return "<p>No Stockfish analysis available</p>"
+
+    val sb = StringBuilder()
+    sb.append("<p style=\"color: #888;\">Depth: ${result.depth} • Nodes: ${formatNodes(result.nodes)}</p>")
+
+    result.lines.forEach { line ->
+        val scoreClass = when {
+            line.isMate -> if (line.mateIn > 0) "positive" else "negative"
+            line.score >= 0 -> "positive"
+            else -> "negative"
+        }
+        val scoreText = if (line.isMate) {
+            if (line.mateIn > 0) "M${line.mateIn}" else "M${-line.mateIn}"
+        } else {
+            val s = line.score
+            if (s >= 0) "+%.2f".format(s) else "%.2f".format(s)
+        }
+
+        // Convert UCI moves to readable format (simplified)
+        val movesText = line.pv.split(" ").take(8).joinToString(" ")
+
+        sb.append("""
+            <div class="pv-line">
+                <span class="pv-score $scoreClass">$scoreText</span>
+                <span class="pv-moves">$movesText</span>
+            </div>
+        """.trimIndent())
+    }
+
+    return sb.toString()
+}
+
+/**
+ * Formats node count for display.
+ */
+private fun formatNodes(nodes: Long): String {
+    return when {
+        nodes >= 1_000_000_000 -> "%.1fB".format(nodes / 1_000_000_000.0)
+        nodes >= 1_000_000 -> "%.1fM".format(nodes / 1_000_000.0)
+        nodes >= 1_000 -> "%.1fK".format(nodes / 1_000.0)
+        else -> nodes.toString()
+    }
 }

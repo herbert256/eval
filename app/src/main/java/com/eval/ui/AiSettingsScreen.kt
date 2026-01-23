@@ -1,5 +1,9 @@
 package com.eval.ui
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -10,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -87,6 +92,8 @@ fun AiSettingsScreen(
     onSave: (AiSettings) -> Unit
 ) {
     var showAiLogos by remember { mutableStateOf(aiSettings.showAiLogos) }
+    var showExportDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     Column(
         modifier = Modifier
@@ -209,7 +216,175 @@ fun AiSettingsScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        // Export API keys button
+        if (aiSettings.hasAnyApiKey()) {
+            Button(
+                onClick = { showExportDialog = true },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF4D6BFE)
+                )
+            ) {
+                Text("Export API keys")
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
         SettingsBackButtons(onBackToSettings = onBackToSettings, onBackToGame = onBackToGame)
+    }
+
+    // Export API keys dialog
+    if (showExportDialog) {
+        ExportApiKeysDialog(
+            aiSettings = aiSettings,
+            onDismiss = { showExportDialog = false },
+            onSendEmail = { email ->
+                sendApiKeysEmail(context, email, aiSettings)
+                showExportDialog = false
+            }
+        )
+    }
+}
+
+/**
+ * Dialog for exporting API keys via email.
+ */
+@Composable
+private fun ExportApiKeysDialog(
+    aiSettings: AiSettings,
+    onDismiss: () -> Unit,
+    onSendEmail: (String) -> Unit
+) {
+    var email by remember { mutableStateOf("") }
+    var emailError by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Export API Keys",
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Enter your email address to receive the configured API keys.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+
+                Text(
+                    text = "Configured services: ${aiSettings.getConfiguredServices().joinToString { it.displayName }}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF00E676)
+                )
+
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = {
+                        email = it
+                        emailError = null
+                    },
+                    label = { Text("Email address") },
+                    singleLine = true,
+                    isError = emailError != null,
+                    supportingText = emailError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Text(
+                    text = "Warning: API keys will be sent in plain text. Make sure you trust this email address.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFFFF9800)
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (email.isBlank()) {
+                        emailError = "Email address is required"
+                    } else if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                        emailError = "Invalid email address"
+                    } else {
+                        onSendEmail(email.trim())
+                    }
+                }
+            ) {
+                Text("Send")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+/**
+ * Send API keys via email using an Intent.
+ */
+private fun sendApiKeysEmail(context: Context, email: String, aiSettings: AiSettings) {
+    val subject = "Eval App - API Keys Export"
+
+    val body = buildString {
+        appendLine("Your API keys from the Eval chess app:")
+        appendLine()
+
+        if (aiSettings.chatGptApiKey.isNotBlank()) {
+            appendLine("ChatGPT (OpenAI):")
+            appendLine("  API Key: ${aiSettings.chatGptApiKey}")
+            appendLine("  Model: ${aiSettings.chatGptModel}")
+            appendLine()
+        }
+
+        if (aiSettings.claudeApiKey.isNotBlank()) {
+            appendLine("Claude (Anthropic):")
+            appendLine("  API Key: ${aiSettings.claudeApiKey}")
+            appendLine("  Model: ${aiSettings.claudeModel}")
+            appendLine()
+        }
+
+        if (aiSettings.geminiApiKey.isNotBlank()) {
+            appendLine("Gemini (Google):")
+            appendLine("  API Key: ${aiSettings.geminiApiKey}")
+            appendLine("  Model: ${aiSettings.geminiModel}")
+            appendLine()
+        }
+
+        if (aiSettings.grokApiKey.isNotBlank()) {
+            appendLine("Grok (xAI):")
+            appendLine("  API Key: ${aiSettings.grokApiKey}")
+            appendLine("  Model: ${aiSettings.grokModel}")
+            appendLine()
+        }
+
+        if (aiSettings.deepSeekApiKey.isNotBlank()) {
+            appendLine("DeepSeek:")
+            appendLine("  API Key: ${aiSettings.deepSeekApiKey}")
+            appendLine("  Model: ${aiSettings.deepSeekModel}")
+            appendLine()
+        }
+
+        appendLine("---")
+        appendLine("Keep these keys secure and do not share them with others.")
+    }
+
+    val intent = Intent(Intent.ACTION_SENDTO).apply {
+        data = Uri.parse("mailto:")
+        putExtra(Intent.EXTRA_EMAIL, arrayOf(email))
+        putExtra(Intent.EXTRA_SUBJECT, subject)
+        putExtra(Intent.EXTRA_TEXT, body)
+    }
+
+    try {
+        context.startActivity(Intent.createChooser(intent, "Send API keys via email"))
+    } catch (e: Exception) {
+        Toast.makeText(context, "No email app found", Toast.LENGTH_SHORT).show()
     }
 }
 
