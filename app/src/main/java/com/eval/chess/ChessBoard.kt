@@ -132,6 +132,99 @@ class ChessBoard {
         return sb.toString()
     }
 
+    /**
+     * Set the board position from a FEN string.
+     * Returns true if the FEN was valid and successfully applied.
+     */
+    fun setFen(fen: String): Boolean {
+        try {
+            val parts = fen.trim().split(" ")
+            if (parts.isEmpty()) return false
+
+            // Clear the board first
+            for (i in 0..63) board[i] = null
+
+            // Parse board position (first part)
+            val ranks = parts[0].split("/")
+            if (ranks.size != 8) return false
+
+            for ((rankIndex, rankStr) in ranks.withIndex()) {
+                val rank = 7 - rankIndex  // FEN starts from rank 8 (index 7)
+                var file = 0
+                for (c in rankStr) {
+                    if (c.isDigit()) {
+                        file += c.digitToInt()
+                    } else {
+                        val piece = charToPiece(c) ?: return false
+                        if (file > 7) return false
+                        board[rank * 8 + file] = piece
+                        file++
+                    }
+                }
+                if (file != 8) return false
+            }
+
+            // Parse turn (second part)
+            turn = if (parts.size > 1) {
+                when (parts[1].lowercase()) {
+                    "w" -> PieceColor.WHITE
+                    "b" -> PieceColor.BLACK
+                    else -> PieceColor.WHITE
+                }
+            } else {
+                PieceColor.WHITE
+            }
+
+            // Parse castling rights (third part)
+            castlingRights.clear()
+            if (parts.size > 2 && parts[2] != "-") {
+                for (c in parts[2]) {
+                    if (c in "KQkq") castlingRights.add(c)
+                }
+            }
+
+            // Parse en passant square (fourth part)
+            enPassantSquare = if (parts.size > 3 && parts[3] != "-") {
+                Square.fromAlgebraic(parts[3])
+            } else {
+                null
+            }
+
+            // Parse half-move clock (fifth part)
+            halfMoveClock = if (parts.size > 4) {
+                parts[4].toIntOrNull() ?: 0
+            } else {
+                0
+            }
+
+            // Parse full move number (sixth part)
+            fullMoveNumber = if (parts.size > 5) {
+                parts[5].toIntOrNull() ?: 1
+            } else {
+                1
+            }
+
+            lastMove = null
+            return true
+        } catch (e: Exception) {
+            return false
+        }
+    }
+
+    private fun charToPiece(c: Char): Piece? {
+        val color = if (c.isUpperCase()) PieceColor.WHITE else PieceColor.BLACK
+        val type = when (c.lowercaseChar()) {
+            'k' -> PieceType.KING
+            'q' -> PieceType.QUEEN
+            'r' -> PieceType.ROOK
+            'b' -> PieceType.BISHOP
+            'n' -> PieceType.KNIGHT
+            'p' -> PieceType.PAWN
+            else -> return null
+        }
+        return Piece(type, color)
+    }
+
     private fun pieceToChar(piece: Piece): Char {
         val c = when (piece.type) {
             PieceType.KING -> 'k'

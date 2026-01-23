@@ -373,10 +373,68 @@ private fun RetrieveMainScreen(
                 onClick = onOpeningClick,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF6B8E23)
+                    containerColor = Color(0xFF3A5A7C)
                 )
             ) {
                 Text("Start with opening")
+            }
+
+            // Button to start from FEN position
+            var showFenDialog by remember { mutableStateOf(false) }
+            var fenInput by remember { mutableStateOf("") }
+
+            Button(
+                onClick = { showFenDialog = true },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF3A5A7C)
+                )
+            ) {
+                Text("Start from FEN position")
+            }
+
+            // FEN input dialog
+            if (showFenDialog) {
+                AlertDialog(
+                    onDismissRequest = { showFenDialog = false },
+                    title = { Text("Enter FEN position") },
+                    text = {
+                        Column {
+                            Text(
+                                "Paste or type a FEN string:",
+                                color = Color.Gray,
+                                fontSize = 14.sp
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedTextField(
+                                value = fenInput,
+                                onValueChange = { fenInput = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = { Text("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1") },
+                                singleLine = false,
+                                maxLines = 3
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                if (fenInput.isNotBlank()) {
+                                    viewModel.startFromFen(fenInput.trim())
+                                    showFenDialog = false
+                                    fenInput = ""
+                                }
+                            }
+                        ) {
+                            Text("Start")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showFenDialog = false }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
             }
 
             HorizontalDivider(color = Color(0xFF404040), modifier = Modifier.padding(vertical = 8.dp))

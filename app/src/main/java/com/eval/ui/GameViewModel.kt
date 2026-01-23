@@ -823,6 +823,85 @@ ${opening.moves} *
         }
     }
 
+    /**
+     * Start Manual stage directly from a FEN position.
+     * No PGN, no move list, no graphs - just board analysis.
+     */
+    fun startFromFen(fen: String) {
+        // Validate FEN by trying to set up the board
+        val board = com.eval.chess.ChessBoard()
+        if (!board.setFen(fen)) {
+            _uiState.value = _uiState.value.copy(
+                errorMessage = "Invalid FEN position"
+            )
+            return
+        }
+
+        // Create a minimal game object for FEN analysis
+        val lichessGame = com.eval.data.LichessGame(
+            id = "fen_${System.currentTimeMillis()}",
+            rated = false,
+            variant = "standard",
+            speed = "classical",
+            perf = null,
+            status = "*",  // Ongoing/study
+            winner = null,
+            players = com.eval.data.Players(
+                white = com.eval.data.Player(
+                    user = com.eval.data.User(name = "White", id = "white"),
+                    rating = null,
+                    aiLevel = null
+                ),
+                black = com.eval.data.Player(
+                    user = com.eval.data.User(name = "Black", id = "black"),
+                    rating = null,
+                    aiLevel = null
+                )
+            ),
+            pgn = "[FEN \"$fen\"]\n\n*",
+            moves = null,
+            clock = null,
+            createdAt = System.currentTimeMillis(),
+            lastMoveAt = null
+        )
+
+        // Determine if it's white or black to move from FEN
+        val isWhiteToMove = board.getTurn() == com.eval.chess.PieceColor.WHITE
+
+        // Hide retrieve screen and go directly to Manual stage
+        _uiState.value = _uiState.value.copy(
+            showRetrieveScreen = false,
+            isLoading = false,
+            game = lichessGame,
+            openingName = null,
+            currentOpeningName = null,
+            moves = emptyList(),
+            moveDetails = emptyList(),
+            currentBoard = board,
+            currentMoveIndex = -1,
+            flippedBoard = !isWhiteToMove,  // Flip board if black to move
+            userPlayedBlack = !isWhiteToMove,
+            previewScores = emptyMap(),
+            analyseScores = emptyMap(),
+            currentStage = AnalysisStage.MANUAL,
+            autoAnalysisIndex = -1,
+            isExploringLine = false,
+            exploringLineMoves = emptyList(),
+            exploringLineMoveIndex = -1,
+            savedGameMoveIndex = -1,
+            analysisResult = null,
+            analysisResultFen = null
+        )
+
+        // Configure Stockfish for Manual stage and start analysis
+        viewModelScope.launch {
+            if (_uiState.value.stockfishReady) {
+                analysisOrchestrator.configureForManualStage()
+                analysisOrchestrator.restartAnalysisForExploringLine()
+            }
+        }
+    }
+
     fun updateStockfishSettings(settings: StockfishSettings) {
         saveStockfishSettings(settings)
         _uiState.value = _uiState.value.copy(stockfishSettings = settings)
