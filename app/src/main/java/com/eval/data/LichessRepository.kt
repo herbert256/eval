@@ -2,6 +2,9 @@ package com.eval.data
 
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 
 sealed class Result<out T> {
@@ -1060,6 +1063,84 @@ class ChessRepository(
     }
 
     /**
+     * Stream a live Lichess game as a Flow of events.
+     * This is for continuous following of a live game.
+     *
+     * @param gameId The Lichess game ID
+     * @return Flow of LiveGameEvent
+     */
+    fun streamLiveGame(gameId: String): Flow<LiveGameEvent> = flow {
+        try {
+            emit(LiveGameEvent.Connected)
+
+            val response = lichessApi.streamGame(gameId)
+
+            if (!response.isSuccessful) {
+                emit(LiveGameEvent.Error("Failed to connect: ${response.code()}"))
+                emit(LiveGameEvent.Disconnected)
+                return@flow
+            }
+
+            val responseBody = response.body()
+            if (responseBody == null) {
+                emit(LiveGameEvent.Error("No stream data"))
+                emit(LiveGameEvent.Disconnected)
+                return@flow
+            }
+
+            val reader = responseBody.source()
+            var isFirstLine = true
+            var isSecondLine = true
+
+            try {
+                while (!reader.exhausted()) {
+                    val line = reader.readUtf8Line() ?: break
+                    if (line.isBlank()) continue
+
+                    if (isFirstLine) {
+                        // First line is game info
+                        try {
+                            val gameInfo = gson.fromJson(line, StreamGameInfo::class.java)
+                            emit(LiveGameEvent.GameInfo(gameInfo))
+                        } catch (e: Exception) {
+                            emit(LiveGameEvent.Error("Failed to parse game info"))
+                        }
+                        isFirstLine = false
+                    } else if (isSecondLine) {
+                        // Second line is starting position, skip it
+                        isSecondLine = false
+                    } else {
+                        // Subsequent lines are moves
+                        try {
+                            val moveData = gson.fromJson(line, StreamMoveData::class.java)
+                            if (moveData.lm != null) {
+                                emit(LiveGameEvent.Move(moveData))
+                            }
+                        } catch (e: Exception) {
+                            // May be game end info or other data
+                            // Check for game end
+                            if (line.contains("\"status\":") && (line.contains("\"winner\":") || line.contains("draw"))) {
+                                try {
+                                    val endData = gson.fromJson(line, GameEndData::class.java)
+                                    emit(LiveGameEvent.GameEnd(endData.winner, endData.status))
+                                } catch (ignored: Exception) {}
+                            }
+                        }
+                    }
+                }
+            } catch (e: java.io.IOException) {
+                // Stream closed, possibly game ended
+            }
+
+            responseBody.close()
+            emit(LiveGameEvent.Disconnected)
+        } catch (e: Exception) {
+            emit(LiveGameEvent.Error(e.message ?: "Stream error"))
+            emit(LiveGameEvent.Disconnected)
+        }
+    }.flowOn(Dispatchers.IO)
+
+    /**
      * Build a minimal PGN from UCI moves
      */
     private fun buildPgnFromMoves(moves: List<String>, gameInfo: StreamGameInfo): String {
@@ -1145,6 +1226,32 @@ class ChessRepository(
             Result.Success(result)
         } catch (e: Exception) {
             Result.Error(e.message ?: "Unknown error occurred")
+        }
+    }
+
+    /**
+     * Get opening explorer data for a position.
+     */
+    suspend fun getOpeningExplorer(fen: String): Result<OpeningExplorerResponse> = withContext(Dispatchers.IO) {
+        try {
+            val response = openingExplorerApi.getLichessOpeningExplorer(fen)
+            if (response.isSuccessful && response.body() != null) {
+                Result.Success(response.body()!!)
+            } else {
+                Result.Error("Failed to fetch opening data: ${response.code()}")
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Unknown error fetching opening data")
+        }
+    }
+
+    companion object {
+        private val openingExplorerApi: OpeningExplorerApi by lazy {
+            retrofit2.Retrofit.Builder()
+                .baseUrl("https://explorer.lichess.org/")
+                .addConverterFactory(retrofit2.converter.gson.GsonConverterFactory.create())
+                .build()
+                .create(OpeningExplorerApi::class.java)
         }
     }
 }
@@ -1282,4 +1389,24 @@ data class StreamMoveData(
     val lm: String?,  // Last move in UCI format
     val wc: Int?,     // White clock in seconds
     val bc: Int?      // Black clock in seconds
+)
+
+/**
+ * Event emitted during live game streaming
+ */
+sealed class LiveGameEvent {
+    data class GameInfo(val info: StreamGameInfo) : LiveGameEvent()
+    data class Move(val data: StreamMoveData) : LiveGameEvent()
+    data class GameEnd(val winner: String?, val status: String?) : LiveGameEvent()
+    data class Error(val message: String) : LiveGameEvent()
+    object Connected : LiveGameEvent()
+    object Disconnected : LiveGameEvent()
+}
+
+/**
+ * Game end data from stream
+ */
+data class GameEndData(
+    val winner: String?,
+    val status: String?
 )

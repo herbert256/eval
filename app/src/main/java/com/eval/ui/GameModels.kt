@@ -159,6 +159,7 @@ data class ManualStageVisibility(
     val showResultBar: Boolean = true,
     val showScoreLineGraph: Boolean = true,
     val showScoreBarsGraph: Boolean = true,
+    val showTimeGraph: Boolean = true,
     val showMoveList: Boolean = true,
     val showGameInfo: Boolean = false,
     val showPgn: Boolean = false
@@ -174,8 +175,30 @@ data class InterfaceVisibilitySettings(
 // General app settings
 data class GeneralSettings(
     val longTapForFullScreen: Boolean = false,
-    val paginationPageSize: Int = 10
+    val paginationPageSize: Int = 10,
+    val moveSoundsEnabled: Boolean = true
 )
+
+// Move quality assessment based on evaluation change
+enum class MoveQuality(val symbol: String, val color: Long) {
+    BRILLIANT("!!", 0xFF00BCD4),   // Cyan - exceptional move
+    GOOD("!", 0xFF4CAF50),         // Green - good move
+    INTERESTING("!?", 0xFF8BC34A), // Light green - interesting choice
+    DUBIOUS("?!", 0xFFFF9800),     // Orange - questionable move
+    MISTAKE("?", 0xFFFF5722),      // Deep orange - mistake
+    BLUNDER("??", 0xFFF44336),     // Red - severe error
+    BOOK("", 0xFFA0522D),          // Brown - book move
+    NORMAL("", 0x00000000)         // No symbol - neutral move
+}
+
+// Thresholds for move quality assessment (in pawns)
+object MoveQualityThresholds {
+    const val BLUNDER = 2.0f      // Loss >= 2 pawns
+    const val MISTAKE = 1.0f      // Loss 1-2 pawns
+    const val DUBIOUS = 0.5f      // Loss 0.5-1 pawn
+    const val GOOD = 0.3f         // Found improvement >= 0.3 pawns
+    const val BRILLIANT = 1.0f    // Found very strong move with gain >= 1 pawn
+}
 
 data class MoveScore(
     val score: Float,
@@ -228,6 +251,7 @@ data class GameUiState(
     // Currently loaded game
     val game: LichessGame? = null,
     val openingName: String? = null,  // Extracted from PGN headers
+    val currentOpeningName: String? = null,  // Dynamically calculated from current move position
     val currentBoard: ChessBoard = ChessBoard(),
     val moves: List<String> = emptyList(),
     val moveDetails: List<MoveDetails> = emptyList(),
@@ -257,6 +281,7 @@ data class GameUiState(
     val autoAnalysisIndex: Int = -1,
     val previewScores: Map<Int, MoveScore> = emptyMap(),     // Preview stage scores
     val analyseScores: Map<Int, MoveScore> = emptyMap(),     // Analyse stage scores
+    val moveQualities: Map<Int, MoveQuality> = emptyMap(),   // Move quality assessments
     val autoAnalysisCurrentScore: MoveScore? = null,
     val remainingAnalysisMoves: List<Int> = emptyList(),
     // Lichess settings
@@ -292,6 +317,12 @@ data class GameUiState(
     // AI Analysis settings and state
     val aiSettings: AiSettings = AiSettings(),
     val showAiAnalysisDialog: Boolean = false,
+    // Share position dialog
+    val showSharePositionDialog: Boolean = false,
+    // Opening Explorer
+    val openingExplorerData: com.eval.data.OpeningExplorerResponse? = null,
+    val openingExplorerLoading: Boolean = false,
+    val showOpeningExplorer: Boolean = true,
     val aiAnalysisResult: AiAnalysisResponse? = null,
     val aiAnalysisLoading: Boolean = false,
     val aiAnalysisServiceName: String = "",
@@ -364,5 +395,13 @@ data class GameUiState(
     val selectedPgnEvent: String? = null,
     val pgnGamesForSelectedEvent: List<LichessGame> = emptyList(),
     // Google search for player (when activeServer is null)
-    val googleSearchPlayerName: String? = null
+    val googleSearchPlayerName: String? = null,
+    // GIF export state
+    val gifExportProgress: Float? = null,
+    val showGifExportDialog: Boolean = false,
+    // Live game following state
+    val isLiveGame: Boolean = false,
+    val liveGameId: String? = null,
+    val autoFollowLive: Boolean = true,
+    val liveStreamConnected: Boolean = false
 )

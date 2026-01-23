@@ -235,6 +235,55 @@ fun GameScreen(
         )
     }
 
+    // Show share position dialog
+    if (uiState.showSharePositionDialog) {
+        SharePositionDialog(
+            fen = viewModel.getCurrentFen(),
+            onCopyFen = { viewModel.copyFenToClipboard(context) },
+            onShare = { viewModel.sharePositionAsText(context) },
+            onExportPgn = { viewModel.exportAnnotatedPgn(context) },
+            onCopyPgn = { viewModel.copyPgnToClipboard(context) },
+            onExportGif = { viewModel.exportAsGif(context) },
+            onDismiss = { viewModel.hideSharePositionDialog() }
+        )
+    }
+
+    // Show GIF export progress dialog
+    if (uiState.showGifExportDialog) {
+        AlertDialog(
+            onDismissRequest = { viewModel.cancelGifExport() },
+            title = { Text("Exporting GIF", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    CircularProgressIndicator(
+                        progress = { uiState.gifExportProgress ?: 0f },
+                        modifier = Modifier.size(64.dp),
+                        strokeWidth = 6.dp
+                    )
+                    Text(
+                        text = "Creating animated GIF...",
+                        color = Color.Gray
+                    )
+                    Text(
+                        text = "${((uiState.gifExportProgress ?: 0f) * 100).toInt()}%",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp
+                    )
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { viewModel.cancelGifExport() }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     // Show AI analysis screen (full screen)
     if (uiState.showAiAnalysisDialog) {
         AiAnalysisScreen(
@@ -2296,4 +2345,142 @@ private fun formatNodes(nodes: Long): String {
         nodes >= 1_000 -> "%.1fK".format(nodes / 1_000.0)
         else -> nodes.toString()
     }
+}
+
+/**
+ * Dialog for sharing the current position.
+ */
+@Composable
+fun SharePositionDialog(
+    fen: String,
+    onCopyFen: () -> Unit,
+    onShare: () -> Unit,
+    onExportPgn: () -> Unit,
+    onCopyPgn: () -> Unit,
+    onExportGif: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Share / Export",
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // FEN display
+                Text(
+                    text = "FEN:",
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFFAAAAAA)
+                )
+                Text(
+                    text = fen,
+                    fontSize = 12.sp,
+                    color = Color.White,
+                    modifier = Modifier
+                        .background(Color(0xFF1A1A1A), RoundedCornerShape(4.dp))
+                        .padding(8.dp)
+                        .fillMaxWidth()
+                )
+
+                // Copy FEN button
+                Button(
+                    onClick = {
+                        onCopyFen()
+                        onDismiss()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF404040)
+                    )
+                ) {
+                    Text("Copy FEN to Clipboard")
+                }
+
+                // Share button
+                Button(
+                    onClick = {
+                        onShare()
+                        onDismiss()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF404040)
+                    )
+                ) {
+                    Text("Share Position")
+                }
+
+                HorizontalDivider(color = Color(0xFF404040))
+
+                Text(
+                    text = "Annotated PGN (with evaluations):",
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFFAAAAAA)
+                )
+
+                // Copy PGN button
+                Button(
+                    onClick = {
+                        onCopyPgn()
+                        onDismiss()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF404040)
+                    )
+                ) {
+                    Text("Copy PGN to Clipboard")
+                }
+
+                // Export PGN button
+                Button(
+                    onClick = {
+                        onExportPgn()
+                        onDismiss()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Text("Share Annotated PGN")
+                }
+
+                HorizontalDivider(color = Color(0xFF404040))
+
+                Text(
+                    text = "Animated Game Replay:",
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFFAAAAAA)
+                )
+
+                // Export GIF button
+                Button(
+                    onClick = {
+                        onExportGif()
+                        onDismiss()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF6B8E23) // Olive/green color
+                    )
+                ) {
+                    Text("Export as Animated GIF")
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }

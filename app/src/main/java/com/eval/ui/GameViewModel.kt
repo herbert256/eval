@@ -15,6 +15,8 @@ import com.eval.data.LichessGame
 import com.eval.data.Result
 import com.google.gson.Gson
 import com.eval.stockfish.StockfishEngine
+import com.eval.audio.MoveSoundPlayer
+import com.eval.data.OpeningBook
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -32,6 +34,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     // Helper classes for settings and game storage
     private val settingsPrefs = SettingsPreferences(prefs)
     private val gameStorage = GameStorageManager(prefs, gson)
+
+    // Move sound player for audio feedback
+    private val moveSoundPlayer = MoveSoundPlayer(application)
 
     private val _uiState = MutableStateFlow(GameUiState())
     val uiState: StateFlow<GameUiState> = _uiState.asStateFlow()
@@ -1168,6 +1173,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 currentBoard = newBoard,
                 exploringLineMoveIndex = index
             )
+            playMoveSound()
         } else {
             val moves = _uiState.value.moves
             if (index < -1 || index >= moves.size) return
@@ -1176,6 +1182,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 currentBoard = newBoard,
                 currentMoveIndex = index
             )
+            playMoveSound(index)
         }
         // Pass the exact board we just set to avoid any race conditions
         analyzePosition(newBoard)
@@ -1205,11 +1212,17 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val fenToAnalyze = board.getFen()
             currentAnalysisFen = fenToAnalyze
 
+            // Update opening name for current position
+            val openingName = if (validIndex >= 0 && _uiState.value.moves.isNotEmpty()) {
+                OpeningBook.getOpeningName(_uiState.value.moves, validIndex)
+            } else null
+
             // Update UI state - keep analysisResult to avoid UI jumping, just clear the FEN
             // The card will stay visible with old content until new results arrive
             _uiState.value = _uiState.value.copy(
                 currentMoveIndex = validIndex,
                 currentBoard = board.copy(),
+                currentOpeningName = openingName,
                 analysisResultFen = null  // Mark as stale, but keep result for UI stability
             )
 
@@ -1223,6 +1236,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             // Start fresh analysis
             if (_uiState.value.currentStage == AnalysisStage.MANUAL) {
                 ensureStockfishAnalysis(fenToAnalyze, thisRequestId)
+                // Fetch opening explorer data for current position
+                fetchOpeningExplorer()
             }
         }
     }
@@ -1240,17 +1255,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 currentBoard = newBoard,
                 exploringLineMoveIndex = newIndex
             )
+            playMoveSound()
             // Use full restart for proper Stockfish analysis
             restartAnalysisForExploringLine()
         } else {
             val currentIndex = _uiState.value.currentMoveIndex
             val moves = _uiState.value.moves
             if (currentIndex >= moves.size - 1) return
+            val newIndex = currentIndex + 1
+            playMoveSound(newIndex)
             // In manual stage, use restartAnalysisAtMove for reliable sync
             if (_uiState.value.currentStage == AnalysisStage.MANUAL) {
-                restartAnalysisAtMove(currentIndex + 1)
+                restartAnalysisAtMove(newIndex)
             } else {
-                val newIndex = currentIndex + 1
                 val newBoard = boardHistory.getOrNull(newIndex + 1)?.copy() ?: _uiState.value.currentBoard
                 _uiState.value = _uiState.value.copy(
                     currentBoard = newBoard,
@@ -1273,16 +1290,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 currentBoard = newBoard,
                 exploringLineMoveIndex = newIndex
             )
+            playMoveSound()
             // Use full restart for proper Stockfish analysis
             restartAnalysisForExploringLine()
         } else {
             val currentIndex = _uiState.value.currentMoveIndex
             if (currentIndex < 0) return
+            val newIndex = currentIndex - 1
+            playMoveSound(newIndex)
             // In manual stage, use restartAnalysisAtMove for reliable sync
             if (_uiState.value.currentStage == AnalysisStage.MANUAL) {
-                restartAnalysisAtMove(currentIndex - 1)
+                restartAnalysisAtMove(newIndex)
             } else {
-                val newIndex = currentIndex - 1
                 val newBoard = boardHistory.getOrNull(newIndex + 1)?.copy() ?: ChessBoard()
                 _uiState.value = _uiState.value.copy(
                     currentBoard = newBoard,
@@ -1362,6 +1381,41 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(flippedBoard = !_uiState.value.flippedBoard)
     }
 
+    /**
+     * Play move sound if enabled in settings.
+     * @param moveIndex The index of the move to get sound info from
+     */
+    private fun playMoveSound(moveIndex: Int = -1) {
+        if (!_uiState.value.generalSettings.moveSoundsEnabled) return
+
+        val moveDetails = _uiState.value.moveDetails.getOrNull(moveIndex)
+        if (moveDetails != null) {
+            val isCastle = moveDetails.pieceType == "K" &&
+                kotlin.math.abs(moveDetails.from[0] - moveDetails.to[0]) > 1
+            moveSoundPlayer.playMove(
+                isCapture = moveDetails.isCapture,
+                isCheck = false, // We don't track check status in MoveDetails
+                isCastle = isCastle
+            )
+        } else {
+            moveSoundPlayer.playMoveSound()
+        }
+    }
+
+    /**
+     * Update the current opening name based on the move index.
+     * Uses the OpeningBook to find the best matching opening.
+     */
+    private fun updateCurrentOpeningName(moveIndex: Int) {
+        val moves = _uiState.value.moves
+        val openingName = if (moveIndex >= 0 && moves.isNotEmpty()) {
+            OpeningBook.getOpeningName(moves, moveIndex)
+        } else {
+            null
+        }
+        _uiState.value = _uiState.value.copy(currentOpeningName = openingName)
+    }
+
     fun cycleArrowMode() {
         val currentSettings = _uiState.value.stockfishSettings
         val currentMode = currentSettings.manualStage.arrowMode
@@ -1375,6 +1429,432 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         )
         saveStockfishSettings(newSettings)
         _uiState.value = _uiState.value.copy(stockfishSettings = newSettings)
+    }
+
+    /**
+     * Show the share position dialog.
+     */
+    fun showSharePositionDialog() {
+        _uiState.value = _uiState.value.copy(showSharePositionDialog = true)
+    }
+
+    /**
+     * Hide the share position dialog.
+     */
+    fun hideSharePositionDialog() {
+        _uiState.value = _uiState.value.copy(showSharePositionDialog = false)
+    }
+
+    /**
+     * Get the current position's FEN string.
+     */
+    fun getCurrentFen(): String {
+        return _uiState.value.currentBoard.getFen()
+    }
+
+    /**
+     * Copy the current FEN to clipboard.
+     */
+    fun copyFenToClipboard(context: android.content.Context) {
+        val fen = getCurrentFen()
+        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        val clip = android.content.ClipData.newPlainText("Chess FEN", fen)
+        clipboard.setPrimaryClip(clip)
+    }
+
+    /**
+     * Share the current position as text (FEN and analysis).
+     */
+    fun sharePositionAsText(context: android.content.Context) {
+        val fen = getCurrentFen()
+        val moveIndex = _uiState.value.currentMoveIndex
+        val game = _uiState.value.game
+        val analysis = _uiState.value.analysisResult
+
+        val shareText = buildString {
+            if (game != null) {
+                appendLine("${game.players.white.user?.name ?: "White"} vs ${game.players.black.user?.name ?: "Black"}")
+                appendLine()
+            }
+            appendLine("Position after move ${(moveIndex + 2) / 2}${if (moveIndex % 2 == 0) "." else "..."}")
+            appendLine()
+            appendLine("FEN: $fen")
+            if (analysis != null && analysis.lines.isNotEmpty()) {
+                val topLine = analysis.lines.first()
+                val evalText = if (topLine.isMate) {
+                    "Mate in ${kotlin.math.abs(topLine.mateIn)}"
+                } else {
+                    "%.2f".format(topLine.score)
+                }
+                appendLine()
+                appendLine("Evaluation: $evalText (depth ${analysis.depth})")
+                appendLine("Best move: ${topLine.pv.split(" ").firstOrNull() ?: "N/A"}")
+            }
+            appendLine()
+            appendLine("Analyze at: https://lichess.org/analysis/$fen")
+        }
+
+        val sendIntent = android.content.Intent().apply {
+            action = android.content.Intent.ACTION_SEND
+            putExtra(android.content.Intent.EXTRA_TEXT, shareText)
+            type = "text/plain"
+        }
+        val shareIntent = android.content.Intent.createChooser(sendIntent, "Share position")
+        context.startActivity(shareIntent)
+    }
+
+    /**
+     * Fetch opening explorer data for the current position (debounced).
+     */
+    private var openingExplorerJob: Job? = null
+    fun fetchOpeningExplorer() {
+        openingExplorerJob?.cancel()
+        openingExplorerJob = viewModelScope.launch {
+            delay(500) // Debounce to avoid excessive API calls
+            _uiState.value = _uiState.value.copy(openingExplorerLoading = true)
+
+            val fen = _uiState.value.currentBoard.getFen()
+            when (val result = repository.getOpeningExplorer(fen)) {
+                is com.eval.data.Result.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        openingExplorerData = result.data,
+                        openingExplorerLoading = false
+                    )
+                }
+                is com.eval.data.Result.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        openingExplorerData = null,
+                        openingExplorerLoading = false
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Toggle showing the opening explorer panel.
+     */
+    fun toggleOpeningExplorer() {
+        _uiState.value = _uiState.value.copy(
+            showOpeningExplorer = !_uiState.value.showOpeningExplorer
+        )
+    }
+
+    /**
+     * Export the current game as annotated PGN.
+     */
+    fun exportAnnotatedPgn(context: android.content.Context) {
+        val game = _uiState.value.game ?: return
+        val moveDetails = _uiState.value.moveDetails
+        val analyseScores = _uiState.value.analyseScores
+        val moveQualities = _uiState.value.moveQualities
+        val openingName = _uiState.value.currentOpeningName ?: _uiState.value.openingName
+
+        val pgn = com.eval.export.PgnExporter.exportAnnotatedPgn(
+            game = game,
+            moveDetails = moveDetails,
+            analyseScores = analyseScores,
+            moveQualities = moveQualities,
+            openingName = openingName
+        )
+
+        // Share the PGN
+        val sendIntent = android.content.Intent().apply {
+            action = android.content.Intent.ACTION_SEND
+            putExtra(android.content.Intent.EXTRA_TEXT, pgn)
+            putExtra(android.content.Intent.EXTRA_SUBJECT, "Chess Game PGN - ${game.players.white.user?.name} vs ${game.players.black.user?.name}")
+            type = "text/plain"
+        }
+        val shareIntent = android.content.Intent.createChooser(sendIntent, "Export PGN")
+        context.startActivity(shareIntent)
+    }
+
+    /**
+     * Copy annotated PGN to clipboard.
+     */
+    fun copyPgnToClipboard(context: android.content.Context) {
+        val game = _uiState.value.game ?: return
+        val moveDetails = _uiState.value.moveDetails
+        val analyseScores = _uiState.value.analyseScores
+        val moveQualities = _uiState.value.moveQualities
+        val openingName = _uiState.value.currentOpeningName ?: _uiState.value.openingName
+
+        val pgn = com.eval.export.PgnExporter.exportAnnotatedPgn(
+            game = game,
+            moveDetails = moveDetails,
+            analyseScores = analyseScores,
+            moveQualities = moveQualities,
+            openingName = openingName
+        )
+
+        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        val clip = android.content.ClipData.newPlainText("Chess PGN", pgn)
+        clipboard.setPrimaryClip(clip)
+    }
+
+    /**
+     * Export the game as an animated GIF.
+     */
+    fun exportAsGif(context: android.content.Context) {
+        val game = _uiState.value.game ?: return
+        val moveDetails = _uiState.value.moveDetails
+        val analyseScores = _uiState.value.analyseScores.ifEmpty { _uiState.value.previewScores }
+
+        // Show progress dialog
+        _uiState.value = _uiState.value.copy(
+            showGifExportDialog = true,
+            gifExportProgress = 0f
+        )
+
+        viewModelScope.launch {
+            try {
+                // Build list of board positions
+                val boards = mutableListOf<com.eval.chess.ChessBoard>()
+                var board = com.eval.chess.ChessBoard()
+                boards.add(board.copy())
+
+                for (i in moveDetails.indices) {
+                    val move = moveDetails[i]
+                    val success = board.makeMove(move.san)
+                    if (success) {
+                        boards.add(board.copy())
+                    }
+                }
+
+                // Create scores map for boards (index 0 is starting position)
+                val boardScores = mutableMapOf<Int, MoveScore>()
+                analyseScores.forEach { (moveIndex, score) ->
+                    // Board at moveIndex+1 is after move moveIndex
+                    boardScores[moveIndex + 1] = score
+                }
+
+                // Export GIF with annotations
+                val moves = moveDetails.map { it.san }
+                val file = com.eval.export.GifExporter.exportAsGifWithAnnotations(
+                    context = context,
+                    boards = boards,
+                    moves = moves,
+                    scores = boardScores,
+                    frameDelay = 1000, // 1 second per frame
+                    callback = object : com.eval.export.GifExporter.ProgressCallback {
+                        override fun onProgress(current: Int, total: Int) {
+                            _uiState.value = _uiState.value.copy(
+                                gifExportProgress = current.toFloat() / total
+                            )
+                        }
+                    }
+                )
+
+                // Hide progress dialog
+                _uiState.value = _uiState.value.copy(
+                    showGifExportDialog = false,
+                    gifExportProgress = null
+                )
+
+                // Share the GIF
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    file
+                )
+
+                val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                    type = "image/gif"
+                    putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                context.startActivity(android.content.Intent.createChooser(shareIntent, "Share GIF"))
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    showGifExportDialog = false,
+                    gifExportProgress = null,
+                    errorMessage = "GIF export failed: ${e.message}"
+                )
+            }
+        }
+    }
+
+    fun cancelGifExport() {
+        _uiState.value = _uiState.value.copy(
+            showGifExportDialog = false,
+            gifExportProgress = null
+        )
+    }
+
+    // Live game following
+    private var liveGameJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * Start following a live game.
+     */
+    fun startLiveFollow(gameId: String) {
+        // Cancel any existing live follow
+        stopLiveFollow()
+
+        _uiState.value = _uiState.value.copy(
+            isLiveGame = true,
+            liveGameId = gameId,
+            liveStreamConnected = false
+        )
+
+        liveGameJob = viewModelScope.launch {
+            repository.streamLiveGame(gameId).collect { event ->
+                when (event) {
+                    is com.eval.data.LiveGameEvent.Connected -> {
+                        _uiState.value = _uiState.value.copy(liveStreamConnected = true)
+                    }
+                    is com.eval.data.LiveGameEvent.Disconnected -> {
+                        _uiState.value = _uiState.value.copy(liveStreamConnected = false)
+                    }
+                    is com.eval.data.LiveGameEvent.GameInfo -> {
+                        // Initial game info received
+                    }
+                    is com.eval.data.LiveGameEvent.Move -> {
+                        // New move received
+                        handleLiveMove(event.data)
+                    }
+                    is com.eval.data.LiveGameEvent.GameEnd -> {
+                        // Game ended
+                        _uiState.value = _uiState.value.copy(
+                            isLiveGame = false,
+                            liveStreamConnected = false
+                        )
+                        // Update game status
+                        val currentGame = _uiState.value.game
+                        if (currentGame != null) {
+                            _uiState.value = _uiState.value.copy(
+                                game = currentGame.copy(
+                                    winner = event.winner,
+                                    status = event.status ?: "ended"
+                                )
+                            )
+                        }
+                    }
+                    is com.eval.data.LiveGameEvent.Error -> {
+                        // Handle error - could retry or notify user
+                        _uiState.value = _uiState.value.copy(
+                            errorMessage = "Live stream: ${event.message}"
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Handle a new move from the live stream.
+     */
+    private fun handleLiveMove(moveData: com.eval.data.StreamMoveData) {
+        val uciMove = moveData.lm ?: return
+        val currentMoves = _uiState.value.moves.toMutableList()
+        val currentMoveDetails = _uiState.value.moveDetails.toMutableList()
+
+        // Add the new UCI move to the moves list
+        currentMoves.add(uciMove)
+
+        // Parse the move to get SAN and other details
+        val board = _uiState.value.currentBoard.copy()
+        val from = uciMove.substring(0, 2)
+        val to = uciMove.substring(2, 4)
+        val fromSquare = com.eval.chess.Square.fromAlgebraic(from)
+        val toSquare = com.eval.chess.Square.fromAlgebraic(to)
+
+        if (fromSquare != null && toSquare != null) {
+            val piece = board.getPiece(fromSquare)
+            val isCapture = board.getPiece(toSquare) != null
+
+            // Make the move on the board
+            val promotion = if (uciMove.length > 4) {
+                when (uciMove[4]) {
+                    'q' -> com.eval.chess.PieceType.QUEEN
+                    'r' -> com.eval.chess.PieceType.ROOK
+                    'b' -> com.eval.chess.PieceType.BISHOP
+                    'n' -> com.eval.chess.PieceType.KNIGHT
+                    else -> null
+                }
+            } else null
+
+            board.makeMoveFromSquares(fromSquare, toSquare, promotion)
+
+            // Create move details
+            val pieceType = when (piece?.type) {
+                com.eval.chess.PieceType.KING -> "K"
+                com.eval.chess.PieceType.QUEEN -> "Q"
+                com.eval.chess.PieceType.ROOK -> "R"
+                com.eval.chess.PieceType.BISHOP -> "B"
+                com.eval.chess.PieceType.KNIGHT -> "N"
+                com.eval.chess.PieceType.PAWN -> "P"
+                else -> "P"
+            }
+
+            // Format clock time
+            val clockTime = if (currentMoves.size % 2 == 1) {
+                // White's move, show black's clock time after
+                moveData.bc?.let { formatClockSeconds(it) }
+            } else {
+                // Black's move, show white's clock time after
+                moveData.wc?.let { formatClockSeconds(it) }
+            }
+
+            val moveDetail = MoveDetails(
+                san = uciMove, // We'll use UCI since converting to SAN is complex
+                from = from,
+                to = to,
+                isCapture = isCapture,
+                pieceType = pieceType,
+                clockTime = clockTime
+            )
+            currentMoveDetails.add(moveDetail)
+
+            // Update state
+            val autoFollow = _uiState.value.autoFollowLive
+            val newMoveIndex = if (autoFollow) currentMoves.size - 1 else _uiState.value.currentMoveIndex
+
+            _uiState.value = _uiState.value.copy(
+                moves = currentMoves,
+                moveDetails = currentMoveDetails,
+                currentMoveIndex = newMoveIndex,
+                currentBoard = if (autoFollow) board else _uiState.value.currentBoard
+            )
+
+            // Play move sound
+            if (_uiState.value.generalSettings.moveSoundsEnabled && autoFollow) {
+                moveSoundPlayer.playMove(isCapture = isCapture, isCheck = false, isCastle = false)
+            }
+        }
+    }
+
+    private fun formatClockSeconds(seconds: Int): String {
+        val hours = seconds / 3600
+        val mins = (seconds % 3600) / 60
+        val secs = seconds % 60
+        return if (hours > 0) {
+            "%d:%02d:%02d".format(hours, mins, secs)
+        } else {
+            "%d:%02d".format(mins, secs)
+        }
+    }
+
+    /**
+     * Stop following a live game.
+     */
+    fun stopLiveFollow() {
+        liveGameJob?.cancel()
+        liveGameJob = null
+        _uiState.value = _uiState.value.copy(
+            isLiveGame = false,
+            liveGameId = null,
+            liveStreamConnected = false
+        )
+    }
+
+    /**
+     * Toggle auto-follow mode for live games.
+     */
+    fun toggleAutoFollowLive() {
+        _uiState.value = _uiState.value.copy(
+            autoFollowLive = !_uiState.value.autoFollowLive
+        )
     }
 
     fun showSettingsDialog() {
@@ -1658,6 +2138,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     /**
      * Show player info for the specified username and server.
+     * If player is not found on the server (e.g., broadcast players), falls back to Google search.
      */
     fun showPlayerInfo(username: String, server: ChessServer) {
         _uiState.value = _uiState.value.copy(
@@ -1681,18 +2162,20 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                         playerInfo = result.data,
                         playerInfoError = null
                     )
+                    // Fetch first batch of games (10)
+                    fetchPlayerGames(username, server, 10)
                 }
                 is Result.Error -> {
+                    // Player not found on server - fall back to Google search
                     _uiState.value = _uiState.value.copy(
+                        showPlayerInfoScreen = false,
                         playerInfoLoading = false,
                         playerInfo = null,
-                        playerInfoError = result.message
+                        playerInfoError = null,
+                        googleSearchPlayerName = username
                     )
                 }
             }
-
-            // Fetch first batch of games (10)
-            fetchPlayerGames(username, server, 10)
         }
     }
 
@@ -2929,6 +3412,62 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * Calculate move qualities based on evaluation changes.
+     * Compares each move's score with the previous move of the same color
+     * to determine if it was a blunder, mistake, good move, etc.
+     */
+    private fun calculateMoveQualities(): Map<Int, MoveQuality> {
+        val scores = _uiState.value.analyseScores.ifEmpty { _uiState.value.previewScores }
+        if (scores.isEmpty()) return emptyMap()
+
+        val qualities = mutableMapOf<Int, MoveQuality>()
+        val userPlayedBlack = _uiState.value.userPlayedBlack
+
+        for (moveIndex in scores.keys) {
+            // Compare with previous move of the SAME color (2 plies back)
+            val prevSameColorIndex = moveIndex - 2
+
+            if (prevSameColorIndex < 0) {
+                // First move of this color - consider it normal or book
+                qualities[moveIndex] = MoveQuality.NORMAL
+                continue
+            }
+
+            val currentScore = scores[moveIndex]?.score ?: continue
+            val prevScore = scores[prevSameColorIndex]?.score ?: continue
+
+            // Determine if this move was by the user
+            val isWhiteMove = moveIndex % 2 == 0
+            val isUserMove = if (userPlayedBlack) !isWhiteMove else isWhiteMove
+
+            // Calculate the evaluation change from the user's perspective
+            // Positive change = improvement for user, Negative = worsening
+            val change = if (userPlayedBlack) {
+                -(currentScore - prevScore)  // Invert for black's perspective
+            } else {
+                currentScore - prevScore
+            }
+
+            // Adjust based on whose move it is
+            val adjustedChange = if (isUserMove) change else -change
+
+            // Determine move quality
+            val quality = when {
+                adjustedChange <= -MoveQualityThresholds.BLUNDER -> MoveQuality.BLUNDER
+                adjustedChange <= -MoveQualityThresholds.MISTAKE -> MoveQuality.MISTAKE
+                adjustedChange <= -MoveQualityThresholds.DUBIOUS -> MoveQuality.DUBIOUS
+                adjustedChange >= MoveQualityThresholds.BRILLIANT -> MoveQuality.BRILLIANT
+                adjustedChange >= MoveQualityThresholds.GOOD -> MoveQuality.GOOD
+                else -> MoveQuality.NORMAL
+            }
+
+            qualities[moveIndex] = quality
+        }
+
+        return qualities
+    }
+
+    /**
      * Internal function to enter Manual stage at a specific move.
      * Kills current Stockfish and starts a new one configured for Manual stage.
      */
@@ -2938,6 +3477,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             android.util.Log.e("Analysis", "ActivePlayer validation failed at MANUAL stage")
             // Continue anyway but error will be shown to user
         }
+
+        // Calculate move qualities before entering manual stage
+        val moveQualities = calculateMoveQualities()
 
         viewModelScope.launch {
             // Stop any running analysis
@@ -2962,7 +3504,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 remainingAnalysisMoves = emptyList(),
                 stockfishReady = false,
                 analysisResult = null,
-                analysisResultFen = null
+                analysisResultFen = null,
+                moveQualities = moveQualities
             )
 
             // Start new Stockfish process for Manual stage
@@ -3123,5 +3666,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         autoAnalysisJob?.cancel()
         manualAnalysisJob?.cancel()
         stockfish.shutdown()
+        moveSoundPlayer.release()
     }
 }

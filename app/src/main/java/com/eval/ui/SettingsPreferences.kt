@@ -222,6 +222,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
                 showResultBar = prefs.getBoolean(KEY_MANUAL_VIS_RESULTBAR, true),
                 showScoreLineGraph = prefs.getBoolean(KEY_MANUAL_VIS_SCORELINEGRAPH, true),
                 showScoreBarsGraph = prefs.getBoolean(KEY_MANUAL_VIS_SCOREBARSGRAPH, true),
+                showTimeGraph = prefs.getBoolean(KEY_MANUAL_VIS_TIMEGRAPH, true),
                 showMoveList = prefs.getBoolean(KEY_MANUAL_VIS_MOVELIST, true),
                 showGameInfo = prefs.getBoolean(KEY_MANUAL_VIS_GAMEINFO, false),
                 showPgn = prefs.getBoolean(KEY_MANUAL_VIS_PGN, false)
@@ -250,6 +251,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             .putBoolean(KEY_MANUAL_VIS_RESULTBAR, settings.manualStage.showResultBar)
             .putBoolean(KEY_MANUAL_VIS_SCORELINEGRAPH, settings.manualStage.showScoreLineGraph)
             .putBoolean(KEY_MANUAL_VIS_SCOREBARSGRAPH, settings.manualStage.showScoreBarsGraph)
+            .putBoolean(KEY_MANUAL_VIS_TIMEGRAPH, settings.manualStage.showTimeGraph)
             .putBoolean(KEY_MANUAL_VIS_MOVELIST, settings.manualStage.showMoveList)
             .putBoolean(KEY_MANUAL_VIS_GAMEINFO, settings.manualStage.showGameInfo)
             .putBoolean(KEY_MANUAL_VIS_PGN, settings.manualStage.showPgn)
@@ -264,15 +266,17 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         // Full screen mode is not persistent - always starts as false
         return GeneralSettings(
             longTapForFullScreen = false,
-            paginationPageSize = prefs.getInt(KEY_PAGINATION_PAGE_SIZE, 10).coerceIn(5, 50)
+            paginationPageSize = prefs.getInt(KEY_PAGINATION_PAGE_SIZE, 10).coerceIn(5, 50),
+            moveSoundsEnabled = prefs.getBoolean(KEY_MOVE_SOUNDS_ENABLED, true)
         )
     }
 
     fun saveGeneralSettings(settings: GeneralSettings) {
         // Full screen mode is not persistent - do not save
-        // But pagination page size is saved
+        // But pagination page size and move sounds are saved
         prefs.edit()
             .putInt(KEY_PAGINATION_PAGE_SIZE, settings.paginationPageSize.coerceIn(5, 50))
+            .putBoolean(KEY_MOVE_SOUNDS_ENABLED, settings.moveSoundsEnabled)
             .apply()
     }
 
@@ -455,6 +459,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         private const val KEY_MANUAL_VIS_RESULTBAR = "manual_vis_resultbar"
         private const val KEY_MANUAL_VIS_SCORELINEGRAPH = "manual_vis_scorelinegraph"
         private const val KEY_MANUAL_VIS_SCOREBARSGRAPH = "manual_vis_scorebarsgraph"
+        private const val KEY_MANUAL_VIS_TIMEGRAPH = "manual_vis_timegraph"
         private const val KEY_MANUAL_VIS_MOVELIST = "manual_vis_movelist"
         private const val KEY_MANUAL_VIS_GAMEINFO = "manual_vis_gameinfo"
         private const val KEY_MANUAL_VIS_PGN = "manual_vis_pgn"
@@ -464,6 +469,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
 
         // General settings
         private const val KEY_PAGINATION_PAGE_SIZE = "pagination_page_size"
+        private const val KEY_MOVE_SOUNDS_ENABLED = "move_sounds_enabled"
 
         // AI Analysis settings
         private const val KEY_AI_SHOW_LOGOS = "ai_show_logos"

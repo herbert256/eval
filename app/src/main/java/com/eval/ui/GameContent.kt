@@ -292,6 +292,7 @@ fun GameContent(
                         EvaluationGraph(
                             previewScores = uiState.previewScores,
                             analyseScores = uiState.analyseScores,
+                            moveQualities = uiState.moveQualities,
                             totalMoves = uiState.moveDetails.size,
                             currentMoveIndex = uiState.currentMoveIndex,
                             currentStage = uiState.currentStage,
@@ -336,6 +337,26 @@ fun GameContent(
                         )
                     }
                 }
+
+                // Time usage graph - only show in Manual stage when clock data is available
+                val showTimeGraph = uiState.currentStage == AnalysisStage.MANUAL &&
+                    uiState.interfaceVisibility.manualStage.showTimeGraph &&
+                    uiState.moveDetails.any { it.clockTime != null }
+                if (showTimeGraph) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TimeUsageGraph(
+                        moveDetails = uiState.moveDetails,
+                        currentMoveIndex = uiState.currentMoveIndex,
+                        currentStage = uiState.currentStage,
+                        graphSettings = uiState.graphSettings,
+                        onMoveSelected = { moveIndex ->
+                            viewModel.restartAnalysisAtMove(moveIndex)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(80.dp)
+                    )
+                }
             }
         }
     }
@@ -362,6 +383,21 @@ fun GameContent(
     if (uiState.currentStage == AnalysisStage.MANUAL && showResultBar) {
         ResultBar()
         Spacer(modifier = Modifier.height(8.dp))
+    }
+
+    // Opening name display (Manual stage only, when available)
+    val displayOpeningName = uiState.currentOpeningName ?: uiState.openingName
+    if (uiState.currentStage == AnalysisStage.MANUAL && displayOpeningName != null) {
+        Text(
+            text = displayOpeningName,
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color(0xFFAAAAAA),
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp, vertical = 2.dp)
+        )
+        Spacer(modifier = Modifier.height(4.dp))
     }
 
     // Show the board based on visibility settings
@@ -695,6 +731,50 @@ fun GameContent(
                         Text("Back to game", fontSize = 18.sp)
                     }
                 } else {
+                    // LIVE badge and auto-follow toggle for live games
+                    if (uiState.isLiveGame) {
+                        Box(
+                            modifier = Modifier
+                                .background(
+                                    color = if (uiState.liveStreamConnected) Color(0xFFE53935) else Color(0xFF757575),
+                                    shape = RoundedCornerShape(4.dp)
+                                )
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "LIVE",
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        // Auto-follow toggle
+                        Button(
+                            onClick = { viewModel.toggleAutoFollowLive() },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (uiState.autoFollowLive) Color(0xFF4CAF50) else Color(0xFF404040)
+                            ),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = if (uiState.autoFollowLive) "Follow" else "Manual",
+                                fontSize = 11.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                    }
+                    // Share button - smaller with different background
+                    Button(
+                        onClick = { viewModel.showSharePositionDialog() },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF404040)
+                        ),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        Text(text = "⤴", fontSize = 18.sp)
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
                     // Arrow mode toggle button - smaller with different background
                     Button(
                         onClick = { viewModel.cycleArrowMode() },
@@ -730,6 +810,20 @@ fun GameContent(
                 .fillMaxWidth()
                 .padding(bottom = 4.dp)
         )
+
+        // Opening Explorer panel
+        if (uiState.showOpeningExplorer) {
+            Spacer(modifier = Modifier.height(8.dp))
+            OpeningExplorerPanel(
+                explorerData = uiState.openingExplorerData,
+                isLoading = uiState.openingExplorerLoading,
+                onMoveClick = { uciMove ->
+                    // Make the move on the current board
+                    viewModel.exploreLine(uciMove, 0)
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
     }
 
     // Show graph cards between Stockfish panel and moves list during manual stage
@@ -766,6 +860,7 @@ fun GameContent(
                     moveDetails = uiState.moveDetails,
                     currentMoveIndex = uiState.currentMoveIndex,
                     moveScores = displayScores,
+                    moveQualities = uiState.moveQualities,
                     currentStage = uiState.currentStage,
                     autoAnalysisIndex = uiState.autoAnalysisIndex,
                     userPlayedBlack = uiState.userPlayedBlack,

@@ -46,6 +46,7 @@ private const val BLACK_PAWN = "♟"
 fun EvaluationGraph(
     previewScores: Map<Int, MoveScore>,
     analyseScores: Map<Int, MoveScore>,
+    moveQualities: Map<Int, MoveQuality>,
     totalMoves: Int,
     currentMoveIndex: Int,
     currentStage: AnalysisStage,
@@ -61,6 +62,8 @@ fun EvaluationGraph(
     val lineColor = Color(0xFF666666)
     val currentMoveColor = Color(graphSettings.verticalLineColor.toInt())
     val analyseColor = Color(graphSettings.analyseLineColor.toInt())
+    val blunderMarkerColor = Color(0xFFFF5252)  // Red for blunders
+    val mistakeMarkerColor = Color(0xFFFF9800)  // Orange for mistakes
 
     // Track the graph width for calculating move index from drag position
     var graphWidth by remember { mutableStateOf(0f) }
@@ -217,6 +220,23 @@ fun EvaluationGraph(
             drawLine(analyseColor, Offset(p1.x, p1.y), Offset(p2.x, p2.y), strokeWidth = 8f)
         }
 
+        // Draw blunder/mistake markers (only in manual stage)
+        if (isManualStage) {
+            moveQualities.forEach { (index, quality) ->
+                if (quality == MoveQuality.BLUNDER || quality == MoveQuality.MISTAKE) {
+                    val markerX = if (totalMoves > 1) index * pointSpacing else width / 2
+                    val markerColor = if (quality == MoveQuality.BLUNDER) blunderMarkerColor else mistakeMarkerColor
+                    // Draw a thin vertical line at the blunder/mistake position
+                    drawLine(
+                        color = markerColor.copy(alpha = 0.6f),
+                        start = Offset(markerX, 0f),
+                        end = Offset(markerX, height),
+                        strokeWidth = 2f
+                    )
+                }
+            }
+        }
+
         // Draw current move indicator (only in manual stage)
         if (isManualStage && currentMoveIndex >= 0 && currentMoveIndex < totalMoves) {
             val x = if (totalMoves > 1) currentMoveIndex * pointSpacing else width / 2
@@ -227,6 +247,150 @@ fun EvaluationGraph(
                 strokeWidth = 5f
             )
         }
+    }
+}
+
+/**
+ * Time usage graph showing remaining clock time for both players.
+ */
+@Composable
+fun TimeUsageGraph(
+    moveDetails: List<MoveDetails>,
+    currentMoveIndex: Int,
+    currentStage: AnalysisStage,
+    graphSettings: GraphSettings,
+    onMoveSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val whiteTimeColor = Color(0xFFFFFFFF)  // White for white's time
+    val blackTimeColor = Color(0xFF888888)  // Gray for black's time
+    val lineColor = Color(0xFF444444)
+    val currentMoveColor = Color(graphSettings.verticalLineColor.toInt())
+
+    var graphWidth by remember { mutableStateOf(0f) }
+    val isManualStage = currentStage == AnalysisStage.MANUAL
+
+    // Parse clock times to seconds
+    val whiteTimes = mutableListOf<Pair<Int, Int>>()  // (moveIndex, seconds)
+    val blackTimes = mutableListOf<Pair<Int, Int>>()
+
+    moveDetails.forEachIndexed { index, detail ->
+        val seconds = parseClockTimeToSeconds(detail.clockTime)
+        if (seconds != null) {
+            if (index % 2 == 0) {
+                whiteTimes.add(index to seconds)
+            } else {
+                blackTimes.add(index to seconds)
+            }
+        }
+    }
+
+    // If no clock data, don't show the graph
+    if (whiteTimes.isEmpty() && blackTimes.isEmpty()) {
+        return
+    }
+
+    val maxTime = maxOf(
+        whiteTimes.maxOfOrNull { it.second } ?: 0,
+        blackTimes.maxOfOrNull { it.second } ?: 0
+    ).toFloat().coerceAtLeast(60f)
+
+    Canvas(
+        modifier = modifier
+            .background(Color(graphSettings.backgroundColor.toInt()), RoundedCornerShape(8.dp))
+            .padding(8.dp)
+            .pointerInput(moveDetails.size, currentStage) {
+                if (moveDetails.isNotEmpty() && isManualStage) {
+                    detectHorizontalDragGestures { change, _ ->
+                        change.consume()
+                        val x = change.position.x.coerceIn(0f, graphWidth)
+                        val moveIndex = ((x / graphWidth) * (moveDetails.size - 1) + 0.5f)
+                            .toInt().coerceIn(0, moveDetails.size - 1)
+                        onMoveSelected(moveIndex)
+                    }
+                }
+            }
+            .pointerInput(moveDetails.size, currentStage) {
+                if (moveDetails.isNotEmpty() && currentStage != AnalysisStage.PREVIEW) {
+                    detectTapGestures(
+                        onTap = { offset ->
+                            val x = offset.x.coerceIn(0f, graphWidth)
+                            val moveIndex = ((x / graphWidth) * (moveDetails.size - 1) + 0.5f)
+                                .toInt().coerceIn(0, moveDetails.size - 1)
+                            onMoveSelected(moveIndex)
+                        }
+                    )
+                }
+            }
+    ) {
+        val width = size.width
+        val height = size.height
+        graphWidth = width
+        val totalMoves = moveDetails.size
+        if (totalMoves == 0) return@Canvas
+
+        val pointSpacing = if (totalMoves > 1) width / (totalMoves - 1) else width / 2
+
+        // Draw horizontal grid lines
+        for (i in 1..3) {
+            val y = height * i / 4
+            drawLine(lineColor, Offset(0f, y), Offset(width, y), strokeWidth = 1f)
+        }
+
+        // Draw white's time line
+        if (whiteTimes.size > 1) {
+            for (i in 0 until whiteTimes.size - 1) {
+                val (idx1, t1) = whiteTimes[i]
+                val (idx2, t2) = whiteTimes[i + 1]
+                val x1 = idx1 * pointSpacing
+                val x2 = idx2 * pointSpacing
+                val y1 = height - (t1 / maxTime) * height
+                val y2 = height - (t2 / maxTime) * height
+                drawLine(whiteTimeColor, Offset(x1, y1), Offset(x2, y2), strokeWidth = 2f)
+            }
+        }
+
+        // Draw black's time line
+        if (blackTimes.size > 1) {
+            for (i in 0 until blackTimes.size - 1) {
+                val (idx1, t1) = blackTimes[i]
+                val (idx2, t2) = blackTimes[i + 1]
+                val x1 = idx1 * pointSpacing
+                val x2 = idx2 * pointSpacing
+                val y1 = height - (t1 / maxTime) * height
+                val y2 = height - (t2 / maxTime) * height
+                drawLine(blackTimeColor, Offset(x1, y1), Offset(x2, y2), strokeWidth = 2f)
+            }
+        }
+
+        // Draw current move indicator (only in manual stage)
+        if (isManualStage && currentMoveIndex >= 0 && currentMoveIndex < totalMoves) {
+            val x = currentMoveIndex * pointSpacing
+            drawLine(
+                color = currentMoveColor,
+                start = Offset(x, 0f),
+                end = Offset(x, height),
+                strokeWidth = 3f
+            )
+        }
+    }
+}
+
+/**
+ * Parse clock time string (e.g., "10:30" or "1:30:45") to total seconds.
+ */
+private fun parseClockTimeToSeconds(time: String?): Int? {
+    if (time.isNullOrBlank()) return null
+    val parts = time.split(":")
+    return try {
+        when (parts.size) {
+            3 -> parts[0].toInt() * 3600 + parts[1].toInt() * 60 + parts[2].toInt()
+            2 -> parts[0].toInt() * 60 + parts[1].toInt()
+            1 -> parts[0].toInt()
+            else -> null
+        }
+    } catch (e: NumberFormatException) {
+        null
     }
 }
 

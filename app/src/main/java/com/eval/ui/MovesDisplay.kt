@@ -39,6 +39,7 @@ fun MovesList(
     moveDetails: List<MoveDetails>,
     currentMoveIndex: Int,
     moveScores: Map<Int, MoveScore>,
+    moveQualities: Map<Int, MoveQuality>,
     currentStage: AnalysisStage,
     autoAnalysisIndex: Int,
     userPlayedBlack: Boolean,
@@ -73,6 +74,7 @@ fun MovesList(
                         isActive = whiteIndex == currentMoveIndex,
                         isAnalyzing = isAutoAnalyzing && autoAnalysisIndex == whiteIndex,
                         score = moveScores[whiteIndex],
+                        quality = moveQualities[whiteIndex],
                         userPlayedBlack = userPlayedBlack,
                         onClick = { onMoveClick(whiteIndex) },
                         modifier = Modifier.weight(1f)
@@ -88,6 +90,7 @@ fun MovesList(
                             isActive = blackIndex == currentMoveIndex,
                             isAnalyzing = isAutoAnalyzing && autoAnalysisIndex == blackIndex,
                             score = moveScores[blackIndex],
+                            quality = moveQualities[blackIndex],
                             userPlayedBlack = userPlayedBlack,
                             onClick = { onMoveClick(blackIndex) },
                             modifier = Modifier.weight(1f)
@@ -102,7 +105,7 @@ fun MovesList(
 }
 
 /**
- * Individual move chip displaying piece symbol, move coordinates, clock time, and score.
+ * Individual move chip displaying piece symbol, move coordinates, clock time, score, and quality.
  */
 @Composable
 private fun MoveChip(
@@ -111,13 +114,23 @@ private fun MoveChip(
     isActive: Boolean,
     isAnalyzing: Boolean = false,
     score: MoveScore? = null,
+    quality: MoveQuality? = null,
     userPlayedBlack: Boolean = false,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Background color based on move quality for blunders/mistakes
+    val qualityBackground = when (quality) {
+        MoveQuality.BLUNDER -> Color(0x40F44336)  // Semi-transparent red
+        MoveQuality.MISTAKE -> Color(0x30FF9800)  // Semi-transparent orange
+        else -> Color.Transparent
+    }
+
     val backgroundColor = when {
         isActive -> MaterialTheme.colorScheme.primary
         isAnalyzing -> Color(0xFFFFE082) // Light yellow when analyzing
+        quality == MoveQuality.BLUNDER -> qualityBackground
+        quality == MoveQuality.MISTAKE -> qualityBackground
         else -> Color.Transparent
     }
 
@@ -135,6 +148,10 @@ private fun MoveChip(
     val separator = if (moveDetails.isCapture) "x" else "-"
     val moveText = "$pieceSymbol ${moveDetails.from}$separator${moveDetails.to}"
 
+    // Quality symbol and color
+    val qualitySymbol = quality?.symbol ?: ""
+    val qualityColor = quality?.let { Color(it.color.toInt()) } ?: Color.Transparent
+
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(4.dp))
@@ -148,6 +165,16 @@ private fun MoveChip(
             fontSize = 15.sp,
             color = if (isActive) Color.White else MaterialTheme.colorScheme.onSurface
         )
+
+        // Show quality symbol if available and not NORMAL
+        if (qualitySymbol.isNotEmpty()) {
+            Spacer(modifier = Modifier.width(2.dp))
+            Text(
+                text = qualitySymbol,
+                fontSize = 13.sp,
+                color = if (isActive) Color.White else qualityColor
+            )
+        }
 
         // Show clock time if available
         if (moveDetails.clockTime != null) {

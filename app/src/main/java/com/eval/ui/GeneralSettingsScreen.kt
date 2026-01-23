@@ -25,11 +25,13 @@ fun GeneralSettingsScreen(
 ) {
     var longTapForFullScreen by remember { mutableStateOf(generalSettings.longTapForFullScreen) }
     var paginationPageSize by remember { mutableFloatStateOf(generalSettings.paginationPageSize.toFloat()) }
+    var moveSoundsEnabled by remember { mutableStateOf(generalSettings.moveSoundsEnabled) }
 
     fun saveSettings() {
         onSave(GeneralSettings(
             longTapForFullScreen = longTapForFullScreen,
-            paginationPageSize = paginationPageSize.roundToInt()
+            paginationPageSize = paginationPageSize.roundToInt(),
+            moveSoundsEnabled = moveSoundsEnabled
         ))
     }
 
@@ -121,6 +123,31 @@ fun GeneralSettingsScreen(
                         valueRange = 5f..50f,
                         steps = 8,  // 5, 10, 15, 20, 25, 30, 35, 40, 45, 50
                         modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                HorizontalDivider(color = Color(0xFF404040))
+
+                // Move sounds toggle
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Move sounds", color = Color.White)
+                        Text(
+                            text = "Play sound when navigating moves",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFFAAAAAA)
+                        )
+                    }
+                    Switch(
+                        checked = moveSoundsEnabled,
+                        onCheckedChange = {
+                            moveSoundsEnabled = it
+                            saveSettings()
+                        }
                     )
                 }
             }
