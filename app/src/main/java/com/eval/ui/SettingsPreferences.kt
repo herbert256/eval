@@ -263,13 +263,17 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
     fun loadGeneralSettings(): GeneralSettings {
         // Full screen mode is not persistent - always starts as false
         return GeneralSettings(
-            longTapForFullScreen = false
+            longTapForFullScreen = false,
+            paginationPageSize = prefs.getInt(KEY_PAGINATION_PAGE_SIZE, 10).coerceIn(5, 50)
         )
     }
 
-    @Suppress("UNUSED_PARAMETER")
     fun saveGeneralSettings(settings: GeneralSettings) {
         // Full screen mode is not persistent - do not save
+        // But pagination page size is saved
+        prefs.edit()
+            .putInt(KEY_PAGINATION_PAGE_SIZE, settings.paginationPageSize.coerceIn(5, 50))
+            .apply()
     }
 
     // ============================================================================
@@ -457,6 +461,9 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
 
         // First run tracking
         private const val KEY_FIRST_GAME_RETRIEVED_VERSION = "first_game_retrieved_version"
+
+        // General settings
+        private const val KEY_PAGINATION_PAGE_SIZE = "pagination_page_size"
 
         // AI Analysis settings
         private const val KEY_AI_SHOW_LOGOS = "ai_show_logos"

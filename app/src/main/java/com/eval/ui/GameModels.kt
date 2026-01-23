@@ -168,7 +168,8 @@ data class InterfaceVisibilitySettings(
 
 // General app settings
 data class GeneralSettings(
-    val longTapForFullScreen: Boolean = false
+    val longTapForFullScreen: Boolean = false,
+    val paginationPageSize: Int = 10
 )
 
 data class MoveScore(

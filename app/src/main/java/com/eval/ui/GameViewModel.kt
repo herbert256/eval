@@ -70,7 +70,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private fun loadInterfaceVisibilitySettings(): InterfaceVisibilitySettings = settingsPrefs.loadInterfaceVisibilitySettings()
     private fun saveInterfaceVisibilitySettings(settings: InterfaceVisibilitySettings) = settingsPrefs.saveInterfaceVisibilitySettings(settings)
     private fun loadGeneralSettings(): GeneralSettings = settingsPrefs.loadGeneralSettings()
-    @Suppress("UNUSED_PARAMETER")
     private fun saveGeneralSettings(settings: GeneralSettings) = settingsPrefs.saveGeneralSettings(settings)
     private fun loadAiSettings(): AiSettings = settingsPrefs.loadAiSettings()
     private fun saveAiSettings(settings: AiSettings) = settingsPrefs.saveAiSettings(settings)
@@ -225,7 +224,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 hasActive = hasActive,
                 hasPreviousRetrieves = hasPreviousRetrieves,
                 previousRetrievesList = retrievesList,
-                hasAnalysedGames = hasAnalysedGames
+                hasAnalysedGames = hasAnalysedGames,
+                playerGamesPageSize = generalSettings.paginationPageSize,
+                gameSelectionPageSize = generalSettings.paginationPageSize
             )
 
             // Initialize Stockfish with manual stage settings (default)
@@ -317,7 +318,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             aiSettings = aiSettings,
             lichessMaxGames = lichessMaxGames,
             chessComMaxGames = chessComMaxGames,
-            hasActive = hasActive
+            hasActive = hasActive,
+            playerGamesPageSize = generalSettings.paginationPageSize,
+            gameSelectionPageSize = generalSettings.paginationPageSize
         )
 
         // Initialize Stockfish with manual stage settings (default)
@@ -1530,7 +1533,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun updateGeneralSettings(settings: GeneralSettings) {
         saveGeneralSettings(settings)
         _uiState.value = _uiState.value.copy(
-            generalSettings = settings
+            generalSettings = settings,
+            playerGamesPageSize = settings.paginationPageSize,
+            gameSelectionPageSize = settings.paginationPageSize
         )
     }
 

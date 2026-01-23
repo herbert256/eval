@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 
 /**
  * General settings screen for app-wide settings.
@@ -23,10 +24,12 @@ fun GeneralSettingsScreen(
     onSave: (GeneralSettings) -> Unit
 ) {
     var longTapForFullScreen by remember { mutableStateOf(generalSettings.longTapForFullScreen) }
+    var paginationPageSize by remember { mutableFloatStateOf(generalSettings.paginationPageSize.toFloat()) }
 
     fun saveSettings() {
         onSave(GeneralSettings(
-            longTapForFullScreen = longTapForFullScreen
+            longTapForFullScreen = longTapForFullScreen,
+            paginationPageSize = paginationPageSize.roundToInt()
         ))
     }
 
@@ -87,6 +90,37 @@ fun GeneralSettingsScreen(
                             longTapForFullScreen = it
                             saveSettings()
                         }
+                    )
+                }
+
+                HorizontalDivider(color = Color(0xFF404040))
+
+                // Pagination page size
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Rows per page when pagination", color = Color.White)
+                        Text(
+                            text = "${paginationPageSize.roundToInt()}",
+                            color = Color(0xFF6B9BFF),
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Text(
+                        text = "Number of items shown per page (5-50)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFAAAAAA)
+                    )
+                    Slider(
+                        value = paginationPageSize,
+                        onValueChange = { paginationPageSize = it },
+                        onValueChangeFinished = { saveSettings() },
+                        valueRange = 5f..50f,
+                        steps = 8,  // 5, 10, 15, 20, 25, 30, 35, 40, 45, 50
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             }
