@@ -590,7 +590,7 @@ fun SelectedRetrieveGamesScreen(
 }
 
 /**
- * Individual game row for retrieve games list - shows opponent and result.
+ * Individual game row for retrieve games list - shows opponent, format, and result.
  * Result is "1" green if won, "0" red if lost, "1/2" if draw.
  */
 @Composable
@@ -650,7 +650,22 @@ private fun RetrieveGameListItem(
             )
         }
 
-        // Column 2: Result
+        // Column 2: Format/speed
+        Box(
+            modifier = Modifier
+                .weight(0.6f)
+                .background(rowBackgroundColor)
+                .padding(horizontal = 8.dp, vertical = 10.dp)
+        ) {
+            Text(
+                text = game.speed,
+                fontSize = 14.sp,
+                color = rowTextColor,
+                maxLines = 1
+            )
+        }
+
+        // Column 3: Result
         Box(
             modifier = Modifier
                 .width(50.dp)
