@@ -24,6 +24,7 @@ enum class AiService(val displayName: String, val baseUrl: String) {
     MISTRAL("Mistral", "https://api.mistral.ai/"),
     PERPLEXITY("Perplexity", "https://api.perplexity.ai/"),
     TOGETHER("Together", "https://api.together.xyz/"),
+    OPENROUTER("OpenRouter", "https://openrouter.ai/api/"),
     DUMMY("Dummy", "")
 }
 
@@ -164,6 +165,13 @@ data class PerplexityRequest(
 // Together AI models (uses OpenAI-compatible format)
 data class TogetherRequest(
     val model: String = "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+    val messages: List<OpenAiMessage>,
+    val max_tokens: Int = 1024
+)
+
+// OpenRouter models (uses OpenAI-compatible format)
+data class OpenRouterRequest(
+    val model: String = "anthropic/claude-3.5-sonnet",
     val messages: List<OpenAiMessage>,
     val max_tokens: Int = 1024
 )
@@ -315,6 +323,22 @@ interface TogetherApi {
 }
 
 /**
+ * Retrofit interface for OpenRouter API (OpenAI-compatible).
+ */
+interface OpenRouterApi {
+    @POST("v1/chat/completions")
+    suspend fun createChatCompletion(
+        @Header("Authorization") authorization: String,
+        @Body request: OpenRouterRequest
+    ): Response<OpenAiResponse>
+
+    @retrofit2.http.GET("v1/models")
+    suspend fun listModels(
+        @Header("Authorization") authorization: String
+    ): Response<OpenAiModelsResponse>
+}
+
+/**
  * Factory for creating API instances.
  */
 object AiApiFactory {
@@ -368,6 +392,10 @@ object AiApiFactory {
 
     fun createTogetherApi(): TogetherApi {
         return getRetrofit(AiService.TOGETHER.baseUrl).create(TogetherApi::class.java)
+    }
+
+    fun createOpenRouterApi(): OpenRouterApi {
+        return getRetrofit(AiService.OPENROUTER.baseUrl).create(OpenRouterApi::class.java)
     }
 
 }

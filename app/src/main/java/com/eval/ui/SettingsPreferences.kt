@@ -354,6 +354,13 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             togetherOtherPlayerPrompt = prefs.getString(KEY_AI_TOGETHER_OTHER_PLAYER_PROMPT, DEFAULT_OTHER_PLAYER_PROMPT) ?: DEFAULT_OTHER_PLAYER_PROMPT,
             togetherModelSource = loadModelSource(KEY_AI_TOGETHER_MODEL_SOURCE, ModelSource.API),
             togetherManualModels = loadManualModels(KEY_AI_TOGETHER_MANUAL_MODELS),
+            openRouterApiKey = prefs.getString(KEY_AI_OPENROUTER_API_KEY, "") ?: "",
+            openRouterModel = prefs.getString(KEY_AI_OPENROUTER_MODEL, "anthropic/claude-3.5-sonnet") ?: "anthropic/claude-3.5-sonnet",
+            openRouterPrompt = prefs.getString(KEY_AI_OPENROUTER_PROMPT, DEFAULT_GAME_PROMPT) ?: DEFAULT_GAME_PROMPT,
+            openRouterServerPlayerPrompt = prefs.getString(KEY_AI_OPENROUTER_SERVER_PLAYER_PROMPT, DEFAULT_SERVER_PLAYER_PROMPT) ?: DEFAULT_SERVER_PLAYER_PROMPT,
+            openRouterOtherPlayerPrompt = prefs.getString(KEY_AI_OPENROUTER_OTHER_PLAYER_PROMPT, DEFAULT_OTHER_PLAYER_PROMPT) ?: DEFAULT_OTHER_PLAYER_PROMPT,
+            openRouterModelSource = loadModelSource(KEY_AI_OPENROUTER_MODEL_SOURCE, ModelSource.API),
+            openRouterManualModels = loadManualModels(KEY_AI_OPENROUTER_MANUAL_MODELS),
             dummyEnabled = prefs.getBoolean(KEY_AI_DUMMY_ENABLED, false),
             dummyPrompt = prefs.getString(KEY_AI_DUMMY_PROMPT, DEFAULT_GAME_PROMPT) ?: DEFAULT_GAME_PROMPT,
             dummyServerPlayerPrompt = prefs.getString(KEY_AI_DUMMY_SERVER_PLAYER_PROMPT, DEFAULT_SERVER_PLAYER_PROMPT) ?: DEFAULT_SERVER_PLAYER_PROMPT,
@@ -448,6 +455,13 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             .putString(KEY_AI_TOGETHER_OTHER_PLAYER_PROMPT, settings.togetherOtherPlayerPrompt)
             .putString(KEY_AI_TOGETHER_MODEL_SOURCE, settings.togetherModelSource.name)
             .putString(KEY_AI_TOGETHER_MANUAL_MODELS, gson.toJson(settings.togetherManualModels))
+            .putString(KEY_AI_OPENROUTER_API_KEY, settings.openRouterApiKey)
+            .putString(KEY_AI_OPENROUTER_MODEL, settings.openRouterModel)
+            .putString(KEY_AI_OPENROUTER_PROMPT, settings.openRouterPrompt)
+            .putString(KEY_AI_OPENROUTER_SERVER_PLAYER_PROMPT, settings.openRouterServerPlayerPrompt)
+            .putString(KEY_AI_OPENROUTER_OTHER_PLAYER_PROMPT, settings.openRouterOtherPlayerPrompt)
+            .putString(KEY_AI_OPENROUTER_MODEL_SOURCE, settings.openRouterModelSource.name)
+            .putString(KEY_AI_OPENROUTER_MANUAL_MODELS, gson.toJson(settings.openRouterManualModels))
             .putBoolean(KEY_AI_DUMMY_ENABLED, settings.dummyEnabled)
             .putString(KEY_AI_DUMMY_PROMPT, settings.dummyPrompt)
             .putString(KEY_AI_DUMMY_SERVER_PLAYER_PROMPT, settings.dummyServerPlayerPrompt)
@@ -624,6 +638,9 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         private const val KEY_AI_TOGETHER_API_KEY = "ai_together_api_key"
         private const val KEY_AI_TOGETHER_MODEL = "ai_together_model"
         private const val KEY_AI_TOGETHER_PROMPT = "ai_together_prompt"
+        private const val KEY_AI_OPENROUTER_API_KEY = "ai_openrouter_api_key"
+        private const val KEY_AI_OPENROUTER_MODEL = "ai_openrouter_model"
+        private const val KEY_AI_OPENROUTER_PROMPT = "ai_openrouter_prompt"
         private const val KEY_AI_DUMMY_ENABLED = "ai_dummy_enabled"
         private const val KEY_AI_DUMMY_PROMPT = "ai_dummy_prompt"
         private const val KEY_AI_DUMMY_SERVER_PLAYER_PROMPT = "ai_dummy_server_player_prompt"
@@ -638,6 +655,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         private const val KEY_AI_MISTRAL_SERVER_PLAYER_PROMPT = "ai_mistral_server_player_prompt"
         private const val KEY_AI_PERPLEXITY_SERVER_PLAYER_PROMPT = "ai_perplexity_server_player_prompt"
         private const val KEY_AI_TOGETHER_SERVER_PLAYER_PROMPT = "ai_together_server_player_prompt"
+        private const val KEY_AI_OPENROUTER_SERVER_PLAYER_PROMPT = "ai_openrouter_server_player_prompt"
 
         // AI prompts - Other player prompts
         private const val KEY_AI_CHATGPT_OTHER_PLAYER_PROMPT = "ai_chatgpt_other_player_prompt"
@@ -648,6 +666,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         private const val KEY_AI_MISTRAL_OTHER_PLAYER_PROMPT = "ai_mistral_other_player_prompt"
         private const val KEY_AI_PERPLEXITY_OTHER_PLAYER_PROMPT = "ai_perplexity_other_player_prompt"
         private const val KEY_AI_TOGETHER_OTHER_PLAYER_PROMPT = "ai_together_other_player_prompt"
+        private const val KEY_AI_OPENROUTER_OTHER_PLAYER_PROMPT = "ai_openrouter_other_player_prompt"
 
         // AI model source (API or MANUAL)
         private const val KEY_AI_CHATGPT_MODEL_SOURCE = "ai_chatgpt_model_source"
@@ -658,6 +677,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         private const val KEY_AI_MISTRAL_MODEL_SOURCE = "ai_mistral_model_source"
         private const val KEY_AI_PERPLEXITY_MODEL_SOURCE = "ai_perplexity_model_source"
         private const val KEY_AI_TOGETHER_MODEL_SOURCE = "ai_together_model_source"
+        private const val KEY_AI_OPENROUTER_MODEL_SOURCE = "ai_openrouter_model_source"
 
         // AI manual models lists
         private const val KEY_AI_CHATGPT_MANUAL_MODELS = "ai_chatgpt_manual_models"
@@ -668,6 +688,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         private const val KEY_AI_MISTRAL_MANUAL_MODELS = "ai_mistral_manual_models"
         private const val KEY_AI_PERPLEXITY_MANUAL_MODELS = "ai_perplexity_manual_models"
         private const val KEY_AI_TOGETHER_MANUAL_MODELS = "ai_together_manual_models"
+        private const val KEY_AI_OPENROUTER_MANUAL_MODELS = "ai_openrouter_manual_models"
 
         // AI report email
         const val KEY_AI_REPORT_EMAIL = "ai_report_email"
@@ -680,6 +701,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         private const val KEY_CACHED_MISTRAL_MODELS = "cached_mistral_models"
         private const val KEY_CACHED_PERPLEXITY_MODELS = "cached_perplexity_models"
         private const val KEY_CACHED_TOGETHER_MODELS = "cached_together_models"
+        private const val KEY_CACHED_OPENROUTER_MODELS = "cached_openrouter_models"
 
         // FEN history
         private const val KEY_FEN_HISTORY = "fen_history"
@@ -838,5 +860,20 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
     fun saveCachedTogetherModels(models: List<String>) {
         val json = gson.toJson(models)
         prefs.edit().putString(KEY_CACHED_TOGETHER_MODELS, json).apply()
+    }
+
+    fun loadCachedOpenRouterModels(): List<String> {
+        val json = prefs.getString(KEY_CACHED_OPENROUTER_MODELS, null) ?: return emptyList()
+        return try {
+            val type = object : TypeToken<List<String>>() {}.type
+            gson.fromJson(json, type) ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    fun saveCachedOpenRouterModels(models: List<String>) {
+        val json = gson.toJson(models)
+        prefs.edit().putString(KEY_CACHED_OPENROUTER_MODELS, json).apply()
     }
 }

@@ -360,6 +360,9 @@ data class GameUiState(
     // Together model selection
     val availableTogetherModels: List<String> = emptyList(),
     val isLoadingTogetherModels: Boolean = false,
+    // OpenRouter model selection
+    val availableOpenRouterModels: List<String> = emptyList(),
+    val isLoadingOpenRouterModels: Boolean = false,
     // Player info screen
     val showPlayerInfoScreen: Boolean = false,
     val playerInfo: PlayerInfo? = null,

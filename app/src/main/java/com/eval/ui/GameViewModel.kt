@@ -224,6 +224,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val cachedMistralModels = settingsPrefs.loadCachedMistralModels()
             val cachedPerplexityModels = settingsPrefs.loadCachedPerplexityModels()
             val cachedTogetherModels = settingsPrefs.loadCachedTogetherModels()
+            val cachedOpenRouterModels = settingsPrefs.loadCachedOpenRouterModels()
 
             _uiState.value = _uiState.value.copy(
                 stockfishSettings = settings,
@@ -246,7 +247,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 availableDeepSeekModels = cachedDeepSeekModels,
                 availableMistralModels = cachedMistralModels,
                 availablePerplexityModels = cachedPerplexityModels,
-                availableTogetherModels = cachedTogetherModels
+                availableTogetherModels = cachedTogetherModels,
+                availableOpenRouterModels = cachedOpenRouterModels
             )
 
             viewModelScope.launch {
@@ -320,6 +322,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val cachedMistralModels = settingsPrefs.loadCachedMistralModels()
         val cachedPerplexityModels = settingsPrefs.loadCachedPerplexityModels()
         val cachedTogetherModels = settingsPrefs.loadCachedTogetherModels()
+        val cachedOpenRouterModels = settingsPrefs.loadCachedOpenRouterModels()
 
         _uiState.value = _uiState.value.copy(
             stockfishSettings = settings,
@@ -339,7 +342,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             availableDeepSeekModels = cachedDeepSeekModels,
             availableMistralModels = cachedMistralModels,
             availablePerplexityModels = cachedPerplexityModels,
-            availableTogetherModels = cachedTogetherModels
+            availableTogetherModels = cachedTogetherModels,
+            availableOpenRouterModels = cachedOpenRouterModels
         )
 
         viewModelScope.launch {
@@ -1106,6 +1110,7 @@ ${opening.moves} *
                 AiService.MISTRAL -> aiSettings.mistralPrompt
                 AiService.PERPLEXITY -> aiSettings.perplexityPrompt
                 AiService.TOGETHER -> aiSettings.togetherPrompt
+                AiService.OPENROUTER -> aiSettings.openRouterPrompt
                 AiService.DUMMY -> ""
             }
             val result = aiAnalysisRepository.analyzePosition(
@@ -1120,7 +1125,8 @@ ${opening.moves} *
                 deepSeekModel = aiSettings.deepSeekModel,
                 mistralModel = aiSettings.mistralModel,
                 perplexityModel = aiSettings.perplexityModel,
-                togetherModel = aiSettings.togetherModel
+                togetherModel = aiSettings.togetherModel,
+                openRouterModel = aiSettings.openRouterModel
             )
             _uiState.value = _uiState.value.copy(
                 aiAnalysisLoading = false,
@@ -1497,6 +1503,21 @@ ${opening.moves} *
             _uiState.value = _uiState.value.copy(
                 availableTogetherModels = models,
                 isLoadingTogetherModels = false
+            )
+        }
+    }
+
+    fun fetchOpenRouterModels(apiKey: String) {
+        if (apiKey.isBlank()) return
+        _uiState.value = _uiState.value.copy(isLoadingOpenRouterModels = true)
+        viewModelScope.launch {
+            val models = aiAnalysisRepository.fetchOpenRouterModels(apiKey)
+            if (models.isNotEmpty()) {
+                settingsPrefs.saveCachedOpenRouterModels(models)
+            }
+            _uiState.value = _uiState.value.copy(
+                availableOpenRouterModels = models,
+                isLoadingOpenRouterModels = false
             )
         }
     }

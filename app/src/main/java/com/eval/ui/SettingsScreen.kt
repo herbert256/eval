@@ -34,6 +34,7 @@ enum class SettingsSubScreen {
     AI_MISTRAL,
     AI_PERPLEXITY,
     AI_TOGETHER,
+    AI_OPENROUTER,
     AI_DUMMY
 }
 
@@ -63,6 +64,8 @@ fun SettingsScreen(
     isLoadingPerplexityModels: Boolean,
     availableTogetherModels: List<String>,
     isLoadingTogetherModels: Boolean,
+    availableOpenRouterModels: List<String>,
+    isLoadingOpenRouterModels: Boolean,
     onBack: () -> Unit,
     onSaveStockfish: (StockfishSettings) -> Unit,
     onSaveBoardLayout: (BoardLayoutSettings) -> Unit,
@@ -77,7 +80,8 @@ fun SettingsScreen(
     onFetchDeepSeekModels: (String) -> Unit,
     onFetchMistralModels: (String) -> Unit,
     onFetchPerplexityModels: (String) -> Unit,
-    onFetchTogetherModels: (String) -> Unit
+    onFetchTogetherModels: (String) -> Unit,
+    onFetchOpenRouterModels: (String) -> Unit
 ) {
     var currentSubScreen by remember { mutableStateOf(SettingsSubScreen.MAIN) }
 
@@ -93,6 +97,7 @@ fun SettingsScreen(
             SettingsSubScreen.AI_MISTRAL,
             SettingsSubScreen.AI_PERPLEXITY,
             SettingsSubScreen.AI_TOGETHER,
+            SettingsSubScreen.AI_OPENROUTER,
             SettingsSubScreen.AI_DUMMY -> currentSubScreen = SettingsSubScreen.AI_SETTINGS
             else -> currentSubScreen = SettingsSubScreen.MAIN
         }
@@ -215,6 +220,15 @@ fun SettingsScreen(
             onBackToGame = onBack,
             onSave = onSaveAi,
             onFetchModels = onFetchTogetherModels
+        )
+        SettingsSubScreen.AI_OPENROUTER -> OpenRouterSettingsScreen(
+            aiSettings = aiSettings,
+            availableModels = availableOpenRouterModels,
+            isLoadingModels = isLoadingOpenRouterModels,
+            onBackToAiSettings = { currentSubScreen = SettingsSubScreen.AI_SETTINGS },
+            onBackToGame = onBack,
+            onSave = onSaveAi,
+            onFetchModels = onFetchOpenRouterModels
         )
         SettingsSubScreen.AI_DUMMY -> DummySettingsScreen(
             aiSettings = aiSettings,

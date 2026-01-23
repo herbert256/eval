@@ -137,6 +137,13 @@ data class AiSettings(
     val togetherOtherPlayerPrompt: String = DEFAULT_OTHER_PLAYER_PROMPT,
     val togetherModelSource: ModelSource = ModelSource.API,
     val togetherManualModels: List<String> = emptyList(),
+    val openRouterApiKey: String = "",
+    val openRouterModel: String = "anthropic/claude-3.5-sonnet",
+    val openRouterPrompt: String = DEFAULT_GAME_PROMPT,
+    val openRouterServerPlayerPrompt: String = DEFAULT_SERVER_PLAYER_PROMPT,
+    val openRouterOtherPlayerPrompt: String = DEFAULT_OTHER_PLAYER_PROMPT,
+    val openRouterModelSource: ModelSource = ModelSource.API,
+    val openRouterManualModels: List<String> = emptyList(),
     val dummyEnabled: Boolean = false,
     val dummyPrompt: String = DEFAULT_GAME_PROMPT,
     val dummyServerPlayerPrompt: String = DEFAULT_SERVER_PLAYER_PROMPT,
@@ -152,6 +159,7 @@ data class AiSettings(
             AiService.MISTRAL -> mistralApiKey
             AiService.PERPLEXITY -> perplexityApiKey
             AiService.TOGETHER -> togetherApiKey
+            AiService.OPENROUTER -> openRouterApiKey
             AiService.DUMMY -> if (dummyEnabled) "enabled" else ""
         }
     }
@@ -166,6 +174,7 @@ data class AiSettings(
             AiService.MISTRAL -> mistralModel
             AiService.PERPLEXITY -> perplexityModel
             AiService.TOGETHER -> togetherModel
+            AiService.OPENROUTER -> openRouterModel
             AiService.DUMMY -> ""
         }
     }
@@ -182,6 +191,7 @@ data class AiSettings(
             AiService.MISTRAL -> mistralPrompt
             AiService.PERPLEXITY -> perplexityPrompt
             AiService.TOGETHER -> togetherPrompt
+            AiService.OPENROUTER -> openRouterPrompt
             AiService.DUMMY -> dummyPrompt
         }
     }
@@ -196,6 +206,7 @@ data class AiSettings(
             AiService.MISTRAL -> mistralServerPlayerPrompt
             AiService.PERPLEXITY -> perplexityServerPlayerPrompt
             AiService.TOGETHER -> togetherServerPlayerPrompt
+            AiService.OPENROUTER -> openRouterServerPlayerPrompt
             AiService.DUMMY -> dummyServerPlayerPrompt
         }
     }
@@ -210,6 +221,7 @@ data class AiSettings(
             AiService.MISTRAL -> mistralOtherPlayerPrompt
             AiService.PERPLEXITY -> perplexityOtherPlayerPrompt
             AiService.TOGETHER -> togetherOtherPlayerPrompt
+            AiService.OPENROUTER -> openRouterOtherPlayerPrompt
             AiService.DUMMY -> dummyOtherPlayerPrompt
         }
     }
@@ -224,6 +236,7 @@ data class AiSettings(
             AiService.MISTRAL -> copy(mistralModel = model)
             AiService.PERPLEXITY -> copy(perplexityModel = model)
             AiService.TOGETHER -> copy(togetherModel = model)
+            AiService.OPENROUTER -> copy(openRouterModel = model)
             AiService.DUMMY -> this
         }
     }
@@ -238,6 +251,7 @@ data class AiSettings(
             AiService.MISTRAL -> mistralModelSource
             AiService.PERPLEXITY -> perplexityModelSource
             AiService.TOGETHER -> togetherModelSource
+            AiService.OPENROUTER -> openRouterModelSource
             AiService.DUMMY -> ModelSource.MANUAL
         }
     }
@@ -252,6 +266,7 @@ data class AiSettings(
             AiService.MISTRAL -> mistralManualModels
             AiService.PERPLEXITY -> perplexityManualModels
             AiService.TOGETHER -> togetherManualModels
+            AiService.OPENROUTER -> openRouterManualModels
             AiService.DUMMY -> emptyList()
         }
     }
@@ -265,6 +280,7 @@ data class AiSettings(
                 mistralApiKey.isNotBlank() ||
                 perplexityApiKey.isNotBlank() ||
                 togetherApiKey.isNotBlank() ||
+                openRouterApiKey.isNotBlank() ||
                 dummyEnabled
     }
 
@@ -392,6 +408,16 @@ fun AiSettingsScreen(
             isConfigured = aiSettings.togetherApiKey.isNotBlank(),
             selectedModel = if (aiSettings.togetherApiKey.isNotBlank()) aiSettings.togetherModel else null,
             onClick = { onNavigate(SettingsSubScreen.AI_TOGETHER) }
+        )
+
+        // OpenRouter
+        AiServiceNavigationCard(
+            title = "OpenRouter",
+            subtitle = "OpenRouter AI",
+            accentColor = Color(0xFF6B5AED),
+            isConfigured = aiSettings.openRouterApiKey.isNotBlank(),
+            selectedModel = if (aiSettings.openRouterApiKey.isNotBlank()) aiSettings.openRouterModel else null,
+            onClick = { onNavigate(SettingsSubScreen.AI_OPENROUTER) }
         )
 
         // Dummy (for testing)
@@ -578,6 +604,18 @@ private fun exportAiConfigToClipboard(context: Context, aiSettings: AiSettings) 
         ))
     }
 
+    if (aiSettings.openRouterApiKey.isNotBlank()) {
+        services.add(AiServiceConfig(
+            name = "OpenRouter",
+            apiKey = aiSettings.openRouterApiKey,
+            model = aiSettings.openRouterModel,
+            prompt = aiSettings.openRouterPrompt,
+            gamePrompt = aiSettings.openRouterPrompt,
+            serverPlayerPrompt = aiSettings.openRouterServerPlayerPrompt,
+            otherPlayerPrompt = aiSettings.openRouterOtherPlayerPrompt
+        ))
+    }
+
     val export = AiConfigExport(
         services = services,
         dummyEnabled = aiSettings.dummyEnabled
@@ -680,6 +718,13 @@ private fun importAiConfigFromClipboard(context: Context): AiSettings? {
                     togetherPrompt = gamePrompt,
                     togetherServerPlayerPrompt = serverPlayerPrompt,
                     togetherOtherPlayerPrompt = otherPlayerPrompt
+                )
+                "OpenRouter" -> settings.copy(
+                    openRouterApiKey = service.apiKey,
+                    openRouterModel = service.model,
+                    openRouterPrompt = gamePrompt,
+                    openRouterServerPlayerPrompt = serverPlayerPrompt,
+                    openRouterOtherPlayerPrompt = otherPlayerPrompt
                 )
                 else -> settings
             }
@@ -1590,6 +1635,99 @@ fun TogetherSettingsScreen(
                 onResetOtherPlayerPrompt = {
                     otherPlayerPrompt = DEFAULT_OTHER_PLAYER_PROMPT
                     onSave(aiSettings.copy(togetherOtherPlayerPrompt = DEFAULT_OTHER_PLAYER_PROMPT))
+                }
+            )
+        }
+    }
+}
+
+/**
+ * OpenRouter AI settings screen.
+ */
+@Composable
+fun OpenRouterSettingsScreen(
+    aiSettings: AiSettings,
+    availableModels: List<String>,
+    isLoadingModels: Boolean,
+    onBackToAiSettings: () -> Unit,
+    onBackToGame: () -> Unit,
+    onSave: (AiSettings) -> Unit,
+    onFetchModels: (String) -> Unit
+) {
+    var apiKey by remember { mutableStateOf(aiSettings.openRouterApiKey) }
+    var showKey by remember { mutableStateOf(false) }
+    var selectedModel by remember { mutableStateOf(aiSettings.openRouterModel) }
+    var gamePrompt by remember { mutableStateOf(aiSettings.openRouterPrompt) }
+    var serverPlayerPrompt by remember { mutableStateOf(aiSettings.openRouterServerPlayerPrompt) }
+    var otherPlayerPrompt by remember { mutableStateOf(aiSettings.openRouterOtherPlayerPrompt) }
+    var modelSource by remember { mutableStateOf(aiSettings.openRouterModelSource) }
+    var manualModels by remember { mutableStateOf(aiSettings.openRouterManualModels) }
+
+    AiServiceSettingsScreenTemplate(
+        title = "OpenRouter",
+        subtitle = "OpenRouter AI",
+        accentColor = Color(0xFF6B5AED),
+        apiKey = apiKey,
+        showKey = showKey,
+        onApiKeyChange = {
+            apiKey = it
+            onSave(aiSettings.copy(openRouterApiKey = it))
+        },
+        onToggleVisibility = { showKey = !showKey },
+        onBackToAiSettings = onBackToAiSettings,
+        onBackToGame = onBackToGame
+    ) {
+        // Model selection
+        if (apiKey.isNotBlank()) {
+            UnifiedModelSelectionSection(
+                selectedModel = selectedModel,
+                modelSource = modelSource,
+                manualModels = manualModels,
+                availableApiModels = availableModels,
+                isLoadingModels = isLoadingModels,
+                onModelChange = {
+                    selectedModel = it
+                    onSave(aiSettings.copy(openRouterModel = it))
+                },
+                onModelSourceChange = {
+                    modelSource = it
+                    onSave(aiSettings.copy(openRouterModelSource = it))
+                },
+                onManualModelsChange = {
+                    manualModels = it
+                    onSave(aiSettings.copy(openRouterManualModels = it))
+                },
+                onFetchModels = { onFetchModels(apiKey) }
+            )
+
+            // All prompts editing
+            AllPromptsSection(
+                gamePrompt = gamePrompt,
+                serverPlayerPrompt = serverPlayerPrompt,
+                otherPlayerPrompt = otherPlayerPrompt,
+                onGamePromptChange = {
+                    gamePrompt = it
+                    onSave(aiSettings.copy(openRouterPrompt = it))
+                },
+                onServerPlayerPromptChange = {
+                    serverPlayerPrompt = it
+                    onSave(aiSettings.copy(openRouterServerPlayerPrompt = it))
+                },
+                onOtherPlayerPromptChange = {
+                    otherPlayerPrompt = it
+                    onSave(aiSettings.copy(openRouterOtherPlayerPrompt = it))
+                },
+                onResetGamePrompt = {
+                    gamePrompt = DEFAULT_GAME_PROMPT
+                    onSave(aiSettings.copy(openRouterPrompt = DEFAULT_GAME_PROMPT))
+                },
+                onResetServerPlayerPrompt = {
+                    serverPlayerPrompt = DEFAULT_SERVER_PLAYER_PROMPT
+                    onSave(aiSettings.copy(openRouterServerPlayerPrompt = DEFAULT_SERVER_PLAYER_PROMPT))
+                },
+                onResetOtherPlayerPrompt = {
+                    otherPlayerPrompt = DEFAULT_OTHER_PLAYER_PROMPT
+                    onSave(aiSettings.copy(openRouterOtherPlayerPrompt = DEFAULT_OTHER_PLAYER_PROMPT))
                 }
             )
         }

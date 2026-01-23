@@ -172,6 +172,8 @@ fun GameScreen(
             isLoadingPerplexityModels = uiState.isLoadingPerplexityModels,
             availableTogetherModels = uiState.availableTogetherModels,
             isLoadingTogetherModels = uiState.isLoadingTogetherModels,
+            availableOpenRouterModels = uiState.availableOpenRouterModels,
+            isLoadingOpenRouterModels = uiState.isLoadingOpenRouterModels,
             onBack = { viewModel.hideSettingsDialog() },
             onSaveStockfish = { viewModel.updateStockfishSettings(it) },
             onSaveBoardLayout = { viewModel.updateBoardLayoutSettings(it) },
@@ -186,7 +188,8 @@ fun GameScreen(
             onFetchDeepSeekModels = { viewModel.fetchDeepSeekModels(it) },
             onFetchMistralModels = { viewModel.fetchMistralModels(it) },
             onFetchPerplexityModels = { viewModel.fetchPerplexityModels(it) },
-            onFetchTogetherModels = { viewModel.fetchTogetherModels(it) }
+            onFetchTogetherModels = { viewModel.fetchTogetherModels(it) },
+            onFetchOpenRouterModels = { viewModel.fetchOpenRouterModels(it) }
         )
         return
     }
@@ -255,6 +258,7 @@ fun GameScreen(
             availableMistralModels = uiState.availableMistralModels,
             availablePerplexityModels = uiState.availablePerplexityModels,
             availableTogetherModels = uiState.availableTogetherModels,
+            availableOpenRouterModels = uiState.availableOpenRouterModels,
             onModelChange = { service, model ->
                 viewModel.updateAiSettings(uiState.aiSettings.withModel(service, model))
             },
@@ -404,6 +408,7 @@ fun GameScreen(
             availableMistralModels = uiState.availableMistralModels,
             availablePerplexityModels = uiState.availablePerplexityModels,
             availableTogetherModels = uiState.availableTogetherModels,
+            availableOpenRouterModels = uiState.availableOpenRouterModels,
             onModelChange = { service, model ->
                 viewModel.updateAiSettings(uiState.aiSettings.withModel(service, model))
             },
@@ -3935,6 +3940,7 @@ private fun AiReportsSelectionDialog(
     availableMistralModels: List<String>,
     availablePerplexityModels: List<String>,
     availableTogetherModels: List<String>,
+    availableOpenRouterModels: List<String>,
     onModelChange: (com.eval.data.AiService, String) -> Unit,
     onGenerate: (Set<com.eval.data.AiService>) -> Unit,
     onDismiss: () -> Unit,
@@ -3997,6 +4003,7 @@ private fun AiReportsSelectionDialog(
                         com.eval.data.AiService.MISTRAL -> availableMistralModels
                         com.eval.data.AiService.PERPLEXITY -> availablePerplexityModels
                         com.eval.data.AiService.TOGETHER -> availableTogetherModels
+                        com.eval.data.AiService.OPENROUTER -> availableOpenRouterModels
                         com.eval.data.AiService.DUMMY -> emptyList()
                     }
 
@@ -4175,6 +4182,7 @@ private fun getAiServiceColor(service: com.eval.data.AiService): Color {
         com.eval.data.AiService.MISTRAL -> Color(0xFFFF7000)
         com.eval.data.AiService.PERPLEXITY -> Color(0xFF20B2AA)
         com.eval.data.AiService.TOGETHER -> Color(0xFF6366F1)
+        com.eval.data.AiService.OPENROUTER -> Color(0xFF6B5AED)
         com.eval.data.AiService.DUMMY -> Color(0xFF888888)
     }
 }
@@ -4189,6 +4197,7 @@ private fun getAiServiceLetter(service: com.eval.data.AiService): String {
         com.eval.data.AiService.MISTRAL -> "M"
         com.eval.data.AiService.PERPLEXITY -> "P"
         com.eval.data.AiService.TOGETHER -> "T"
+        com.eval.data.AiService.OPENROUTER -> "R"
         com.eval.data.AiService.DUMMY -> "?"
     }
 }

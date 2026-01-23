@@ -38,6 +38,7 @@ class AiAnalysisRepository {
     private val mistralApi = AiApiFactory.createMistralApi()
     private val perplexityApi = AiApiFactory.createPerplexityApi()
     private val togetherApi = AiApiFactory.createTogetherApi()
+    private val openRouterApi = AiApiFactory.createOpenRouterApi()
 
     /**
      * Builds the chess analysis prompt by replacing @FEN@ placeholder with actual FEN.
@@ -86,7 +87,8 @@ class AiAnalysisRepository {
         deepSeekModel: String = "deepseek-chat",
         mistralModel: String = "mistral-small-latest",
         perplexityModel: String = "sonar",
-        togetherModel: String = "meta-llama/Llama-3.3-70B-Instruct-Turbo"
+        togetherModel: String = "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+        openRouterModel: String = "anthropic/claude-3.5-sonnet"
     ): AiAnalysisResponse = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) {
             return@withContext AiAnalysisResponse(
@@ -108,6 +110,7 @@ class AiAnalysisRepository {
                 AiService.MISTRAL -> analyzeWithMistral(apiKey, finalPrompt, mistralModel)
                 AiService.PERPLEXITY -> analyzeWithPerplexity(apiKey, finalPrompt, perplexityModel)
                 AiService.TOGETHER -> analyzeWithTogether(apiKey, finalPrompt, togetherModel)
+                AiService.OPENROUTER -> analyzeWithOpenRouter(apiKey, finalPrompt, openRouterModel)
                 AiService.DUMMY -> analyzeWithDummy()
             }
         }
@@ -164,7 +167,8 @@ class AiAnalysisRepository {
         deepSeekModel: String = "deepseek-chat",
         mistralModel: String = "mistral-small-latest",
         perplexityModel: String = "sonar",
-        togetherModel: String = "meta-llama/Llama-3.3-70B-Instruct-Turbo"
+        togetherModel: String = "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+        openRouterModel: String = "anthropic/claude-3.5-sonnet"
     ): AiAnalysisResponse = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) {
             return@withContext AiAnalysisResponse(
@@ -186,6 +190,7 @@ class AiAnalysisRepository {
                 AiService.MISTRAL -> analyzeWithMistral(apiKey, finalPrompt, mistralModel)
                 AiService.PERPLEXITY -> analyzeWithPerplexity(apiKey, finalPrompt, perplexityModel)
                 AiService.TOGETHER -> analyzeWithTogether(apiKey, finalPrompt, togetherModel)
+                AiService.OPENROUTER -> analyzeWithOpenRouter(apiKey, finalPrompt, openRouterModel)
                 AiService.DUMMY -> analyzeWithDummy()
             }
         }
@@ -461,6 +466,36 @@ class AiAnalysisRepository {
         }
     }
 
+    private suspend fun analyzeWithOpenRouter(apiKey: String, prompt: String, model: String): AiAnalysisResponse {
+        val request = OpenRouterRequest(
+            model = model,
+            messages = listOf(OpenAiMessage(role = "user", content = prompt))
+        )
+        val response = openRouterApi.createChatCompletion(
+            authorization = "Bearer $apiKey",
+            request = request
+        )
+
+        return if (response.isSuccessful) {
+            val body = response.body()
+            val content = body?.choices?.firstOrNull()?.message?.content
+            val usage = body?.usage?.let {
+                TokenUsage(
+                    inputTokens = it.prompt_tokens ?: 0,
+                    outputTokens = it.completion_tokens ?: 0
+                )
+            }
+            if (content != null) {
+                AiAnalysisResponse(AiService.OPENROUTER, content, null, usage)
+            } else {
+                val errorMsg = body?.error?.message ?: "No response content"
+                AiAnalysisResponse(AiService.OPENROUTER, null, errorMsg)
+            }
+        } else {
+            AiAnalysisResponse(AiService.OPENROUTER, null, "API error: ${response.code()} ${response.message()}")
+        }
+    }
+
     private fun analyzeWithDummy(): AiAnalysisResponse {
         return AiAnalysisResponse(AiService.DUMMY, "Hi, greetings from AI", null, TokenUsage(10, 5))
     }
@@ -620,6 +655,27 @@ class AiAnalysisRepository {
             }
         } catch (e: Exception) {
             android.util.Log.e("TogetherAPI", "Error fetching models: ${e.message}")
+            emptyList()
+        }
+    }
+
+    /**
+     * Fetch available OpenRouter models.
+     */
+    suspend fun fetchOpenRouterModels(apiKey: String): List<String> = withContext(Dispatchers.IO) {
+        try {
+            val response = openRouterApi.listModels("Bearer $apiKey")
+            if (response.isSuccessful) {
+                val models = response.body()?.data ?: emptyList()
+                models
+                    .mapNotNull { it.id }
+                    .sorted()
+            } else {
+                android.util.Log.e("OpenRouterAPI", "Failed to fetch models: ${response.code()}")
+                emptyList()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("OpenRouterAPI", "Error fetching models: ${e.message}")
             emptyList()
         }
     }
