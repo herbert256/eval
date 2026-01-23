@@ -2,6 +2,7 @@ package com.eval.ui
 
 import com.eval.chess.ChessBoard
 import com.eval.data.AiAnalysisResponse
+import com.eval.data.AiService
 import com.eval.data.ChessServer
 import com.eval.data.TournamentInfo
 import com.eval.data.BroadcastInfo
@@ -404,5 +405,10 @@ data class GameUiState(
     val isLiveGame: Boolean = false,
     val liveGameId: String? = null,
     val autoFollowLive: Boolean = true,
-    val liveStreamConnected: Boolean = false
+    val liveStreamConnected: Boolean = false,
+    // AI Reports export state
+    val showAiReportsDialog: Boolean = false,
+    val aiReportsProgress: Int = 0,  // Number of completed calls
+    val aiReportsTotal: Int = 0,     // Total number of calls to make
+    val aiReportsResults: Map<AiService, AiAnalysisResponse> = emptyMap()
 )

@@ -209,6 +209,8 @@ fun GameScreen(
             onExportPgn = { viewModel.exportAnnotatedPgn(context) },
             onCopyPgn = { viewModel.copyPgnToClipboard(context) },
             onExportGif = { viewModel.exportAsGif(context) },
+            onGenerateAiReports = { viewModel.generateAiReports() },
+            hasConfiguredAiServices = uiState.aiSettings.getConfiguredServices().any { it != com.eval.data.AiService.DUMMY },
             onDismiss = { viewModel.hideSharePositionDialog() }
         )
     }
@@ -244,6 +246,80 @@ fun GameScreen(
             dismissButton = {
                 TextButton(onClick = { viewModel.cancelGifExport() }) {
                     Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Show AI Reports generation dialog
+    if (uiState.showAiReportsDialog) {
+        val isComplete = uiState.aiReportsProgress >= uiState.aiReportsTotal && uiState.aiReportsTotal > 0
+        AlertDialog(
+            onDismissRequest = { if (isComplete) viewModel.dismissAiReportsDialog() },
+            title = {
+                Text(
+                    text = if (isComplete) "AI Reports Ready" else "Generating AI Reports",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    if (!isComplete) {
+                        CircularProgressIndicator(
+                            progress = {
+                                if (uiState.aiReportsTotal > 0)
+                                    uiState.aiReportsProgress.toFloat() / uiState.aiReportsTotal
+                                else 0f
+                            },
+                            modifier = Modifier.size(64.dp),
+                            strokeWidth = 6.dp
+                        )
+                    }
+                    Text(
+                        text = if (isComplete)
+                            "All ${uiState.aiReportsTotal} AI analyses completed"
+                        else
+                            "Calling AI services... ${uiState.aiReportsProgress}/${uiState.aiReportsTotal}",
+                        color = Color.Gray
+                    )
+
+                    // Show status for each service
+                    uiState.aiReportsResults.forEach { (service, result) ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(service.displayName, fontWeight = FontWeight.Medium)
+                            Text(
+                                text = if (result.isSuccess) "✓" else "✗",
+                                color = if (result.isSuccess) Color(0xFF4CAF50) else Color(0xFFF44336)
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                if (isComplete) {
+                    Button(
+                        onClick = {
+                            openAiReportsInChrome(context, uiState)
+                            viewModel.dismissAiReportsDialog()
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF8B5CF6)
+                        )
+                    ) {
+                        Text("View in Chrome")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissAiReportsDialog() }) {
+                    Text(if (isComplete) "Close" else "Cancel")
                 }
             }
         )
@@ -475,7 +551,7 @@ fun GameScreen(
                         .padding(bottom = 8.dp)
                 ) {
                     Text(
-                        text = uiState.errorMessage!!,
+                        text = uiState.errorMessage ?: "Unknown error",
                         color = Color.White,
                         modifier = Modifier.padding(12.dp),
                         textAlign = TextAlign.Center
@@ -1781,6 +1857,332 @@ private fun openAnalysisInChrome(context: android.content.Context, serviceName: 
 }
 
 /**
+ * Opens AI reports from multiple services in Chrome with tabbed interface.
+ */
+private fun openAiReportsInChrome(context: android.content.Context, uiState: GameUiState) {
+    try {
+        val html = convertAiReportsToHtml(uiState)
+
+        val cacheDir = java.io.File(context.cacheDir, "ai_analysis")
+        if (!cacheDir.exists()) {
+            cacheDir.mkdirs()
+        }
+
+        val htmlFile = java.io.File(cacheDir, "ai_reports.html")
+        htmlFile.writeText(html)
+
+        val contentUri = androidx.core.content.FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            htmlFile
+        )
+
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(contentUri, "text/html")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            setPackage("com.android.chrome")
+        }
+
+        try {
+            context.startActivity(intent)
+        } catch (e: android.content.ActivityNotFoundException) {
+            intent.setPackage(null)
+            context.startActivity(intent)
+        }
+    } catch (e: Exception) {
+        android.widget.Toast.makeText(
+            context,
+            "Failed to open in browser: ${e.message}",
+            android.widget.Toast.LENGTH_SHORT
+        ).show()
+    }
+}
+
+/**
+ * Converts AI analysis results from multiple services to a tabbed HTML document.
+ */
+private fun convertAiReportsToHtml(uiState: GameUiState): String {
+    val game = uiState.game
+    val whiteName = game?.players?.white?.user?.name
+        ?: game?.players?.white?.aiLevel?.let { "Stockfish $it" }
+        ?: "White"
+    val blackName = game?.players?.black?.user?.name
+        ?: game?.players?.black?.aiLevel?.let { "Stockfish $it" }
+        ?: "Black"
+    val whiteRating = game?.players?.white?.rating?.toString() ?: ""
+    val blackRating = game?.players?.black?.rating?.toString() ?: ""
+    val fen = uiState.currentBoard.getFen()
+    val flippedBoard = uiState.flippedBoard
+    val isWhiteToMove = uiState.currentBoard.getTurn() == com.eval.chess.PieceColor.WHITE
+
+    val results = uiState.aiReportsResults
+    val serviceNames = results.keys.sortedBy { it.ordinal }
+
+    // Generate tabs HTML
+    val tabsHtml = serviceNames.mapIndexed { index, service ->
+        val isActive = if (index == 0) "active" else ""
+        """<button class="tab-btn $isActive" onclick="showTab('${service.name}')">${service.displayName}</button>"""
+    }.joinToString("\n")
+
+    // Generate content panels for each service
+    val panelsHtml = serviceNames.mapIndexed { index, service ->
+        val result = results[service]!!
+        val isActive = if (index == 0) "active" else ""
+        val content = if (result.isSuccess && result.analysis != null) {
+            convertMarkdownContentToHtml(result.analysis)
+        } else {
+            """<pre class="error">${escapeHtml(result.error ?: "Unknown error")}</pre>"""
+        }
+        """
+        <div id="panel-${service.name}" class="tab-panel $isActive">
+            <h2>${service.displayName} Analysis</h2>
+            $content
+        </div>
+        """
+    }.joinToString("\n")
+
+    return """
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Analysis Reports</title>
+    <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            padding: 16px;
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+        }
+        h1, h2, h3 {
+            color: #ffffff;
+            margin-top: 1.5em;
+            margin-bottom: 0.5em;
+        }
+        h1 { font-size: 1.8em; border-bottom: 2px solid #8B5CF6; padding-bottom: 8px; }
+        h2 { font-size: 1.4em; color: #8B5CF6; margin-top: 1em; }
+        h3 { font-size: 1.2em; color: #A78BFA; }
+        p { margin: 1em 0; }
+        ul { padding-left: 20px; }
+        li { margin: 0.5em 0; }
+        strong { color: #ffffff; }
+        em { color: #b0b0b0; }
+
+        /* Board container */
+        .board-section { margin-bottom: 24px; }
+        .board-container {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            align-items: stretch;
+        }
+        .board-wrapper { width: 320px; }
+
+        /* Player bars */
+        .player-bar {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            background: #2d2d2d;
+            border-radius: 4px;
+            margin-bottom: 4px;
+            width: 320px;
+        }
+        .player-bar.bottom { margin-top: 4px; margin-bottom: 0; }
+        .player-name { font-weight: bold; color: #fff; }
+        .player-rating { color: #888; margin-left: 8px; font-size: 0.9em; }
+        .player-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .player-indicator.white { background: #fff; border: 1px solid #666; }
+        .player-indicator.black { background: #000; border: 1px solid #666; }
+        .to-move { box-shadow: 0 0 0 2px #ff4444; }
+
+        /* Eval bar */
+        .eval-bar {
+            width: 24px;
+            background: linear-gradient(to top, #333 50%, #fff 50%);
+            border-radius: 4px;
+            position: relative;
+            overflow: hidden;
+        }
+        .eval-fill {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #fff;
+            transition: height 0.3s ease;
+        }
+
+        /* Tabs */
+        .tabs-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 24px 0 16px 0;
+            border-bottom: 2px solid #333;
+            padding-bottom: 8px;
+        }
+        .tab-btn {
+            padding: 10px 20px;
+            background: #2d2d2d;
+            border: none;
+            border-radius: 8px 8px 0 0;
+            color: #888;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .tab-btn:hover {
+            background: #3d3d3d;
+            color: #ccc;
+        }
+        .tab-btn.active {
+            background: #8B5CF6;
+            color: #fff;
+        }
+
+        /* Tab panels */
+        .tab-panel {
+            display: none;
+            padding: 16px 0;
+        }
+        .tab-panel.active {
+            display: block;
+        }
+
+        /* Error styling */
+        pre.error {
+            background: #2d1f1f;
+            border: 1px solid #5c2020;
+            border-radius: 8px;
+            padding: 16px;
+            color: #ff6b6b;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: monospace;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <h1>AI Analysis Reports</h1>
+
+    <!-- Board Section -->
+    <div class="board-section">
+        <div style="display: flex; flex-direction: column; align-items: center;">
+            <!-- Top player bar -->
+            <div class="player-bar">
+                <div class="player-indicator ${if (flippedBoard) "white" else "black"} ${if ((flippedBoard && isWhiteToMove) || (!flippedBoard && !isWhiteToMove)) "to-move" else ""}"></div>
+                <span class="player-name">${if (flippedBoard) whiteName else blackName}</span>
+                <span class="player-rating">${if (flippedBoard) whiteRating else blackRating}</span>
+            </div>
+
+            <div class="board-container">
+                <!-- Eval bar -->
+                <div class="eval-bar">
+                    <div class="eval-fill" id="evalFill" style="height: 50%;"></div>
+                </div>
+                <!-- Chess board -->
+                <div class="board-wrapper">
+                    <div id="board" style="width: 320px;"></div>
+                </div>
+            </div>
+
+            <!-- Bottom player bar -->
+            <div class="player-bar bottom">
+                <div class="player-indicator ${if (flippedBoard) "black" else "white"} ${if ((flippedBoard && !isWhiteToMove) || (!flippedBoard && isWhiteToMove)) "to-move" else ""}"></div>
+                <span class="player-name">${if (flippedBoard) blackName else whiteName}</span>
+                <span class="player-rating">${if (flippedBoard) blackRating else whiteRating}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs-container">
+        $tabsHtml
+    </div>
+
+    <!-- Tab panels -->
+    $panelsHtml
+
+    <script>
+        // Initialize chessboard
+        var board = Chessboard('board', {
+            position: '$fen',
+            orientation: '${if (flippedBoard) "black" else "white"}',
+            pieceTheme: 'https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/img/chesspieces/wikipedia/{piece}.png'
+        });
+
+        // Tab switching
+        function showTab(serviceName) {
+            // Hide all panels
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+            // Deactivate all buttons
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            // Show selected panel
+            document.getElementById('panel-' + serviceName).classList.add('active');
+            // Activate selected button
+            event.target.classList.add('active');
+        }
+    </script>
+</body>
+</html>
+"""
+}
+
+/**
+ * Converts markdown content to HTML (helper function for AI reports).
+ */
+private fun convertMarkdownContentToHtml(markdown: String): String {
+    return markdown
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace(Regex("^### (.+)$", RegexOption.MULTILINE), "<h3>$1</h3>")
+        .replace(Regex("^## (.+)$", RegexOption.MULTILINE), "<h2>$1</h2>")
+        .replace(Regex("^# (.+)$", RegexOption.MULTILINE), "<h1>$1</h1>")
+        .replace(Regex("\\*\\*(.+?)\\*\\*"), "<strong>$1</strong>")
+        .replace(Regex("\\*(.+?)\\*"), "<em>$1</em>")
+        .replace(Regex("^- (.+)$", RegexOption.MULTILINE), "<li>$1</li>")
+        .replace(Regex("^\\* (.+)$", RegexOption.MULTILINE), "<li>$1</li>")
+        .replace(Regex("^\\d+\\. (.+)$", RegexOption.MULTILINE), "<li>$1</li>")
+        .replace("\n\n", "</p><p>")
+        .replace("\n", "<br>")
+        .let { html ->
+            html.replace(Regex("(<li>.*?</li>)+")) { match ->
+                "<ul>${match.value}</ul>"
+            }
+        }
+        .let { "<p>$it</p>" }
+}
+
+/**
+ * Escapes HTML special characters.
+ */
+private fun escapeHtml(text: String): String {
+    return text
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\"", "&quot;")
+        .replace("'", "&#39;")
+}
+
+/**
  * Converts markdown text to a styled HTML document with chessboard and game data.
  */
 private fun convertMarkdownToHtml(serviceName: String, markdown: String, uiState: GameUiState): String {
@@ -2344,6 +2746,8 @@ fun SharePositionDialog(
     onExportPgn: () -> Unit,
     onCopyPgn: () -> Unit,
     onExportGif: () -> Unit,
+    onGenerateAiReports: () -> Unit,
+    hasConfiguredAiServices: Boolean,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
@@ -2459,6 +2863,30 @@ fun SharePositionDialog(
                     )
                 ) {
                     Text("Export as Animated GIF")
+                }
+
+                if (hasConfiguredAiServices) {
+                    HorizontalDivider(color = Color(0xFF404040))
+
+                    Text(
+                        text = "AI Analysis Reports:",
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFFAAAAAA)
+                    )
+
+                    // AI Reports button
+                    Button(
+                        onClick = {
+                            onGenerateAiReports()
+                            onDismiss()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF8B5CF6) // Purple color for AI
+                        )
+                    ) {
+                        Text("Generate AI Reports")
+                    }
                 }
             }
         },

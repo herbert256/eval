@@ -884,6 +884,79 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
+    // ===== AI REPORTS (MULTI-SERVICE) =====
+    fun generateAiReports() {
+        val aiSettings = _uiState.value.aiSettings
+        // Get all configured services except DUMMY
+        val servicesToCall = AiService.entries.filter { service ->
+            service != AiService.DUMMY && aiSettings.getApiKey(service).isNotBlank()
+        }
+
+        if (servicesToCall.isEmpty()) {
+            _uiState.value = _uiState.value.copy(
+                errorMessage = "No AI services configured. Please add API keys in Settings > AI Analysis."
+            )
+            return
+        }
+
+        val fen = _uiState.value.currentBoard.getFen()
+
+        _uiState.value = _uiState.value.copy(
+            showAiReportsDialog = true,
+            aiReportsProgress = 0,
+            aiReportsTotal = servicesToCall.size,
+            aiReportsResults = emptyMap()
+        )
+
+        viewModelScope.launch {
+            val results = mutableMapOf<AiService, AiAnalysisResponse>()
+
+            for ((index, service) in servicesToCall.withIndex()) {
+                val apiKey = aiSettings.getApiKey(service)
+                val prompt = when (service) {
+                    AiService.CHATGPT -> aiSettings.chatGptPrompt
+                    AiService.CLAUDE -> aiSettings.claudePrompt
+                    AiService.GEMINI -> aiSettings.geminiPrompt
+                    AiService.GROK -> aiSettings.grokPrompt
+                    AiService.DEEPSEEK -> aiSettings.deepSeekPrompt
+                    AiService.MISTRAL -> aiSettings.mistralPrompt
+                    AiService.DUMMY -> ""
+                }
+
+                val result = aiAnalysisRepository.analyzePosition(
+                    service = service,
+                    fen = fen,
+                    apiKey = apiKey,
+                    prompt = prompt,
+                    chatGptModel = aiSettings.chatGptModel,
+                    claudeModel = aiSettings.claudeModel,
+                    geminiModel = aiSettings.geminiModel,
+                    grokModel = aiSettings.grokModel,
+                    deepSeekModel = aiSettings.deepSeekModel,
+                    mistralModel = aiSettings.mistralModel
+                )
+
+                results[service] = result
+
+                _uiState.value = _uiState.value.copy(
+                    aiReportsProgress = index + 1,
+                    aiReportsResults = results.toMap()
+                )
+            }
+
+            // All done - keep dialog open until user exports
+        }
+    }
+
+    fun dismissAiReportsDialog() {
+        _uiState.value = _uiState.value.copy(
+            showAiReportsDialog = false,
+            aiReportsResults = emptyMap(),
+            aiReportsProgress = 0,
+            aiReportsTotal = 0
+        )
+    }
+
     // ===== AI MODEL FETCHING =====
     fun fetchChatGptModels(apiKey: String) {
         if (apiKey.isBlank()) return
