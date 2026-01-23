@@ -29,7 +29,9 @@ enum class AiService(val displayName: String, val baseUrl: String) {
 // OpenAI / ChatGPT models
 data class OpenAiMessage(
     val role: String,
-    val content: String
+    val content: String?,
+    // DeepSeek reasoning models return reasoning in this field
+    val reasoning_content: String? = null
 )
 
 data class OpenAiRequest(

@@ -345,14 +345,17 @@ class AiAnalysisRepository {
 
         return if (response.isSuccessful) {
             val body = response.body()
-            val content = body?.choices?.firstOrNull()?.message?.content
+            val message = body?.choices?.firstOrNull()?.message
+            // DeepSeek reasoning models may return content in reasoning_content field
+            // Use content first, fall back to reasoning_content
+            val content = message?.content ?: message?.reasoning_content
             val usage = body?.usage?.let {
                 TokenUsage(
                     inputTokens = it.prompt_tokens ?: 0,
                     outputTokens = it.completion_tokens ?: 0
                 )
             }
-            if (content != null) {
+            if (!content.isNullOrBlank()) {
                 AiAnalysisResponse(AiService.DEEPSEEK, content, null, usage)
             } else {
                 val errorMsg = body?.error?.message ?: "No response content"
