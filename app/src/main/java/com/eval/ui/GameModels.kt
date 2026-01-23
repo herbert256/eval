@@ -159,7 +159,8 @@ data class ManualStageVisibility(
     val showResultBar: Boolean = true,
     val showScoreLineGraph: Boolean = true,
     val showScoreBarsGraph: Boolean = true,
-    val showTimeGraph: Boolean = true,
+    val showTimeGraph: Boolean = false,
+    val showOpeningExplorer: Boolean = false,
     val showMoveList: Boolean = true,
     val showGameInfo: Boolean = false,
     val showPgn: Boolean = false

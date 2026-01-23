@@ -812,7 +812,7 @@ fun GameContent(
         )
 
         // Opening Explorer panel
-        if (uiState.showOpeningExplorer) {
+        if (uiState.interfaceVisibility.manualStage.showOpeningExplorer) {
             Spacer(modifier = Modifier.height(8.dp))
             OpeningExplorerPanel(
                 explorerData = uiState.openingExplorerData,

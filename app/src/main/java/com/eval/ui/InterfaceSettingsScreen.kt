@@ -65,6 +65,8 @@ fun InterfaceSettingsScreen(
     var manualShowResultBar by remember { mutableStateOf(interfaceVisibility.manualStage.showResultBar) }
     var manualShowScoreLineGraph by remember { mutableStateOf(interfaceVisibility.manualStage.showScoreLineGraph) }
     var manualShowScoreBarsGraph by remember { mutableStateOf(interfaceVisibility.manualStage.showScoreBarsGraph) }
+    var manualShowTimeGraph by remember { mutableStateOf(interfaceVisibility.manualStage.showTimeGraph) }
+    var manualShowOpeningExplorer by remember { mutableStateOf(interfaceVisibility.manualStage.showOpeningExplorer) }
     var manualShowMoveList by remember { mutableStateOf(interfaceVisibility.manualStage.showMoveList) }
     var manualShowGameInfo by remember { mutableStateOf(interfaceVisibility.manualStage.showGameInfo) }
     var manualShowPgn by remember { mutableStateOf(interfaceVisibility.manualStage.showPgn) }
@@ -92,6 +94,8 @@ fun InterfaceSettingsScreen(
                 showResultBar = manualShowResultBar,
                 showScoreLineGraph = manualShowScoreLineGraph,
                 showScoreBarsGraph = manualShowScoreBarsGraph,
+                showTimeGraph = manualShowTimeGraph,
+                showOpeningExplorer = manualShowOpeningExplorer,
                 showMoveList = manualShowMoveList,
                 showGameInfo = manualShowGameInfo,
                 showPgn = manualShowPgn
@@ -328,6 +332,24 @@ fun InterfaceSettingsScreen(
                     checked = manualShowScoreBarsGraph,
                     onCheckedChange = {
                         manualShowScoreBarsGraph = it
+                        saveAllSettings()
+                    }
+                )
+
+                VisibilityToggle(
+                    label = "Time Usage graph",
+                    checked = manualShowTimeGraph,
+                    onCheckedChange = {
+                        manualShowTimeGraph = it
+                        saveAllSettings()
+                    }
+                )
+
+                VisibilityToggle(
+                    label = "Opening Explorer",
+                    checked = manualShowOpeningExplorer,
+                    onCheckedChange = {
+                        manualShowOpeningExplorer = it
                         saveAllSettings()
                     }
                 )

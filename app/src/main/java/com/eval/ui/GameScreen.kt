@@ -200,41 +200,6 @@ fun GameScreen(
         return
     }
 
-    // Show ActivePlayer validation error popup
-    val activePlayerError = uiState.activePlayerError
-    if (activePlayerError != null) {
-        AlertDialog(
-            onDismissRequest = { viewModel.dismissActivePlayerError() },
-            title = { Text("ActivePlayer Validation Error") },
-            text = {
-                Column {
-                    Text(activePlayerError)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        "ActivePlayer: ${uiState.activePlayer ?: "null"}",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    val game = uiState.game
-                    if (game != null) {
-                        Text(
-                            "White: ${game.players.white.user?.name ?: "unknown"}",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        Text(
-                            "Black: ${game.players.black.user?.name ?: "unknown"}",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { viewModel.dismissActivePlayerError() }) {
-                    Text("OK")
-                }
-            }
-        )
-    }
-
     // Show share position dialog
     if (uiState.showSharePositionDialog) {
         SharePositionDialog(
@@ -1862,27 +1827,6 @@ private fun convertMarkdownToHtml(serviceName: String, markdown: String, uiState
     val isWhiteToMove = uiState.currentBoard.getTurn() == com.eval.chess.PieceColor.WHITE
     val flippedBoard = uiState.flippedBoard
 
-    // Get current score for eval bar
-    val currentScore = uiState.analyseScores[currentMoveIndex]
-        ?: uiState.previewScores[currentMoveIndex]
-    val evalScore = currentScore?.let {
-        if (it.isMate) {
-            if (it.mateIn > 0) "M${it.mateIn}" else "M${-it.mateIn}"
-        } else {
-            val score = it.score
-            if (score >= 0) "+%.1f".format(score) else "%.1f".format(score)
-        }
-    } ?: "0.0"
-    val evalPercent = currentScore?.let {
-        if (it.isMate) {
-            if (it.mateIn > 0) 100f else 0f
-        } else {
-            // Convert centipawns to percentage (sigmoid-like)
-            val cp = it.score * 100
-            (50 + 50 * (2 / (1 + kotlin.math.exp(-0.004 * cp)) - 1)).toFloat()
-        }
-    } ?: 50f
-
     // Generate move list HTML
     val moveListHtml = buildMoveListHtml(uiState)
 
@@ -1912,6 +1856,9 @@ private fun convertMarkdownToHtml(serviceName: String, markdown: String, uiState
 
     // Generate Stockfish analysis HTML
     val stockfishHtml = buildStockfishAnalysisHtml(uiState)
+
+    // Generate PGN with each move on a new line
+    val pgnHtml = buildPgnHtml(uiState)
 
     return """
 <!DOCTYPE html>
@@ -1970,6 +1917,8 @@ private fun convertMarkdownToHtml(serviceName: String, markdown: String, uiState
             background: #2d2d2d;
             border-radius: 4px;
             margin-bottom: 4px;
+            width: 320px;
+            box-sizing: border-box;
         }
         .player-bar.bottom { margin-top: 4px; margin-bottom: 0; }
         .player-name { font-weight: bold; color: #fff; }
@@ -1984,34 +1933,24 @@ private fun convertMarkdownToHtml(serviceName: String, markdown: String, uiState
         .player-indicator.black { background: #000; border: 1px solid #666; }
         .to-move { box-shadow: 0 0 0 2px #ff4444; }
 
-        /* Eval bar */
-        .eval-bar {
-            width: 24px;
-            background: #000;
+        /* PGN section */
+        .pgn-section {
+            background: #242424;
+            padding: 16px;
+            border-radius: 8px;
+            margin: 16px 0;
+        }
+        .pgn-section pre {
+            background: #1a1a1a;
+            padding: 12px;
             border-radius: 4px;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            position: relative;
-        }
-        .eval-bar-white {
-            background: #fff;
-            transition: height 0.3s;
-        }
-        .eval-bar-black {
-            background: #333;
-            flex: 1;
-        }
-        .eval-score {
-            position: absolute;
-            width: 100%;
-            text-align: center;
-            font-size: 10px;
-            font-weight: bold;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #888;
-            text-shadow: 0 0 2px #000;
+            font-family: monospace;
+            font-size: 13px;
+            color: #ccc;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            margin: 0;
+            line-height: 1.8;
         }
 
         /* Analysis section */
@@ -2102,13 +2041,6 @@ private fun convertMarkdownToHtml(serviceName: String, markdown: String, uiState
     <!-- Chess Board Section -->
     <div class="board-section">
         <div class="board-container">
-            <!-- Eval Bar -->
-            <div class="eval-bar" id="evalBar">
-                <div class="eval-bar-white" id="evalWhite" style="height: ${evalPercent}%;"></div>
-                <div class="eval-bar-black"></div>
-                <div class="eval-score" id="evalScore">$evalScore</div>
-            </div>
-
             <!-- Board with player bars -->
             <div class="board-wrapper">
                 <div class="player-bar" id="topPlayer">
@@ -2124,8 +2056,8 @@ private fun convertMarkdownToHtml(serviceName: String, markdown: String, uiState
                 </div>
             </div>
         </div>
-        <p style="text-align: center; color: #666; font-size: 0.9em; margin-top: 8px;">
-            Move ${currentMoveIndex + 1} of ${uiState.moves.size} • ${if (isWhiteToMove) "White" else "Black"} to move
+        <p style="text-align: center; color: #4CAF50; font-size: 1.3em; font-weight: bold; margin-top: 12px;">
+            Move ${currentMoveIndex + 1} of ${uiState.moves.size} - ${if (isWhiteToMove) "White" else "Black"} to move
         </p>
     </div>
 
@@ -2157,6 +2089,12 @@ private fun convertMarkdownToHtml(serviceName: String, markdown: String, uiState
     <div class="stockfish-section">
         <h2>Stockfish Analysis</h2>
         $stockfishHtml
+    </div>
+
+    <!-- PGN -->
+    <div class="pgn-section">
+        <h2>PGN</h2>
+        <pre>$pgnHtml</pre>
     </div>
 
     <script>
@@ -2345,6 +2283,54 @@ private fun formatNodes(nodes: Long): String {
         nodes >= 1_000 -> "%.1fK".format(nodes / 1_000.0)
         else -> nodes.toString()
     }
+}
+
+/**
+ * Builds HTML for the PGN with each move on a new line.
+ */
+private fun buildPgnHtml(uiState: GameUiState): String {
+    val moves = uiState.moveDetails
+    if (moves.isEmpty()) return "No moves available"
+
+    val sb = StringBuilder()
+
+    // Add game headers if available
+    val game = uiState.game
+    if (game != null) {
+        val whiteName = game.players.white.user?.name ?: "White"
+        val blackName = game.players.black.user?.name ?: "Black"
+        val whiteRating = game.players.white.rating
+        val blackRating = game.players.black.rating
+
+        sb.append("[White \"$whiteName\"]\n")
+        sb.append("[Black \"$blackName\"]\n")
+        if (whiteRating != null) sb.append("[WhiteElo \"$whiteRating\"]\n")
+        if (blackRating != null) sb.append("[BlackElo \"$blackRating\"]\n")
+
+        val result = when {
+            game.winner == "white" -> "1-0"
+            game.winner == "black" -> "0-1"
+            game.status == "draw" || game.status == "stalemate" -> "1/2-1/2"
+            else -> "*"
+        }
+        sb.append("[Result \"$result\"]\n")
+        sb.append("\n")
+    }
+
+    // Add moves, one per line with move number
+    for (i in moves.indices step 2) {
+        val moveNum = (i / 2) + 1
+        val whiteMove = moves[i]
+        val blackMove = moves.getOrNull(i + 1)
+
+        if (blackMove != null) {
+            sb.append("$moveNum. ${whiteMove.san} ${blackMove.san}\n")
+        } else {
+            sb.append("$moveNum. ${whiteMove.san}\n")
+        }
+    }
+
+    return sb.toString().trim()
 }
 
 /**
