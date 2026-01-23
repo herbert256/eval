@@ -20,7 +20,8 @@ enum class AiService(val displayName: String, val baseUrl: String) {
     CLAUDE("Claude", "https://api.anthropic.com/"),
     GEMINI("Gemini", "https://generativelanguage.googleapis.com/"),
     GROK("Grok", "https://api.x.ai/"),
-    DEEPSEEK("DeepSeek", "https://api.deepseek.com/")
+    DEEPSEEK("DeepSeek", "https://api.deepseek.com/"),
+    MISTRAL("Mistral", "https://api.mistral.ai/")
 }
 
 // OpenAI / ChatGPT models
@@ -117,6 +118,13 @@ data class GrokRequest(
 // DeepSeek models (uses OpenAI-compatible format)
 data class DeepSeekRequest(
     val model: String = "deepseek-chat",
+    val messages: List<OpenAiMessage>,
+    val max_tokens: Int = 1024
+)
+
+// Mistral models (uses OpenAI-compatible format)
+data class MistralRequest(
+    val model: String = "mistral-small-latest",
     val messages: List<OpenAiMessage>,
     val max_tokens: Int = 1024
 )
@@ -220,6 +228,22 @@ interface DeepSeekApi {
 }
 
 /**
+ * Retrofit interface for Mistral API (OpenAI-compatible).
+ */
+interface MistralApi {
+    @POST("v1/chat/completions")
+    suspend fun createChatCompletion(
+        @Header("Authorization") authorization: String,
+        @Body request: MistralRequest
+    ): Response<OpenAiResponse>
+
+    @retrofit2.http.GET("v1/models")
+    suspend fun listModels(
+        @Header("Authorization") authorization: String
+    ): Response<OpenAiModelsResponse>
+}
+
+/**
  * Factory for creating API instances.
  */
 object AiApiFactory {
@@ -260,5 +284,9 @@ object AiApiFactory {
 
     fun createDeepSeekApi(): DeepSeekApi {
         return getRetrofit(AiService.DEEPSEEK.baseUrl).create(DeepSeekApi::class.java)
+    }
+
+    fun createMistralApi(): MistralApi {
+        return getRetrofit(AiService.MISTRAL.baseUrl).create(MistralApi::class.java)
     }
 }

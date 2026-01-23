@@ -294,5 +294,8 @@ data class GameUiState(
     val isLoadingGrokModels: Boolean = false,
     // DeepSeek model selection
     val availableDeepSeekModels: List<String> = emptyList(),
-    val isLoadingDeepSeekModels: Boolean = false
+    val isLoadingDeepSeekModels: Boolean = false,
+    // Mistral model selection
+    val availableMistralModels: List<String> = emptyList(),
+    val isLoadingMistralModels: Boolean = false
 )

@@ -30,7 +30,8 @@ enum class SettingsSubScreen {
     AI_CLAUDE,
     AI_GEMINI,
     AI_GROK,
-    AI_DEEPSEEK
+    AI_DEEPSEEK,
+    AI_MISTRAL
 }
 
 /**
@@ -53,6 +54,8 @@ fun SettingsScreen(
     isLoadingGrokModels: Boolean,
     availableDeepSeekModels: List<String>,
     isLoadingDeepSeekModels: Boolean,
+    availableMistralModels: List<String>,
+    isLoadingMistralModels: Boolean,
     onBack: () -> Unit,
     onSaveStockfish: (StockfishSettings) -> Unit,
     onSaveBoardLayout: (BoardLayoutSettings) -> Unit,
@@ -63,7 +66,8 @@ fun SettingsScreen(
     onFetchChatGptModels: (String) -> Unit,
     onFetchGeminiModels: (String) -> Unit,
     onFetchGrokModels: (String) -> Unit,
-    onFetchDeepSeekModels: (String) -> Unit
+    onFetchDeepSeekModels: (String) -> Unit,
+    onFetchMistralModels: (String) -> Unit
 ) {
     var currentSubScreen by remember { mutableStateOf(SettingsSubScreen.MAIN) }
 
@@ -75,7 +79,8 @@ fun SettingsScreen(
             SettingsSubScreen.AI_CLAUDE,
             SettingsSubScreen.AI_GEMINI,
             SettingsSubScreen.AI_GROK,
-            SettingsSubScreen.AI_DEEPSEEK -> currentSubScreen = SettingsSubScreen.AI_SETTINGS
+            SettingsSubScreen.AI_DEEPSEEK,
+            SettingsSubScreen.AI_MISTRAL -> currentSubScreen = SettingsSubScreen.AI_SETTINGS
             else -> currentSubScreen = SettingsSubScreen.MAIN
         }
     }
@@ -169,6 +174,15 @@ fun SettingsScreen(
             onBackToGame = onBack,
             onSave = onSaveAi,
             onFetchModels = onFetchDeepSeekModels
+        )
+        SettingsSubScreen.AI_MISTRAL -> MistralSettingsScreen(
+            aiSettings = aiSettings,
+            availableModels = availableMistralModels,
+            isLoadingModels = isLoadingMistralModels,
+            onBackToAiSettings = { currentSubScreen = SettingsSubScreen.AI_SETTINGS },
+            onBackToGame = onBack,
+            onSave = onSaveAi,
+            onFetchModels = onFetchMistralModels
         )
     }
 }

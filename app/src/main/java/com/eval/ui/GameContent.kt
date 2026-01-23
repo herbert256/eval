@@ -1393,6 +1393,7 @@ private fun AiServiceLogo(
         AiService.GEMINI -> Color(0xFF4285F4)   // Google blue
         AiService.GROK -> Color(0xFF000000)     // X/Twitter black
         AiService.DEEPSEEK -> Color(0xFF0066FF) // DeepSeek blue
+        AiService.MISTRAL -> Color(0xFFFF7000)  // Mistral orange
     }
 
     val textColor = when (service) {
@@ -1407,6 +1408,7 @@ private fun AiServiceLogo(
         AiService.GEMINI -> "G"
         AiService.GROK -> "X"
         AiService.DEEPSEEK -> "D"
+        AiService.MISTRAL -> "M"
     }
 
     Box(

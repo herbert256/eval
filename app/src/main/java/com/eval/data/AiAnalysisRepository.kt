@@ -23,6 +23,7 @@ class AiAnalysisRepository {
     private val geminiApi = AiApiFactory.createGeminiApi()
     private val grokApi = AiApiFactory.createGrokApi()
     private val deepSeekApi = AiApiFactory.createDeepSeekApi()
+    private val mistralApi = AiApiFactory.createMistralApi()
 
     /**
      * Builds the chess analysis prompt by replacing @FEN@ placeholder with actual FEN.
@@ -54,7 +55,8 @@ class AiAnalysisRepository {
         claudeModel: String = "claude-sonnet-4-20250514",
         geminiModel: String = "gemini-2.0-flash",
         grokModel: String = "grok-3-mini",
-        deepSeekModel: String = "deepseek-chat"
+        deepSeekModel: String = "deepseek-chat",
+        mistralModel: String = "mistral-small-latest"
     ): AiAnalysisResponse = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) {
             return@withContext AiAnalysisResponse(
@@ -73,6 +75,7 @@ class AiAnalysisRepository {
                 AiService.GEMINI -> analyzeWithGemini(apiKey, finalPrompt, geminiModel)
                 AiService.GROK -> analyzeWithGrok(apiKey, finalPrompt, grokModel)
                 AiService.DEEPSEEK -> analyzeWithDeepSeek(apiKey, finalPrompt, deepSeekModel)
+                AiService.MISTRAL -> analyzeWithMistral(apiKey, finalPrompt, mistralModel)
             }
         } catch (e: Exception) {
             AiAnalysisResponse(
@@ -205,6 +208,30 @@ class AiAnalysisRepository {
         }
     }
 
+    private suspend fun analyzeWithMistral(apiKey: String, prompt: String, model: String): AiAnalysisResponse {
+        val request = MistralRequest(
+            model = model,
+            messages = listOf(OpenAiMessage(role = "user", content = prompt))
+        )
+        val response = mistralApi.createChatCompletion(
+            authorization = "Bearer $apiKey",
+            request = request
+        )
+
+        return if (response.isSuccessful) {
+            val body = response.body()
+            val content = body?.choices?.firstOrNull()?.message?.content
+            if (content != null) {
+                AiAnalysisResponse(AiService.MISTRAL, content, null)
+            } else {
+                val errorMsg = body?.error?.message ?: "No response content"
+                AiAnalysisResponse(AiService.MISTRAL, null, errorMsg)
+            }
+        } else {
+            AiAnalysisResponse(AiService.MISTRAL, null, "API error: ${response.code()} ${response.message()}")
+        }
+    }
+
     /**
      * Fetch available Gemini models that support generateContent.
      */
@@ -294,6 +321,28 @@ class AiAnalysisRepository {
             }
         } catch (e: Exception) {
             android.util.Log.e("DeepSeekAPI", "Error fetching models: ${e.message}")
+            emptyList()
+        }
+    }
+
+    /**
+     * Fetch available Mistral models.
+     */
+    suspend fun fetchMistralModels(apiKey: String): List<String> = withContext(Dispatchers.IO) {
+        try {
+            val response = mistralApi.listModels("Bearer $apiKey")
+            if (response.isSuccessful) {
+                val models = response.body()?.data ?: emptyList()
+                models
+                    .mapNotNull { it.id }
+                    .filter { it.startsWith("mistral") || it.startsWith("open-mistral") || it.startsWith("codestral") || it.startsWith("pixtral") }
+                    .sorted()
+            } else {
+                android.util.Log.e("MistralAPI", "Failed to fetch models: ${response.code()}")
+                emptyList()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("MistralAPI", "Error fetching models: ${e.message}")
             emptyList()
         }
     }

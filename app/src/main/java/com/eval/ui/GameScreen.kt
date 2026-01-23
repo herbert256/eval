@@ -149,6 +149,8 @@ fun GameScreen(
             isLoadingGrokModels = uiState.isLoadingGrokModels,
             availableDeepSeekModels = uiState.availableDeepSeekModels,
             isLoadingDeepSeekModels = uiState.isLoadingDeepSeekModels,
+            availableMistralModels = uiState.availableMistralModels,
+            isLoadingMistralModels = uiState.isLoadingMistralModels,
             onBack = { viewModel.hideSettingsDialog() },
             onSaveStockfish = { viewModel.updateStockfishSettings(it) },
             onSaveBoardLayout = { viewModel.updateBoardLayoutSettings(it) },
@@ -159,7 +161,8 @@ fun GameScreen(
             onFetchChatGptModels = { viewModel.fetchChatGptModels(it) },
             onFetchGeminiModels = { viewModel.fetchGeminiModels(it) },
             onFetchGrokModels = { viewModel.fetchGrokModels(it) },
-            onFetchDeepSeekModels = { viewModel.fetchDeepSeekModels(it) }
+            onFetchDeepSeekModels = { viewModel.fetchDeepSeekModels(it) },
+            onFetchMistralModels = { viewModel.fetchMistralModels(it) }
         )
         return
     }

@@ -293,7 +293,10 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             grokPrompt = prefs.getString(KEY_AI_GROK_PROMPT, DEFAULT_AI_PROMPT) ?: DEFAULT_AI_PROMPT,
             deepSeekApiKey = prefs.getString(KEY_AI_DEEPSEEK_API_KEY, "") ?: "",
             deepSeekModel = prefs.getString(KEY_AI_DEEPSEEK_MODEL, "deepseek-chat") ?: "deepseek-chat",
-            deepSeekPrompt = prefs.getString(KEY_AI_DEEPSEEK_PROMPT, DEFAULT_AI_PROMPT) ?: DEFAULT_AI_PROMPT
+            deepSeekPrompt = prefs.getString(KEY_AI_DEEPSEEK_PROMPT, DEFAULT_AI_PROMPT) ?: DEFAULT_AI_PROMPT,
+            mistralApiKey = prefs.getString(KEY_AI_MISTRAL_API_KEY, "") ?: "",
+            mistralModel = prefs.getString(KEY_AI_MISTRAL_MODEL, "mistral-small-latest") ?: "mistral-small-latest",
+            mistralPrompt = prefs.getString(KEY_AI_MISTRAL_PROMPT, DEFAULT_AI_PROMPT) ?: DEFAULT_AI_PROMPT
         )
     }
 
@@ -315,6 +318,9 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             .putString(KEY_AI_DEEPSEEK_API_KEY, settings.deepSeekApiKey)
             .putString(KEY_AI_DEEPSEEK_MODEL, settings.deepSeekModel)
             .putString(KEY_AI_DEEPSEEK_PROMPT, settings.deepSeekPrompt)
+            .putString(KEY_AI_MISTRAL_API_KEY, settings.mistralApiKey)
+            .putString(KEY_AI_MISTRAL_MODEL, settings.mistralModel)
+            .putString(KEY_AI_MISTRAL_PROMPT, settings.mistralPrompt)
             .apply()
     }
 
@@ -469,6 +475,9 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         private const val KEY_AI_GEMINI_PROMPT = "ai_gemini_prompt"
         private const val KEY_AI_GROK_PROMPT = "ai_grok_prompt"
         private const val KEY_AI_DEEPSEEK_PROMPT = "ai_deepseek_prompt"
+        private const val KEY_AI_MISTRAL_API_KEY = "ai_mistral_api_key"
+        private const val KEY_AI_MISTRAL_MODEL = "ai_mistral_model"
+        private const val KEY_AI_MISTRAL_PROMPT = "ai_mistral_prompt"
 
         // AI report email
         const val KEY_AI_REPORT_EMAIL = "ai_report_email"

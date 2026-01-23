@@ -55,7 +55,10 @@ data class AiSettings(
     val grokPrompt: String = DEFAULT_AI_PROMPT,
     val deepSeekApiKey: String = "",
     val deepSeekModel: String = "deepseek-chat",
-    val deepSeekPrompt: String = DEFAULT_AI_PROMPT
+    val deepSeekPrompt: String = DEFAULT_AI_PROMPT,
+    val mistralApiKey: String = "",
+    val mistralModel: String = "mistral-small-latest",
+    val mistralPrompt: String = DEFAULT_AI_PROMPT
 ) {
     fun getApiKey(service: AiService): String {
         return when (service) {
@@ -64,6 +67,7 @@ data class AiSettings(
             AiService.GEMINI -> geminiApiKey
             AiService.GROK -> grokApiKey
             AiService.DEEPSEEK -> deepSeekApiKey
+            AiService.MISTRAL -> mistralApiKey
         }
     }
 
@@ -72,7 +76,8 @@ data class AiSettings(
                 claudeApiKey.isNotBlank() ||
                 geminiApiKey.isNotBlank() ||
                 grokApiKey.isNotBlank() ||
-                deepSeekApiKey.isNotBlank()
+                deepSeekApiKey.isNotBlank() ||
+                mistralApiKey.isNotBlank()
     }
 
     fun getConfiguredServices(): List<AiService> {
@@ -212,6 +217,16 @@ fun AiSettingsScreen(
             isConfigured = aiSettings.deepSeekApiKey.isNotBlank(),
             selectedModel = if (aiSettings.deepSeekApiKey.isNotBlank()) aiSettings.deepSeekModel else null,
             onClick = { onNavigate(SettingsSubScreen.AI_DEEPSEEK) }
+        )
+
+        // Mistral
+        AiServiceNavigationCard(
+            title = "Mistral",
+            subtitle = "Mistral AI",
+            accentColor = Color(0xFFFF7000),
+            isConfigured = aiSettings.mistralApiKey.isNotBlank(),
+            selectedModel = if (aiSettings.mistralApiKey.isNotBlank()) aiSettings.mistralModel else null,
+            onClick = { onNavigate(SettingsSubScreen.AI_MISTRAL) }
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -367,6 +382,13 @@ private fun sendApiKeysEmail(context: Context, email: String, aiSettings: AiSett
             appendLine("DeepSeek:")
             appendLine("  API Key: ${aiSettings.deepSeekApiKey}")
             appendLine("  Model: ${aiSettings.deepSeekModel}")
+            appendLine()
+        }
+
+        if (aiSettings.mistralApiKey.isNotBlank()) {
+            appendLine("Mistral (Mistral AI):")
+            appendLine("  API Key: ${aiSettings.mistralApiKey}")
+            appendLine("  Model: ${aiSettings.mistralModel}")
             appendLine()
         }
 
@@ -772,6 +794,67 @@ fun DeepSeekSettingsScreen(
                 onResetToDefault = {
                     prompt = DEFAULT_AI_PROMPT
                     onSave(aiSettings.copy(deepSeekPrompt = DEFAULT_AI_PROMPT))
+                }
+            )
+        }
+    }
+}
+
+/**
+ * Mistral settings screen.
+ */
+@Composable
+fun MistralSettingsScreen(
+    aiSettings: AiSettings,
+    availableModels: List<String>,
+    isLoadingModels: Boolean,
+    onBackToAiSettings: () -> Unit,
+    onBackToGame: () -> Unit,
+    onSave: (AiSettings) -> Unit,
+    onFetchModels: (String) -> Unit
+) {
+    var apiKey by remember { mutableStateOf(aiSettings.mistralApiKey) }
+    var selectedModel by remember { mutableStateOf(aiSettings.mistralModel) }
+    var prompt by remember { mutableStateOf(aiSettings.mistralPrompt) }
+    var showKey by remember { mutableStateOf(false) }
+
+    AiServiceSettingsScreenTemplate(
+        title = "Mistral",
+        subtitle = "Mistral AI",
+        accentColor = Color(0xFFFF7000),
+        apiKey = apiKey,
+        showKey = showKey,
+        onApiKeyChange = {
+            apiKey = it
+            onSave(aiSettings.copy(mistralApiKey = it.trim()))
+        },
+        onToggleVisibility = { showKey = !showKey },
+        onBackToAiSettings = onBackToAiSettings,
+        onBackToGame = onBackToGame
+    ) {
+        // Model selection
+        if (apiKey.isNotBlank()) {
+            ModelSelectionSection(
+                selectedModel = selectedModel,
+                availableModels = availableModels,
+                isLoadingModels = isLoadingModels,
+                onModelChange = {
+                    selectedModel = it
+                    onSave(aiSettings.copy(mistralModel = it))
+                },
+                onFetchModels = { onFetchModels(apiKey) }
+            )
+
+            // Prompt editing
+            PromptEditSection(
+                prompt = prompt,
+                onPromptChange = {
+                    prompt = it
+                    onSave(aiSettings.copy(mistralPrompt = it))
+                },
+                onResetToDefault = {
+                    prompt = DEFAULT_AI_PROMPT
+                    onSave(aiSettings.copy(mistralPrompt = DEFAULT_AI_PROMPT))
                 }
             )
         }

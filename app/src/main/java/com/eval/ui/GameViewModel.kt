@@ -1506,6 +1506,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 AiService.GEMINI -> aiSettings.geminiPrompt
                 AiService.GROK -> aiSettings.grokPrompt
                 AiService.DEEPSEEK -> aiSettings.deepSeekPrompt
+                AiService.MISTRAL -> aiSettings.mistralPrompt
             }
             val result = aiAnalysisRepository.analyzePosition(
                 service = service,
@@ -1516,7 +1517,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 claudeModel = aiSettings.claudeModel,
                 geminiModel = aiSettings.geminiModel,
                 grokModel = aiSettings.grokModel,
-                deepSeekModel = aiSettings.deepSeekModel
+                deepSeekModel = aiSettings.deepSeekModel,
+                mistralModel = aiSettings.mistralModel
             )
             _uiState.value = _uiState.value.copy(
                 aiAnalysisLoading = false,
@@ -1594,6 +1596,20 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.value = _uiState.value.copy(
                 availableDeepSeekModels = models,
                 isLoadingDeepSeekModels = false
+            )
+        }
+    }
+
+    fun fetchMistralModels(apiKey: String) {
+        if (apiKey.isBlank()) return
+
+        _uiState.value = _uiState.value.copy(isLoadingMistralModels = true)
+
+        viewModelScope.launch {
+            val models = aiAnalysisRepository.fetchMistralModels(apiKey)
+            _uiState.value = _uiState.value.copy(
+                availableMistralModels = models,
+                isLoadingMistralModels = false
             )
         }
     }
