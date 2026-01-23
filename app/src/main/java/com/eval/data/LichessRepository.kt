@@ -610,24 +610,47 @@ class ChessRepository(
                 return@withContext Result.Error("Failed to fetch Lichess broadcasts")
             }
 
-            val broadcastPage = response.body() ?: return@withContext Result.Error("No broadcast data received")
+            val body = response.body()
+            if (body.isNullOrBlank()) {
+                return@withContext Result.Error("No broadcast data received")
+            }
 
-            val result = broadcastPage.currentPageResults?.mapNotNull { broadcast ->
-                val tour = broadcast.tour ?: return@mapNotNull null
-                val latestRound = broadcast.rounds?.firstOrNull { it.ongoing == true }
-                    ?: broadcast.rounds?.firstOrNull()
+            // Parse NDJSON - each line is a broadcast object
+            val result = body.lines()
+                .filter { it.isNotBlank() }
+                .mapNotNull { line ->
+                    try {
+                        val broadcast = gson.fromJson(line, LichessBroadcast::class.java)
+                        val tour = broadcast.tour ?: return@mapNotNull null
 
-                BroadcastInfo(
-                    id = tour.id ?: return@mapNotNull null,
-                    name = tour.name ?: "Unknown",
-                    description = tour.description,
-                    roundId = latestRound?.id,
-                    roundName = latestRound?.name,
-                    ongoing = latestRound?.ongoing == true,
-                    startsAt = latestRound?.startsAt,
-                    server = ChessServer.LICHESS
-                )
-            } ?: emptyList()
+                        // Convert all rounds to BroadcastRoundInfo
+                        val rounds = broadcast.rounds?.mapNotNull { round ->
+                            val roundId = round.id ?: return@mapNotNull null
+                            BroadcastRoundInfo(
+                                id = roundId,
+                                name = round.name ?: "Round",
+                                ongoing = round.ongoing == true,
+                                finished = round.finished == true,
+                                startsAt = round.startsAt
+                            )
+                        } ?: emptyList()
+
+                        val hasOngoing = rounds.any { it.ongoing }
+                        val firstRoundStart = rounds.firstOrNull()?.startsAt
+
+                        BroadcastInfo(
+                            id = tour.id ?: return@mapNotNull null,
+                            name = tour.name ?: "Unknown",
+                            description = tour.description,
+                            rounds = rounds,
+                            ongoing = hasOngoing,
+                            startsAt = firstRoundStart,
+                            server = ChessServer.LICHESS
+                        )
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
 
             Result.Success(result)
         } catch (e: Exception) {
@@ -638,12 +661,13 @@ class ChessRepository(
     /**
      * Get games from a Lichess broadcast round
      */
+    @Suppress("UNUSED_PARAMETER")
     suspend fun getLichessBroadcastGames(tournamentId: String, roundId: String): Result<List<LichessGame>> = withContext(Dispatchers.IO) {
         try {
-            val response = lichessApi.getBroadcastRoundPgn(tournamentId, roundId)
+            val response = lichessApi.getBroadcastRoundPgn(roundId)
 
             if (!response.isSuccessful) {
-                return@withContext Result.Error("Failed to fetch broadcast games")
+                return@withContext Result.Error("Failed to fetch broadcast games: ${response.code()}")
             }
 
             val body = response.body()
@@ -651,13 +675,12 @@ class ChessRepository(
                 return@withContext Result.Error("No games found in this broadcast")
             }
 
-            // Parse NDJSON - each line contains game data
-            val games = body.lines()
+            // Parse PGN - games are separated by double newlines
+            val games = body.split(Regex("\n\n(?=\\[Event)"))
                 .filter { it.isNotBlank() }
-                .mapNotNull { line ->
+                .mapNotNull { pgn ->
                     try {
-                        val gameData = gson.fromJson(line, BroadcastGameData::class.java)
-                        convertBroadcastGameToLichessFormat(gameData)
+                        convertPgnToLichessGame(pgn.trim())
                     } catch (e: Exception) {
                         android.util.Log.e("ChessRepository", "Error parsing broadcast game: ${e.message}")
                         null
@@ -672,6 +695,53 @@ class ChessRepository(
         } catch (e: Exception) {
             Result.Error(e.message ?: "Unknown error occurred")
         }
+    }
+
+    /**
+     * Convert a PGN string to LichessGame format
+     */
+    private fun convertPgnToLichessGame(pgn: String): LichessGame? {
+        if (pgn.isBlank()) return null
+
+        val whiteName = extractPgnTag(pgn, "White") ?: "White"
+        val blackName = extractPgnTag(pgn, "Black") ?: "Black"
+        val result = extractPgnTag(pgn, "Result")
+
+        val winner = when (result) {
+            "1-0" -> "white"
+            "0-1" -> "black"
+            else -> null
+        }
+
+        val gameUrl = extractPgnTag(pgn, "GameURL")
+        val gameId = gameUrl?.substringAfterLast("/") ?: java.util.UUID.randomUUID().toString()
+
+        return LichessGame(
+            id = gameId,
+            rated = false,
+            variant = "standard",
+            speed = "classical",
+            perf = "classical",
+            status = if (result == "*") "started" else "ended",
+            winner = winner,
+            players = Players(
+                white = Player(
+                    user = User(name = whiteName, id = whiteName.lowercase().replace(" ", "_")),
+                    rating = extractPgnTag(pgn, "WhiteElo")?.toIntOrNull(),
+                    aiLevel = null
+                ),
+                black = Player(
+                    user = User(name = blackName, id = blackName.lowercase().replace(" ", "_")),
+                    rating = extractPgnTag(pgn, "BlackElo")?.toIntOrNull(),
+                    aiLevel = null
+                )
+            ),
+            pgn = pgn,
+            moves = null,
+            clock = null,
+            createdAt = null,
+            lastMoveAt = null
+        )
     }
 
     private fun convertBroadcastGameToLichessFormat(gameData: BroadcastGameData): LichessGame? {
@@ -1079,14 +1149,24 @@ data class TournamentInfo(
 )
 
 /**
+ * Broadcast round info
+ */
+data class BroadcastRoundInfo(
+    val id: String,
+    val name: String,
+    val ongoing: Boolean,
+    val finished: Boolean,
+    val startsAt: Long?
+)
+
+/**
  * Broadcast info from Lichess
  */
 data class BroadcastInfo(
     val id: String,
     val name: String,
     val description: String?,
-    val roundId: String?,
-    val roundName: String?,
+    val rounds: List<BroadcastRoundInfo>,
     val ongoing: Boolean,
     val startsAt: Long?,
     val server: ChessServer

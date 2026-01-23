@@ -1188,6 +1188,12 @@ private fun BroadcastsScreen(
 ) {
     val serverColor = Color(0xFF629924)
 
+    // Determine current level: broadcasts -> rounds -> games
+    val showingRounds = uiState.selectedBroadcast != null &&
+            uiState.selectedBroadcastRound == null &&
+            uiState.selectedBroadcast.rounds.size > 1
+    val showingGames = uiState.selectedBroadcastRound != null
+
     BackHandler {
         if (uiState.selectedBroadcast != null) {
             viewModel.backToBroadcastList()
@@ -1218,27 +1224,51 @@ private fun BroadcastsScreen(
                 Text("< Back", color = Color.White)
             }
             Text(
-                text = if (uiState.selectedBroadcast != null) "Broadcast Games" else "Broadcasts",
+                text = when {
+                    showingGames -> "Games"
+                    showingRounds -> "Rounds"
+                    else -> "Broadcasts"
+                },
                 style = MaterialTheme.typography.titleLarge,
                 color = serverColor,
                 fontWeight = FontWeight.Bold
             )
         }
 
-        if (uiState.selectedBroadcast != null) {
-            Text(
-                text = uiState.selectedBroadcast.name,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFFAAAAAA),
-                modifier = Modifier.padding(start = 8.dp, bottom = 16.dp)
-            )
-        } else {
-            Text(
-                text = "Official events from lichess.org",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFFAAAAAA),
-                modifier = Modifier.padding(start = 8.dp, bottom = 16.dp)
-            )
+        // Subtitle showing current broadcast/round
+        when {
+            showingGames && uiState.selectedBroadcast != null -> {
+                Column(modifier = Modifier.padding(start = 8.dp, bottom = 16.dp)) {
+                    Text(
+                        text = uiState.selectedBroadcast.name,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFFAAAAAA)
+                    )
+                    uiState.selectedBroadcastRound?.let { round ->
+                        Text(
+                            text = round.name,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = serverColor
+                        )
+                    }
+                }
+            }
+            showingRounds && uiState.selectedBroadcast != null -> {
+                Text(
+                    text = uiState.selectedBroadcast.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFFAAAAAA),
+                    modifier = Modifier.padding(start = 8.dp, bottom = 16.dp)
+                )
+            }
+            else -> {
+                Text(
+                    text = "Official events from lichess.org",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFFAAAAAA),
+                    modifier = Modifier.padding(start = 8.dp, bottom = 16.dp)
+                )
+            }
         }
 
         // Content
@@ -1265,11 +1295,11 @@ private fun BroadcastsScreen(
                     modifier = Modifier.padding(16.dp)
                 )
             }
-            uiState.selectedBroadcast != null -> {
+            showingGames -> {
                 // Show broadcast games
                 if (uiState.broadcastGames.isEmpty()) {
                     Text(
-                        text = "No games found in this broadcast",
+                        text = "No games found in this round",
                         color = Color(0xFFAAAAAA),
                         modifier = Modifier.padding(16.dp)
                     )
@@ -1283,6 +1313,20 @@ private fun BroadcastsScreen(
                                 onClick = { viewModel.selectBroadcastGame(game) }
                             )
                         }
+                    }
+                }
+            }
+            showingRounds && uiState.selectedBroadcast != null -> {
+                // Show round selection
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(uiState.selectedBroadcast.rounds) { round ->
+                        BroadcastRoundRow(
+                            round = round,
+                            serverColor = serverColor,
+                            onClick = { viewModel.selectBroadcastRound(round) }
+                        )
                     }
                 }
             }
@@ -1336,13 +1380,18 @@ private fun BroadcastRow(
                     )
                 }
             }
-            broadcast.roundName?.let { roundName ->
-                Text(
-                    text = roundName,
-                    color = serverColor,
-                    fontSize = 12.sp
-                )
-            }
+            // Show number of rounds
+            val roundCount = broadcast.rounds.size
+            val ongoingRounds = broadcast.rounds.count { it.ongoing }
+            Text(
+                text = when {
+                    roundCount == 1 -> broadcast.rounds.first().name
+                    ongoingRounds > 0 -> "$roundCount rounds ($ongoingRounds live)"
+                    else -> "$roundCount rounds"
+                },
+                color = serverColor,
+                fontSize = 12.sp
+            )
             broadcast.description?.let { desc ->
                 if (desc.isNotBlank()) {
                     Text(
@@ -1352,6 +1401,56 @@ private fun BroadcastRow(
                         maxLines = 2
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BroadcastRoundRow(
+    round: com.eval.data.BroadcastRoundInfo,
+    serverColor: Color,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2A2A))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = round.name,
+                fontWeight = FontWeight.Medium,
+                color = Color.White,
+                modifier = Modifier.weight(1f)
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (round.ongoing) {
+                    Text(
+                        text = "LIVE",
+                        color = Color(0xFFFF5252),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                } else if (round.finished) {
+                    Text(
+                        text = "Finished",
+                        color = Color(0xFFAAAAAA),
+                        fontSize = 12.sp
+                    )
+                }
+                Text(
+                    text = ">",
+                    color = serverColor,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }

@@ -249,12 +249,11 @@ interface LichessApi {
 
     // Broadcast endpoints
     @GET("api/broadcast?nb=20")
-    suspend fun getBroadcasts(): Response<LichessBroadcastPage>
-
-    @GET("api/broadcast/{broadcastTournamentId}/{broadcastRoundId}")
     @Headers("Accept: application/x-ndjson")
+    suspend fun getBroadcasts(): Response<String>
+
+    @GET("api/broadcast/round/{broadcastRoundId}.pgn")
     suspend fun getBroadcastRoundPgn(
-        @Path("broadcastTournamentId") tournamentId: String,
         @Path("broadcastRoundId") roundId: String
     ): Response<String>
 

@@ -1983,24 +1983,49 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Select a broadcast to view its games.
+     * Select a broadcast to view its rounds or games.
+     * If the broadcast has only 1 round, go directly to games.
+     * If it has multiple rounds, show round selection.
      */
     fun selectBroadcast(broadcast: com.eval.data.BroadcastInfo) {
-        if (broadcast.roundId == null) {
+        if (broadcast.rounds.isEmpty()) {
             _uiState.value = _uiState.value.copy(
-                broadcastsError = "No round available for this broadcast"
+                broadcastsError = "No rounds available for this broadcast"
             )
             return
         }
 
+        // If only one round, select it automatically
+        if (broadcast.rounds.size == 1) {
+            _uiState.value = _uiState.value.copy(
+                selectedBroadcast = broadcast
+            )
+            selectBroadcastRound(broadcast.rounds.first())
+            return
+        }
+
+        // Multiple rounds - show round selection
         _uiState.value = _uiState.value.copy(
             selectedBroadcast = broadcast,
+            selectedBroadcastRound = null,
+            broadcastGames = emptyList()
+        )
+    }
+
+    /**
+     * Select a round from a broadcast to view its games.
+     */
+    fun selectBroadcastRound(round: com.eval.data.BroadcastRoundInfo) {
+        val broadcast = _uiState.value.selectedBroadcast ?: return
+
+        _uiState.value = _uiState.value.copy(
+            selectedBroadcastRound = round,
             broadcastGamesLoading = true,
             broadcastGames = emptyList()
         )
 
         viewModelScope.launch {
-            when (val result = repository.getLichessBroadcastGames(broadcast.id, broadcast.roundId)) {
+            when (val result = repository.getLichessBroadcastGames(broadcast.id, round.id)) {
                 is Result.Success -> {
                     _uiState.value = _uiState.value.copy(
                         broadcastGamesLoading = false,
@@ -2018,11 +2043,28 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Go back from broadcast games to broadcast list.
+     * Go back from broadcast games/rounds to appropriate level.
      */
     fun backToBroadcastList() {
-        _uiState.value = _uiState.value.copy(
+        val currentState = _uiState.value
+
+        // If viewing games, go back to rounds (if multiple) or broadcasts
+        if (currentState.selectedBroadcastRound != null) {
+            val broadcast = currentState.selectedBroadcast
+            if (broadcast != null && broadcast.rounds.size > 1) {
+                // Go back to round selection
+                _uiState.value = currentState.copy(
+                    selectedBroadcastRound = null,
+                    broadcastGames = emptyList()
+                )
+                return
+            }
+        }
+
+        // Go back to broadcast list
+        _uiState.value = currentState.copy(
             selectedBroadcast = null,
+            selectedBroadcastRound = null,
             broadcastGames = emptyList()
         )
     }
@@ -2035,6 +2077,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             showBroadcastsScreen = false,
             broadcastsList = emptyList(),
             selectedBroadcast = null,
+            selectedBroadcastRound = null,
             broadcastGames = emptyList(),
             broadcastsError = null
         )

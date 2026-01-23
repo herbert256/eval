@@ -341,6 +341,7 @@ data class GameUiState(
     val broadcastsError: String? = null,
     val broadcastsList: List<BroadcastInfo> = emptyList(),
     val selectedBroadcast: BroadcastInfo? = null,
+    val selectedBroadcastRound: com.eval.data.BroadcastRoundInfo? = null,
     val broadcastGames: List<LichessGame> = emptyList(),
     val broadcastGamesLoading: Boolean = false,
     // TV screen (Lichess only)
