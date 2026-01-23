@@ -25,11 +25,15 @@ import com.eval.stockfish.StockfishEngine
 import org.json.JSONObject
 import com.eval.audio.MoveSoundPlayer
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = ChessRepository()
@@ -1113,39 +1117,52 @@ ${opening.moves} *
 
         viewModelScope.launch {
             val results = mutableMapOf<AiService, AiAnalysisResponse>()
+            val mutex = Mutex()
+            var completedCount = 0
 
-            for ((index, service) in servicesToCall.withIndex()) {
-                val apiKey = aiSettings.getApiKey(service)
-                val prompt = when (service) {
-                    AiService.CHATGPT -> aiSettings.chatGptPrompt
-                    AiService.CLAUDE -> aiSettings.claudePrompt
-                    AiService.GEMINI -> aiSettings.geminiPrompt
-                    AiService.GROK -> aiSettings.grokPrompt
-                    AiService.DEEPSEEK -> aiSettings.deepSeekPrompt
-                    AiService.MISTRAL -> aiSettings.mistralPrompt
-                    AiService.DUMMY -> ""
+            // Launch all API calls in parallel
+            val deferredResults = servicesToCall.map { service ->
+                async {
+                    val apiKey = aiSettings.getApiKey(service)
+                    val prompt = when (service) {
+                        AiService.CHATGPT -> aiSettings.chatGptPrompt
+                        AiService.CLAUDE -> aiSettings.claudePrompt
+                        AiService.GEMINI -> aiSettings.geminiPrompt
+                        AiService.GROK -> aiSettings.grokPrompt
+                        AiService.DEEPSEEK -> aiSettings.deepSeekPrompt
+                        AiService.MISTRAL -> aiSettings.mistralPrompt
+                        AiService.DUMMY -> ""
+                    }
+
+                    val result = aiAnalysisRepository.analyzePosition(
+                        service = service,
+                        fen = fen,
+                        apiKey = apiKey,
+                        prompt = prompt,
+                        chatGptModel = aiSettings.chatGptModel,
+                        claudeModel = aiSettings.claudeModel,
+                        geminiModel = aiSettings.geminiModel,
+                        grokModel = aiSettings.grokModel,
+                        deepSeekModel = aiSettings.deepSeekModel,
+                        mistralModel = aiSettings.mistralModel
+                    )
+
+                    // Update progress as each call completes
+                    mutex.withLock {
+                        results[service] = result
+                        completedCount++
+                        _uiState.value = _uiState.value.copy(
+                            aiReportsProgress = completedCount,
+                            aiReportsResults = results.toMap()
+                        )
+                    }
+
+                    service to result
                 }
-
-                val result = aiAnalysisRepository.analyzePosition(
-                    service = service,
-                    fen = fen,
-                    apiKey = apiKey,
-                    prompt = prompt,
-                    chatGptModel = aiSettings.chatGptModel,
-                    claudeModel = aiSettings.claudeModel,
-                    geminiModel = aiSettings.geminiModel,
-                    grokModel = aiSettings.grokModel,
-                    deepSeekModel = aiSettings.deepSeekModel,
-                    mistralModel = aiSettings.mistralModel
-                )
-
-                results[service] = result
-
-                _uiState.value = _uiState.value.copy(
-                    aiReportsProgress = index + 1,
-                    aiReportsResults = results.toMap()
-                )
             }
+
+            // Wait for all calls to complete
+            deferredResults.awaitAll()
 
             // All done - keep dialog open until user exports
         }

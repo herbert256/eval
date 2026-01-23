@@ -132,7 +132,13 @@ fun EvaluationGraph(
             val score = previewScores[moveIndex]
             if (score != null) {
                 val x = if (totalMoves > 1) moveIndex * pointSpacing else width / 2
-                val adjustedScore = score.score * scorePerspective
+                // Use raw Stockfish score, but for mate use +/- lineGraphRange
+                val rawScore = if (score.isMate) {
+                    if (score.mateIn > 0) maxScore else -maxScore
+                } else {
+                    score.score
+                }
+                val adjustedScore = rawScore * scorePerspective
                 val clampedScore = adjustedScore.coerceIn(-maxScore, maxScore)
                 val y = centerY - (clampedScore / maxScore) * (height / 2 - 4)
                 points.add(GraphPoint(x, y, adjustedScore))
@@ -206,7 +212,13 @@ fun EvaluationGraph(
             val score = analyseScores[moveIndex]
             if (score != null) {
                 val x = if (totalMoves > 1) moveIndex * pointSpacing else width / 2
-                val adjustedScore = score.score * scorePerspective
+                // Use raw Stockfish score, but for mate use +/- lineGraphRange
+                val rawScore = if (score.isMate) {
+                    if (score.mateIn > 0) maxScore else -maxScore
+                } else {
+                    score.score
+                }
+                val adjustedScore = rawScore * scorePerspective
                 val clampedScore = adjustedScore.coerceIn(-maxScore, maxScore)
                 val y = centerY - (clampedScore / maxScore) * (height / 2 - 4)
                 pointsAnalyse.add(GraphPoint(x, y, adjustedScore))
@@ -217,7 +229,7 @@ fun EvaluationGraph(
         for (i in 0 until pointsAnalyse.size - 1) {
             val p1 = pointsAnalyse[i]
             val p2 = pointsAnalyse[i + 1]
-            drawLine(analyseColor, Offset(p1.x, p1.y), Offset(p2.x, p2.y), strokeWidth = 8f)
+            drawLine(analyseColor, Offset(p1.x, p1.y), Offset(p2.x, p2.y), strokeWidth = 7f)
         }
 
         // Draw blunder/mistake markers (only in manual stage)
@@ -511,11 +523,70 @@ fun ScoreDifferenceGraph(
             }
 
             if (currentScore != null && prevSameColorScore != null) {
-                // Calculate difference: current - previous same color move
-                val currentAdj = currentScore.score * scorePerspective
-                val prevAdj = prevSameColorScore.score * scorePerspective
-                val diff = currentAdj - prevAdj
+                // Calculate difference based on mate handling rules
+                val prevIsMate = prevSameColorScore.isMate
+                val currIsMate = currentScore.isMate
 
+                // M value is the absolute value of mateIn (ignoring sign)
+                val prevMValue = kotlin.math.abs(prevSameColorScore.mateIn)
+                val currMValue = kotlin.math.abs(currentScore.mateIn)
+
+                // Check if winning (+M*) or losing (-M*) mate
+                val prevIsPositiveMate = prevIsMate && prevSameColorScore.mateIn > 0
+                val prevIsNegativeMate = prevIsMate && prevSameColorScore.mateIn < 0
+                val currIsPositiveMate = currIsMate && currentScore.mateIn > 0
+                val currIsNegativeMate = currIsMate && currentScore.mateIn < 0
+
+                val rawDiff: Float = when {
+                    // Both +M* (winning mate for both)
+                    prevIsPositiveMate && currIsPositiveMate -> when {
+                        currMValue == prevMValue -> -1f
+                        currMValue == prevMValue - 1 -> 0f
+                        currMValue > prevMValue -> -(1 + (currMValue - prevMValue)).toFloat().coerceAtMost(maxDiff)
+                        currMValue < prevMValue -> ((prevMValue - currMValue) + 1).toFloat().coerceAtMost(3f)
+                        else -> 0f
+                    }
+
+                    // Both -M* (losing mate for both)
+                    prevIsNegativeMate && currIsNegativeMate -> when {
+                        currMValue == prevMValue -> -1f
+                        currMValue == prevMValue - 1 -> 0f
+                        currMValue > prevMValue -> (1 + (currMValue - prevMValue)).toFloat().coerceAtMost(maxDiff)
+                        currMValue < prevMValue -> -((prevMValue - currMValue) + 1).toFloat().coerceAtLeast(-maxDiff)
+                        else -> 0f
+                    }
+
+                    // +M* to -M* (lost winning mate, now losing)
+                    prevIsPositiveMate && currIsNegativeMate -> -maxDiff
+
+                    // -M* to +M* (escaped losing mate, now winning)
+                    prevIsNegativeMate && currIsPositiveMate -> maxDiff
+
+                    // Previous normal, current +M*
+                    !prevIsMate && currIsPositiveMate -> maxDiff
+
+                    // Previous normal, current -M*
+                    !prevIsMate && currIsNegativeMate -> -maxDiff
+
+                    // Previous +M*, current normal
+                    prevIsPositiveMate && !currIsMate -> -maxDiff
+
+                    // Previous -M*, current normal
+                    prevIsNegativeMate && !currIsMate -> maxDiff
+
+                    // Both normal scores
+                    !prevIsMate && !currIsMate -> when {
+                        currentScore.score == prevSameColorScore.score -> 0f
+                        currentScore.score > prevSameColorScore.score ->
+                            (currentScore.score - prevSameColorScore.score).coerceAtMost(maxDiff)
+                        else ->
+                            (currentScore.score - prevSameColorScore.score).coerceAtLeast(-maxDiff)
+                    }
+
+                    else -> 0f
+                }
+
+                val diff = rawDiff * scorePerspective
                 val clampedDiff = diff.coerceIn(-maxDiff, maxDiff)
                 val barHeight = kotlin.math.abs(clampedDiff / maxDiff) * (height / 2 - 4)
 

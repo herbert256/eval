@@ -171,6 +171,7 @@ data class ManualStageVisibility(
     val showTimeGraph: Boolean = false,
     val showOpeningExplorer: Boolean = false,
     val showOpeningName: Boolean = false,
+    val showRawStockfishScore: Boolean = false,
     val showMoveList: Boolean = true,
     val showGameInfo: Boolean = false,
     val showPgn: Boolean = false

@@ -1,7 +1,18 @@
 package com.eval.data
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+
+/**
+ * Token usage statistics from AI API response.
+ */
+data class TokenUsage(
+    val inputTokens: Int,
+    val outputTokens: Int
+) {
+    val totalTokens: Int get() = inputTokens + outputTokens
+}
 
 /**
  * Response from AI analysis containing either the analysis text or an error message.
@@ -9,7 +20,8 @@ import kotlinx.coroutines.withContext
 data class AiAnalysisResponse(
     val service: AiService,
     val analysis: String?,
-    val error: String?
+    val error: String?,
+    val tokenUsage: TokenUsage? = null
 ) {
     val isSuccess: Boolean get() = analysis != null && error == null
 }
@@ -68,8 +80,8 @@ class AiAnalysisRepository {
 
         val finalPrompt = buildChessPrompt(prompt, fen)
 
-        try {
-            when (service) {
+        suspend fun makeApiCall(): AiAnalysisResponse {
+            return when (service) {
                 AiService.CHATGPT -> analyzeWithChatGpt(apiKey, finalPrompt, chatGptModel)
                 AiService.CLAUDE -> analyzeWithClaude(apiKey, finalPrompt, claudeModel)
                 AiService.GEMINI -> analyzeWithGemini(apiKey, finalPrompt, geminiModel)
@@ -78,12 +90,31 @@ class AiAnalysisRepository {
                 AiService.MISTRAL -> analyzeWithMistral(apiKey, finalPrompt, mistralModel)
                 AiService.DUMMY -> analyzeWithDummy()
             }
+        }
+
+        // First attempt
+        try {
+            val result = makeApiCall()
+            if (result.isSuccess) {
+                return@withContext result
+            }
+            // API returned an error response, retry after delay
+            android.util.Log.w("AiAnalysis", "${service.displayName} first attempt failed: ${result.error}, retrying...")
+            delay(500)
+            makeApiCall()
         } catch (e: Exception) {
-            AiAnalysisResponse(
-                service = service,
-                analysis = null,
-                error = "Network error: ${e.message ?: "Unknown error"}"
-            )
+            // Network/exception error, retry after delay
+            android.util.Log.w("AiAnalysis", "${service.displayName} first attempt exception: ${e.message}, retrying...")
+            try {
+                delay(500)
+                makeApiCall()
+            } catch (e2: Exception) {
+                AiAnalysisResponse(
+                    service = service,
+                    analysis = null,
+                    error = "Network error after retry: ${e2.message ?: "Unknown error"}"
+                )
+            }
         }
     }
 
@@ -100,8 +131,14 @@ class AiAnalysisRepository {
         return if (response.isSuccessful) {
             val body = response.body()
             val content = body?.choices?.firstOrNull()?.message?.content
+            val usage = body?.usage?.let {
+                TokenUsage(
+                    inputTokens = it.prompt_tokens ?: 0,
+                    outputTokens = it.completion_tokens ?: 0
+                )
+            }
             if (content != null) {
-                AiAnalysisResponse(AiService.CHATGPT, content, null)
+                AiAnalysisResponse(AiService.CHATGPT, content, null, usage)
             } else {
                 val errorMsg = body?.error?.message ?: "No response content"
                 AiAnalysisResponse(AiService.CHATGPT, null, errorMsg)
@@ -121,8 +158,14 @@ class AiAnalysisRepository {
         return if (response.isSuccessful) {
             val body = response.body()
             val content = body?.content?.firstOrNull { it.type == "text" }?.text
+            val usage = body?.usage?.let {
+                TokenUsage(
+                    inputTokens = it.input_tokens ?: 0,
+                    outputTokens = it.output_tokens ?: 0
+                )
+            }
             if (content != null) {
-                AiAnalysisResponse(AiService.CLAUDE, content, null)
+                AiAnalysisResponse(AiService.CLAUDE, content, null, usage)
             } else {
                 val errorMsg = body?.error?.message ?: "No response content"
                 AiAnalysisResponse(AiService.CLAUDE, null, errorMsg)
@@ -148,8 +191,14 @@ class AiAnalysisRepository {
         return if (response.isSuccessful) {
             val body = response.body()
             val content = body?.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+            val usage = body?.usageMetadata?.let {
+                TokenUsage(
+                    inputTokens = it.promptTokenCount ?: 0,
+                    outputTokens = it.candidatesTokenCount ?: 0
+                )
+            }
             if (content != null) {
-                AiAnalysisResponse(AiService.GEMINI, content, null)
+                AiAnalysisResponse(AiService.GEMINI, content, null, usage)
             } else {
                 val errorMsg = body?.error?.message ?: "No response content"
                 AiAnalysisResponse(AiService.GEMINI, null, errorMsg)
@@ -174,8 +223,14 @@ class AiAnalysisRepository {
         return if (response.isSuccessful) {
             val body = response.body()
             val content = body?.choices?.firstOrNull()?.message?.content
+            val usage = body?.usage?.let {
+                TokenUsage(
+                    inputTokens = it.prompt_tokens ?: 0,
+                    outputTokens = it.completion_tokens ?: 0
+                )
+            }
             if (content != null) {
-                AiAnalysisResponse(AiService.GROK, content, null)
+                AiAnalysisResponse(AiService.GROK, content, null, usage)
             } else {
                 val errorMsg = body?.error?.message ?: "No response content"
                 AiAnalysisResponse(AiService.GROK, null, errorMsg)
@@ -198,8 +253,14 @@ class AiAnalysisRepository {
         return if (response.isSuccessful) {
             val body = response.body()
             val content = body?.choices?.firstOrNull()?.message?.content
+            val usage = body?.usage?.let {
+                TokenUsage(
+                    inputTokens = it.prompt_tokens ?: 0,
+                    outputTokens = it.completion_tokens ?: 0
+                )
+            }
             if (content != null) {
-                AiAnalysisResponse(AiService.DEEPSEEK, content, null)
+                AiAnalysisResponse(AiService.DEEPSEEK, content, null, usage)
             } else {
                 val errorMsg = body?.error?.message ?: "No response content"
                 AiAnalysisResponse(AiService.DEEPSEEK, null, errorMsg)
@@ -222,8 +283,14 @@ class AiAnalysisRepository {
         return if (response.isSuccessful) {
             val body = response.body()
             val content = body?.choices?.firstOrNull()?.message?.content
+            val usage = body?.usage?.let {
+                TokenUsage(
+                    inputTokens = it.prompt_tokens ?: 0,
+                    outputTokens = it.completion_tokens ?: 0
+                )
+            }
             if (content != null) {
-                AiAnalysisResponse(AiService.MISTRAL, content, null)
+                AiAnalysisResponse(AiService.MISTRAL, content, null, usage)
             } else {
                 val errorMsg = body?.error?.message ?: "No response content"
                 AiAnalysisResponse(AiService.MISTRAL, null, errorMsg)
@@ -234,7 +301,7 @@ class AiAnalysisRepository {
     }
 
     private fun analyzeWithDummy(): AiAnalysisResponse {
-        return AiAnalysisResponse(AiService.DUMMY, "Hi, greetings from AI", null)
+        return AiAnalysisResponse(AiService.DUMMY, "Hi, greetings from AI", null, TokenUsage(10, 5))
     }
 
     /**

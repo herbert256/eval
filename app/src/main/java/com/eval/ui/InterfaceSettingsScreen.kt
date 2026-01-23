@@ -68,6 +68,7 @@ fun InterfaceSettingsScreen(
     var manualShowTimeGraph by remember { mutableStateOf(interfaceVisibility.manualStage.showTimeGraph) }
     var manualShowOpeningExplorer by remember { mutableStateOf(interfaceVisibility.manualStage.showOpeningExplorer) }
     var manualShowOpeningName by remember { mutableStateOf(interfaceVisibility.manualStage.showOpeningName) }
+    var manualShowRawStockfishScore by remember { mutableStateOf(interfaceVisibility.manualStage.showRawStockfishScore) }
     var manualShowMoveList by remember { mutableStateOf(interfaceVisibility.manualStage.showMoveList) }
     var manualShowGameInfo by remember { mutableStateOf(interfaceVisibility.manualStage.showGameInfo) }
     var manualShowPgn by remember { mutableStateOf(interfaceVisibility.manualStage.showPgn) }
@@ -98,6 +99,7 @@ fun InterfaceSettingsScreen(
                 showTimeGraph = manualShowTimeGraph,
                 showOpeningExplorer = manualShowOpeningExplorer,
                 showOpeningName = manualShowOpeningName,
+                showRawStockfishScore = manualShowRawStockfishScore,
                 showMoveList = manualShowMoveList,
                 showGameInfo = manualShowGameInfo,
                 showPgn = manualShowPgn
@@ -361,6 +363,15 @@ fun InterfaceSettingsScreen(
                     checked = manualShowOpeningName,
                     onCheckedChange = {
                         manualShowOpeningName = it
+                        saveAllSettings()
+                    }
+                )
+
+                VisibilityToggle(
+                    label = "Raw Stockfish score",
+                    checked = manualShowRawStockfishScore,
+                    onCheckedChange = {
+                        manualShowRawStockfishScore = it
                         saveAllSettings()
                     }
                 )

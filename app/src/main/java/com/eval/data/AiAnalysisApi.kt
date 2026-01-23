@@ -42,9 +42,16 @@ data class OpenAiChoice(
     val index: Int
 )
 
+data class OpenAiUsage(
+    val prompt_tokens: Int?,
+    val completion_tokens: Int?,
+    val total_tokens: Int?
+)
+
 data class OpenAiResponse(
     val id: String?,
     val choices: List<OpenAiChoice>?,
+    val usage: OpenAiUsage?,
     val error: OpenAiError?
 )
 
@@ -70,9 +77,15 @@ data class ClaudeContentBlock(
     val text: String?
 )
 
+data class ClaudeUsage(
+    val input_tokens: Int?,
+    val output_tokens: Int?
+)
+
 data class ClaudeResponse(
     val id: String?,
     val content: List<ClaudeContentBlock>?,
+    val usage: ClaudeUsage?,
     val error: ClaudeError?
 )
 
@@ -98,8 +111,15 @@ data class GeminiCandidate(
     val content: GeminiContent?
 )
 
+data class GeminiUsageMetadata(
+    val promptTokenCount: Int?,
+    val candidatesTokenCount: Int?,
+    val totalTokenCount: Int?
+)
+
 data class GeminiResponse(
     val candidates: List<GeminiCandidate>?,
+    val usageMetadata: GeminiUsageMetadata?,
     val error: GeminiError?
 )
 

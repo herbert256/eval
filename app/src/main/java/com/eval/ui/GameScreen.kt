@@ -2009,6 +2009,29 @@ private fun convertAiReportsToHtml(uiState: GameUiState, appVersion: String): St
     val fen = uiState.currentBoard.getFen()
     val flippedBoard = uiState.flippedBoard
     val isWhiteToMove = uiState.currentBoard.getTurn() == com.eval.chess.PieceColor.WHITE
+    val currentMoveIndex = uiState.currentMoveIndex
+    val moveDetails = uiState.moveDetails
+    val analyseScores = uiState.analyseScores
+
+    // Build position info text: "Position after move X .... move / Color to move next" or "Position after move X move / Color to move next"
+    val positionInfoText = if (currentMoveIndex >= 0 && currentMoveIndex < moveDetails.size) {
+        val lastMove = moveDetails[currentMoveIndex]
+        val moveNumber = (currentMoveIndex / 2) + 1
+        val wasWhiteMove = currentMoveIndex % 2 == 0  // Index 0 = white's 1st move, index 1 = black's 1st move, etc.
+        val moveNotation = if (wasWhiteMove) {
+            "$moveNumber. ${lastMove.san}"
+        } else {
+            "$moveNumber. .... ${lastMove.san}"
+        }
+        val nextToMove = if (isWhiteToMove) "White to move next" else "Black to move next"
+        "Position after move $moveNotation &nbsp;&nbsp;/&nbsp;&nbsp; $nextToMove"
+    } else {
+        val nextToMove = if (isWhiteToMove) "White to move" else "Black to move"
+        "Starting position &nbsp;&nbsp;/&nbsp;&nbsp; $nextToMove"
+    }
+
+    // Build move list HTML with Stockfish scores
+    val moveListHtml = buildAiReportsMoveListHtml(moveDetails, analyseScores, currentMoveIndex)
 
     val results = uiState.aiReportsResults
     val serviceNames = results.keys.sortedBy { it.ordinal }
@@ -2028,13 +2051,40 @@ private fun convertAiReportsToHtml(uiState: GameUiState, appVersion: String): St
         } else {
             """<pre class="error">${escapeHtml(result.error ?: "Unknown error")}</pre>"""
         }
+        val tokenInfo = result.tokenUsage?.let { usage ->
+            """<div class="token-info">Tokens: ${usage.inputTokens} input + ${usage.outputTokens} output = ${usage.totalTokens} total</div>"""
+        } ?: ""
+        // Get the prompt used for this service
+        val prompt = uiState.aiSettings.getPrompt(service)
+        val promptHtml = if (prompt.isNotBlank()) {
+            """
+            <div class="prompt-section">
+                <h3>Prompt Used</h3>
+                <pre class="prompt-text">${escapeHtml(prompt)}</pre>
+            </div>
+            """
+        } else ""
         """
         <div id="panel-${service.name}" class="tab-panel $isActive">
             <h2>${service.displayName} Analysis</h2>
+            $tokenInfo
             $content
+            $promptHtml
         </div>
         """
     }.joinToString("\n")
+
+    // Calculate total token usage
+    val totalInputTokens = results.values.sumOf { it.tokenUsage?.inputTokens ?: 0 }
+    val totalOutputTokens = results.values.sumOf { it.tokenUsage?.outputTokens ?: 0 }
+    val totalTokens = totalInputTokens + totalOutputTokens
+    val tokenSummaryHtml = if (totalTokens > 0) {
+        """
+        <div class="token-summary">
+            <strong>Total Token Usage:</strong> $totalInputTokens input + $totalOutputTokens output = $totalTokens total
+        </div>
+        """
+    } else ""
 
     return """
 <!DOCTYPE html>
@@ -2075,9 +2125,9 @@ private fun convertAiReportsToHtml(uiState: GameUiState, appVersion: String): St
         .board-section { margin-bottom: 24px; }
         .board-container {
             display: flex;
-            gap: 8px;
+            gap: 12px;
             justify-content: center;
-            align-items: stretch;
+            align-items: flex-start;
         }
         .board-wrapper { width: 320px; }
 
@@ -2104,6 +2154,80 @@ private fun convertAiReportsToHtml(uiState: GameUiState, appVersion: String): St
         .player-indicator.white { background: #fff; border: 1px solid #666; }
         .player-indicator.black { background: #000; border: 1px solid #666; }
         .to-move { box-shadow: 0 0 0 2px #ff4444; }
+
+        /* Move list box next to board */
+        .moves-box {
+            width: 220px;
+            height: 388px; /* Same height as board + player bars */
+            background: #242424;
+            border-radius: 8px;
+            overflow-y: auto;
+            padding: 8px;
+        }
+        .moves-box-title {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 8px;
+            text-align: center;
+            border-bottom: 1px solid #444;
+            padding-bottom: 4px;
+        }
+        .moves-grid {
+            display: grid;
+            grid-template-columns: 28px 1fr 1fr;
+            gap: 2px 4px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .move-number { color: #666; text-align: right; padding-right: 4px; }
+        .move-cell {
+            padding: 2px 4px;
+            border-radius: 3px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .move-cell.current { background: #4a4a00; }
+        .move-san { color: #fff; }
+        .move-score { color: #888; font-size: 10px; margin-left: 4px; }
+        .move-score.positive { color: #4CAF50; }
+        .move-score.negative { color: #f44336; }
+
+        /* Position info text */
+        .position-info {
+            text-align: center;
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #4CAF50;
+            margin-top: 16px;
+            padding: 12px;
+            background: #242424;
+            border-radius: 8px;
+        }
+
+        /* Prompt section */
+        .prompt-section {
+            margin-top: 24px;
+            padding-top: 16px;
+            border-top: 1px solid #444;
+        }
+        .prompt-section h3 {
+            color: #888;
+            font-size: 1em;
+            margin-bottom: 8px;
+        }
+        .prompt-text {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 12px;
+            font-family: monospace;
+            font-size: 11px;
+            color: #aaa;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            line-height: 1.5;
+        }
 
         /* Tabs */
         .tabs-container {
@@ -2156,6 +2280,30 @@ private fun convertAiReportsToHtml(uiState: GameUiState, appVersion: String): St
             font-size: 13px;
         }
 
+        /* Token info */
+        .token-info {
+            background: #2a2a3a;
+            border: 1px solid #444;
+            border-radius: 6px;
+            padding: 8px 12px;
+            margin-bottom: 16px;
+            color: #888;
+            font-size: 12px;
+        }
+        .token-summary {
+            background: #1f2937;
+            border: 1px solid #374151;
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-top: 24px;
+            color: #9ca3af;
+            font-size: 13px;
+            text-align: center;
+        }
+        .token-summary strong {
+            color: #e5e7eb;
+        }
+
         /* Footer */
         .generated-footer {
             margin-top: 40px;
@@ -2176,17 +2324,26 @@ private fun convertAiReportsToHtml(uiState: GameUiState, appVersion: String): St
             <!-- Board with player bars -->
             <div class="board-wrapper">
                 <div class="player-bar" id="topPlayer">
-                    <div class="player-indicator ${if (flippedBoard) "white" else "black"} ${if ((flippedBoard && isWhiteToMove) || (!flippedBoard && !isWhiteToMove)) "to-move" else ""}"></div>
+                    <div class="player-indicator ${if (flippedBoard) "white" else "black"}"></div>
                     <span class="player-name">${if (flippedBoard) whiteName else blackName}</span>
                     <span class="player-rating">${if (flippedBoard) whiteRating else blackRating}</span>
                 </div>
                 <div id="board" style="width: 320px;"></div>
                 <div class="player-bar bottom" id="bottomPlayer">
-                    <div class="player-indicator ${if (flippedBoard) "black" else "white"} ${if ((flippedBoard && !isWhiteToMove) || (!flippedBoard && isWhiteToMove)) "to-move" else ""}"></div>
+                    <div class="player-indicator ${if (flippedBoard) "black" else "white"}"></div>
                     <span class="player-name">${if (flippedBoard) blackName else whiteName}</span>
                     <span class="player-rating">${if (flippedBoard) blackRating else whiteRating}</span>
                 </div>
             </div>
+            <!-- Move list box -->
+            <div class="moves-box">
+                <div class="moves-box-title">Moves with Stockfish Scores</div>
+                $moveListHtml
+            </div>
+        </div>
+        <!-- Position info text below board -->
+        <div class="position-info">
+            $positionInfoText
         </div>
     </div>
 
@@ -2218,6 +2375,8 @@ private fun convertAiReportsToHtml(uiState: GameUiState, appVersion: String): St
             event.target.classList.add('active');
         }
     </script>
+
+    $tokenSummaryHtml
 
     <div class="generated-footer">
         Generated by Eval $appVersion on $generatedDate
@@ -2728,6 +2887,57 @@ private fun buildMoveListHtml(uiState: GameUiState): String {
         sb.append("<div class=\"move white-move $whiteCurrent\">${whiteMove.san}</div>")
         if (blackMove != null) {
             sb.append("<div class=\"move black-move $blackCurrent\">${blackMove.san}</div>")
+        } else {
+            sb.append("<div></div>")
+        }
+    }
+
+    sb.append("</div>")
+    return sb.toString()
+}
+
+/**
+ * Builds HTML for the AI reports move list with Stockfish scores.
+ */
+private fun buildAiReportsMoveListHtml(
+    moveDetails: List<MoveDetails>,
+    analyseScores: Map<Int, MoveScore>,
+    currentMoveIndex: Int
+): String {
+    if (moveDetails.isEmpty()) return "<div style=\"color: #888; text-align: center;\">No moves</div>"
+
+    val sb = StringBuilder()
+    sb.append("<div class=\"moves-grid\">")
+
+    for (i in moveDetails.indices step 2) {
+        val moveNum = (i / 2) + 1
+        val whiteMove = moveDetails[i]
+        val blackMove = moveDetails.getOrNull(i + 1)
+
+        val whiteCurrent = if (i == currentMoveIndex) "current" else ""
+        val blackCurrent = if (i + 1 == currentMoveIndex) "current" else ""
+
+        // Get scores for white and black moves
+        val whiteScore = analyseScores[i]
+        val blackScore = analyseScores.getOrElse(i + 1) { null }
+
+        fun formatScore(score: MoveScore?): String {
+            if (score == null) return ""
+            return if (score.isMate) {
+                val mateText = if (score.mateIn > 0) "M${score.mateIn}" else "M${-score.mateIn}"
+                val scoreClass = if (score.mateIn > 0) "positive" else "negative"
+                """<span class="move-score $scoreClass">$mateText</span>"""
+            } else {
+                val scoreClass = if (score.score >= 0) "positive" else "negative"
+                val scoreText = if (score.score >= 0) "+%.1f".format(score.score) else "%.1f".format(score.score)
+                """<span class="move-score $scoreClass">$scoreText</span>"""
+            }
+        }
+
+        sb.append("<div class=\"move-number\">$moveNum.</div>")
+        sb.append("<div class=\"move-cell $whiteCurrent\"><span class=\"move-san\">${whiteMove.san}</span>${formatScore(whiteScore)}</div>")
+        if (blackMove != null) {
+            sb.append("<div class=\"move-cell $blackCurrent\"><span class=\"move-san\">${blackMove.san}</span>${formatScore(blackScore)}</div>")
         } else {
             sb.append("<div></div>")
         }

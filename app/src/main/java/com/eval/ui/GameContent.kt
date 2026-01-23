@@ -1061,6 +1061,82 @@ fun GameContent(
             }
         }
     }
+
+    // Raw Stockfish scores card (Manual stage only, shows all moves with their analyse scores)
+    val showRawStockfishScore = uiState.interfaceVisibility.manualStage.showRawStockfishScore
+    if (uiState.currentStage == AnalysisStage.MANUAL && showRawStockfishScore && uiState.analyseScores.isNotEmpty()) {
+        Spacer(modifier = Modifier.height(12.dp))
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFF2D2D3D)
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "Raw Stockfish Scores",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFFFD700),
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Display all moves with their scores
+                val moves = uiState.moves
+                val currentMoveIndex = uiState.currentMoveIndex
+
+                moves.forEachIndexed { index, move ->
+                    val analyseScore = uiState.analyseScores[index]
+                    val isWhiteMove = index % 2 == 0
+                    val moveNumber = (index / 2) + 1
+                    val moveNotation = if (isWhiteMove) {
+                        "$moveNumber. $move"
+                    } else {
+                        "$moveNumber... $move"
+                    }
+
+                    val scoreText = analyseScore?.let { score ->
+                        if (score.isMate) {
+                            if (score.mateIn > 0) "M${score.mateIn}" else "-M${kotlin.math.abs(score.mateIn)}"
+                        } else {
+                            if (score.score >= 0) "+%.2f".format(score.score) else "%.2f".format(score.score)
+                        }
+                    } ?: "—"
+
+                    val isCurrentMove = index == currentMoveIndex
+                    val backgroundColor = if (isCurrentMove) Color(0xFF4A4A5A) else Color.Transparent
+                    val textColor = if (isCurrentMove) Color.White else Color(0xFFBBBBBB)
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(backgroundColor, RoundedCornerShape(4.dp))
+                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = moveNotation,
+                            fontSize = 12.sp,
+                            color = textColor,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                        )
+                        Text(
+                            text = scoreText,
+                            fontSize = 12.sp,
+                            color = if (analyseScore != null) Color(0xFFFFD700) else Color(0xFF666666),
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
 
 /**

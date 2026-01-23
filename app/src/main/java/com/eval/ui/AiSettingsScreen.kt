@@ -1,8 +1,8 @@
 package com.eval.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -20,6 +20,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.eval.data.AiService
+import com.google.gson.Gson
+import com.google.gson.JsonSyntaxException
 
 /**
  * AI Settings data class for storing API keys for various AI services.
@@ -84,6 +86,18 @@ data class AiSettings(
         }
     }
 
+    fun getPrompt(service: AiService): String {
+        return when (service) {
+            AiService.CHATGPT -> chatGptPrompt
+            AiService.CLAUDE -> claudePrompt
+            AiService.GEMINI -> geminiPrompt
+            AiService.GROK -> grokPrompt
+            AiService.DEEPSEEK -> deepSeekPrompt
+            AiService.MISTRAL -> mistralPrompt
+            AiService.DUMMY -> ""
+        }
+    }
+
     fun withModel(service: AiService, model: String): AiSettings {
         return when (service) {
             AiService.CHATGPT -> copy(chatGptModel = model)
@@ -122,7 +136,7 @@ fun AiSettingsScreen(
     onNavigate: (SettingsSubScreen) -> Unit,
     onSave: (AiSettings) -> Unit
 ) {
-    var showExportDialog by remember { mutableStateOf(false) }
+    var showImportDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     Column(
@@ -224,54 +238,231 @@ fun AiSettingsScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Export API keys button
+        // Export AI configuration button
         if (aiSettings.hasAnyApiKey()) {
             Button(
-                onClick = { showExportDialog = true },
+                onClick = {
+                    exportAiConfigToClipboard(context, aiSettings)
+                },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF4D6BFE)
+                    containerColor = Color(0xFF4CAF50)
                 )
             ) {
-                Text("Export API keys")
+                Text("Export AI configuration")
             }
 
             Spacer(modifier = Modifier.height(8.dp))
         }
 
+        // Import AI configuration button
+        Button(
+            onClick = { showImportDialog = true },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF4CAF50)
+            )
+        ) {
+            Text("Import AI configuration")
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
         SettingsBackButtons(onBackToSettings = onBackToSettings, onBackToGame = onBackToGame)
     }
 
-    // Export API keys dialog
-    if (showExportDialog) {
-        ExportApiKeysDialog(
-            aiSettings = aiSettings,
-            onDismiss = { showExportDialog = false },
-            onSendEmail = { email ->
-                sendApiKeysEmail(context, email, aiSettings)
-                showExportDialog = false
-            }
+    // Import AI configuration dialog
+    if (showImportDialog) {
+        ImportAiConfigDialog(
+            onImport = { importedSettings ->
+                onSave(importedSettings)
+                showImportDialog = false
+                Toast.makeText(context, "AI configuration imported successfully", Toast.LENGTH_SHORT).show()
+            },
+            onDismiss = { showImportDialog = false }
         )
     }
 }
 
 /**
- * Dialog for exporting API keys via email.
+ * Data class for AI service configuration in JSON export/import.
+ */
+private data class AiServiceConfig(
+    val name: String,
+    val apiKey: String,
+    val model: String,
+    val prompt: String
+)
+
+/**
+ * Data class for the complete AI configuration export.
+ */
+private data class AiConfigExport(
+    val version: Int = 1,
+    val services: List<AiServiceConfig>,
+    val dummyEnabled: Boolean
+)
+
+/**
+ * Export AI configuration to clipboard as JSON.
+ */
+private fun exportAiConfigToClipboard(context: Context, aiSettings: AiSettings) {
+    val services = mutableListOf<AiServiceConfig>()
+
+    if (aiSettings.chatGptApiKey.isNotBlank()) {
+        services.add(AiServiceConfig(
+            name = "ChatGPT",
+            apiKey = aiSettings.chatGptApiKey,
+            model = aiSettings.chatGptModel,
+            prompt = aiSettings.chatGptPrompt
+        ))
+    }
+
+    if (aiSettings.claudeApiKey.isNotBlank()) {
+        services.add(AiServiceConfig(
+            name = "Claude",
+            apiKey = aiSettings.claudeApiKey,
+            model = aiSettings.claudeModel,
+            prompt = aiSettings.claudePrompt
+        ))
+    }
+
+    if (aiSettings.geminiApiKey.isNotBlank()) {
+        services.add(AiServiceConfig(
+            name = "Gemini",
+            apiKey = aiSettings.geminiApiKey,
+            model = aiSettings.geminiModel,
+            prompt = aiSettings.geminiPrompt
+        ))
+    }
+
+    if (aiSettings.grokApiKey.isNotBlank()) {
+        services.add(AiServiceConfig(
+            name = "Grok",
+            apiKey = aiSettings.grokApiKey,
+            model = aiSettings.grokModel,
+            prompt = aiSettings.grokPrompt
+        ))
+    }
+
+    if (aiSettings.deepSeekApiKey.isNotBlank()) {
+        services.add(AiServiceConfig(
+            name = "DeepSeek",
+            apiKey = aiSettings.deepSeekApiKey,
+            model = aiSettings.deepSeekModel,
+            prompt = aiSettings.deepSeekPrompt
+        ))
+    }
+
+    if (aiSettings.mistralApiKey.isNotBlank()) {
+        services.add(AiServiceConfig(
+            name = "Mistral",
+            apiKey = aiSettings.mistralApiKey,
+            model = aiSettings.mistralModel,
+            prompt = aiSettings.mistralPrompt
+        ))
+    }
+
+    val export = AiConfigExport(
+        services = services,
+        dummyEnabled = aiSettings.dummyEnabled
+    )
+
+    val gson = Gson()
+    val json = gson.toJson(export)
+
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    val clip = ClipData.newPlainText("AI Configuration", json)
+    clipboard.setPrimaryClip(clip)
+
+    Toast.makeText(context, "AI configuration copied to clipboard", Toast.LENGTH_SHORT).show()
+}
+
+/**
+ * Import AI configuration from clipboard JSON.
+ */
+private fun importAiConfigFromClipboard(context: Context): AiSettings? {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    val clipData = clipboard.primaryClip
+
+    if (clipData == null || clipData.itemCount == 0) {
+        Toast.makeText(context, "Clipboard is empty", Toast.LENGTH_SHORT).show()
+        return null
+    }
+
+    val json = clipData.getItemAt(0).text?.toString()
+    if (json.isNullOrBlank()) {
+        Toast.makeText(context, "No text in clipboard", Toast.LENGTH_SHORT).show()
+        return null
+    }
+
+    return try {
+        val gson = Gson()
+        val export = gson.fromJson(json, AiConfigExport::class.java)
+
+        var settings = AiSettings()
+
+        export.services.forEach { service ->
+            settings = when (service.name) {
+                "ChatGPT" -> settings.copy(
+                    chatGptApiKey = service.apiKey,
+                    chatGptModel = service.model,
+                    chatGptPrompt = service.prompt
+                )
+                "Claude" -> settings.copy(
+                    claudeApiKey = service.apiKey,
+                    claudeModel = service.model,
+                    claudePrompt = service.prompt
+                )
+                "Gemini" -> settings.copy(
+                    geminiApiKey = service.apiKey,
+                    geminiModel = service.model,
+                    geminiPrompt = service.prompt
+                )
+                "Grok" -> settings.copy(
+                    grokApiKey = service.apiKey,
+                    grokModel = service.model,
+                    grokPrompt = service.prompt
+                )
+                "DeepSeek" -> settings.copy(
+                    deepSeekApiKey = service.apiKey,
+                    deepSeekModel = service.model,
+                    deepSeekPrompt = service.prompt
+                )
+                "Mistral" -> settings.copy(
+                    mistralApiKey = service.apiKey,
+                    mistralModel = service.model,
+                    mistralPrompt = service.prompt
+                )
+                else -> settings
+            }
+        }
+
+        settings.copy(dummyEnabled = export.dummyEnabled)
+    } catch (e: JsonSyntaxException) {
+        Toast.makeText(context, "Invalid AI configuration format", Toast.LENGTH_SHORT).show()
+        null
+    } catch (e: Exception) {
+        Toast.makeText(context, "Error importing configuration: ${e.message}", Toast.LENGTH_SHORT).show()
+        null
+    }
+}
+
+/**
+ * Dialog for importing AI configuration from clipboard.
  */
 @Composable
-private fun ExportApiKeysDialog(
-    aiSettings: AiSettings,
-    onDismiss: () -> Unit,
-    onSendEmail: (String) -> Unit
+private fun ImportAiConfigDialog(
+    onImport: (AiSettings) -> Unit,
+    onDismiss: () -> Unit
 ) {
-    var email by remember { mutableStateOf("") }
-    var emailError by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "Export API Keys",
+                text = "Import AI Configuration",
                 fontWeight = FontWeight.Bold
             )
         },
@@ -280,31 +471,18 @@ private fun ExportApiKeysDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "Enter your email address to receive the configured API keys.",
+                    text = "This will import AI configuration from the clipboard.",
                     style = MaterialTheme.typography.bodyMedium
                 )
 
                 Text(
-                    text = "Configured services: ${aiSettings.getConfiguredServices().joinToString { it.displayName }}",
+                    text = "The clipboard should contain a JSON configuration exported from this app.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF00E676)
-                )
-
-                OutlinedTextField(
-                    value = email,
-                    onValueChange = {
-                        email = it
-                        emailError = null
-                    },
-                    label = { Text("Email address") },
-                    singleLine = true,
-                    isError = emailError != null,
-                    supportingText = emailError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
-                    modifier = Modifier.fillMaxWidth()
+                    color = Color.Gray
                 )
 
                 Text(
-                    text = "Warning: API keys will be sent in plain text. Make sure you trust this email address.",
+                    text = "Warning: This will replace your current AI settings.",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFFFF9800)
                 )
@@ -313,16 +491,13 @@ private fun ExportApiKeysDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    if (email.isBlank()) {
-                        emailError = "Email address is required"
-                    } else if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
-                        emailError = "Invalid email address"
-                    } else {
-                        onSendEmail(email.trim())
+                    val imported = importAiConfigFromClipboard(context)
+                    if (imported != null) {
+                        onImport(imported)
                     }
                 }
             ) {
-                Text("Send")
+                Text("Import")
             }
         },
         dismissButton = {
@@ -331,76 +506,6 @@ private fun ExportApiKeysDialog(
             }
         }
     )
-}
-
-/**
- * Send API keys via email using an Intent.
- */
-private fun sendApiKeysEmail(context: Context, email: String, aiSettings: AiSettings) {
-    val subject = "Eval App - API Keys Export"
-
-    val body = buildString {
-        appendLine("Your API keys from the Eval chess app:")
-        appendLine()
-
-        if (aiSettings.chatGptApiKey.isNotBlank()) {
-            appendLine("ChatGPT (OpenAI):")
-            appendLine("  API Key: ${aiSettings.chatGptApiKey}")
-            appendLine("  Model: ${aiSettings.chatGptModel}")
-            appendLine()
-        }
-
-        if (aiSettings.claudeApiKey.isNotBlank()) {
-            appendLine("Claude (Anthropic):")
-            appendLine("  API Key: ${aiSettings.claudeApiKey}")
-            appendLine("  Model: ${aiSettings.claudeModel}")
-            appendLine()
-        }
-
-        if (aiSettings.geminiApiKey.isNotBlank()) {
-            appendLine("Gemini (Google):")
-            appendLine("  API Key: ${aiSettings.geminiApiKey}")
-            appendLine("  Model: ${aiSettings.geminiModel}")
-            appendLine()
-        }
-
-        if (aiSettings.grokApiKey.isNotBlank()) {
-            appendLine("Grok (xAI):")
-            appendLine("  API Key: ${aiSettings.grokApiKey}")
-            appendLine("  Model: ${aiSettings.grokModel}")
-            appendLine()
-        }
-
-        if (aiSettings.deepSeekApiKey.isNotBlank()) {
-            appendLine("DeepSeek:")
-            appendLine("  API Key: ${aiSettings.deepSeekApiKey}")
-            appendLine("  Model: ${aiSettings.deepSeekModel}")
-            appendLine()
-        }
-
-        if (aiSettings.mistralApiKey.isNotBlank()) {
-            appendLine("Mistral (Mistral AI):")
-            appendLine("  API Key: ${aiSettings.mistralApiKey}")
-            appendLine("  Model: ${aiSettings.mistralModel}")
-            appendLine()
-        }
-
-        appendLine("---")
-        appendLine("Keep these keys secure and do not share them with others.")
-    }
-
-    val intent = Intent(Intent.ACTION_SENDTO).apply {
-        data = Uri.parse("mailto:")
-        putExtra(Intent.EXTRA_EMAIL, arrayOf(email))
-        putExtra(Intent.EXTRA_SUBJECT, subject)
-        putExtra(Intent.EXTRA_TEXT, body)
-    }
-
-    try {
-        context.startActivity(Intent.createChooser(intent, "Send API keys via email"))
-    } catch (e: Exception) {
-        Toast.makeText(context, "No email app found", Toast.LENGTH_SHORT).show()
-    }
 }
 
 /**
