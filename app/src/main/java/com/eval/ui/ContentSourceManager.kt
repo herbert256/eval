@@ -5,6 +5,7 @@ import com.eval.data.BroadcastRoundInfo
 import com.eval.data.ChessRepository
 import com.eval.data.ChessServer
 import com.eval.data.LichessGame
+import com.eval.data.PlayerInfo
 import com.eval.data.Result
 import com.eval.data.StreamerInfo
 import com.eval.data.TournamentInfo
@@ -486,13 +487,41 @@ internal class ContentSourceManager(
                     fetchPlayerGames(username, server, 10)
                 }
                 is Result.Error -> {
+                    // Show screen with minimal player info (just username)
+                    val minimalPlayerInfo = PlayerInfo(
+                        username = username,
+                        server = server,
+                        title = null,
+                        name = null,
+                        country = null,
+                        location = null,
+                        bio = null,
+                        online = null,
+                        createdAt = null,
+                        lastOnline = null,
+                        profileUrl = null,
+                        bulletRating = null,
+                        blitzRating = null,
+                        rapidRating = null,
+                        classicalRating = null,
+                        dailyRating = null,
+                        totalGames = null,
+                        wins = null,
+                        losses = null,
+                        draws = null,
+                        playTimeSeconds = null,
+                        followers = null,
+                        isStreamer = null
+                    )
                     updateUiState {
                         copy(
-                            showPlayerInfoScreen = false,
+                            showPlayerInfoScreen = true,
                             playerInfoLoading = false,
-                            playerInfo = null,
-                            playerInfoError = null,
-                            googleSearchPlayerName = username
+                            playerInfo = minimalPlayerInfo,
+                            playerInfoError = "Profile not found on ${server.name.replace("_", ".")}",
+                            playerGamesLoading = false,
+                            playerGames = emptyList(),
+                            playerGamesHasMore = false
                         )
                     }
                 }

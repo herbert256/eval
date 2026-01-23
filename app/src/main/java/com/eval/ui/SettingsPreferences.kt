@@ -300,22 +300,34 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         return AiSettings(
             chatGptApiKey = prefs.getString(KEY_AI_CHATGPT_API_KEY, "") ?: "",
             chatGptModel = prefs.getString(KEY_AI_CHATGPT_MODEL, "gpt-4o-mini") ?: "gpt-4o-mini",
-            chatGptPrompt = prefs.getString(KEY_AI_CHATGPT_PROMPT, DEFAULT_AI_PROMPT) ?: DEFAULT_AI_PROMPT,
+            chatGptPrompt = prefs.getString(KEY_AI_CHATGPT_PROMPT, DEFAULT_GAME_PROMPT) ?: DEFAULT_GAME_PROMPT,
+            chatGptServerPlayerPrompt = prefs.getString(KEY_AI_CHATGPT_SERVER_PLAYER_PROMPT, DEFAULT_SERVER_PLAYER_PROMPT) ?: DEFAULT_SERVER_PLAYER_PROMPT,
+            chatGptOtherPlayerPrompt = prefs.getString(KEY_AI_CHATGPT_OTHER_PLAYER_PROMPT, DEFAULT_OTHER_PLAYER_PROMPT) ?: DEFAULT_OTHER_PLAYER_PROMPT,
             claudeApiKey = prefs.getString(KEY_AI_CLAUDE_API_KEY, "") ?: "",
             claudeModel = prefs.getString(KEY_AI_CLAUDE_MODEL, "claude-sonnet-4-20250514") ?: "claude-sonnet-4-20250514",
-            claudePrompt = prefs.getString(KEY_AI_CLAUDE_PROMPT, DEFAULT_AI_PROMPT) ?: DEFAULT_AI_PROMPT,
+            claudePrompt = prefs.getString(KEY_AI_CLAUDE_PROMPT, DEFAULT_GAME_PROMPT) ?: DEFAULT_GAME_PROMPT,
+            claudeServerPlayerPrompt = prefs.getString(KEY_AI_CLAUDE_SERVER_PLAYER_PROMPT, DEFAULT_SERVER_PLAYER_PROMPT) ?: DEFAULT_SERVER_PLAYER_PROMPT,
+            claudeOtherPlayerPrompt = prefs.getString(KEY_AI_CLAUDE_OTHER_PLAYER_PROMPT, DEFAULT_OTHER_PLAYER_PROMPT) ?: DEFAULT_OTHER_PLAYER_PROMPT,
             geminiApiKey = prefs.getString(KEY_AI_GEMINI_API_KEY, "") ?: "",
             geminiModel = prefs.getString(KEY_AI_GEMINI_MODEL, "gemini-2.0-flash") ?: "gemini-2.0-flash",
-            geminiPrompt = prefs.getString(KEY_AI_GEMINI_PROMPT, DEFAULT_AI_PROMPT) ?: DEFAULT_AI_PROMPT,
+            geminiPrompt = prefs.getString(KEY_AI_GEMINI_PROMPT, DEFAULT_GAME_PROMPT) ?: DEFAULT_GAME_PROMPT,
+            geminiServerPlayerPrompt = prefs.getString(KEY_AI_GEMINI_SERVER_PLAYER_PROMPT, DEFAULT_SERVER_PLAYER_PROMPT) ?: DEFAULT_SERVER_PLAYER_PROMPT,
+            geminiOtherPlayerPrompt = prefs.getString(KEY_AI_GEMINI_OTHER_PLAYER_PROMPT, DEFAULT_OTHER_PLAYER_PROMPT) ?: DEFAULT_OTHER_PLAYER_PROMPT,
             grokApiKey = prefs.getString(KEY_AI_GROK_API_KEY, "") ?: "",
             grokModel = prefs.getString(KEY_AI_GROK_MODEL, "grok-3-mini") ?: "grok-3-mini",
-            grokPrompt = prefs.getString(KEY_AI_GROK_PROMPT, DEFAULT_AI_PROMPT) ?: DEFAULT_AI_PROMPT,
+            grokPrompt = prefs.getString(KEY_AI_GROK_PROMPT, DEFAULT_GAME_PROMPT) ?: DEFAULT_GAME_PROMPT,
+            grokServerPlayerPrompt = prefs.getString(KEY_AI_GROK_SERVER_PLAYER_PROMPT, DEFAULT_SERVER_PLAYER_PROMPT) ?: DEFAULT_SERVER_PLAYER_PROMPT,
+            grokOtherPlayerPrompt = prefs.getString(KEY_AI_GROK_OTHER_PLAYER_PROMPT, DEFAULT_OTHER_PLAYER_PROMPT) ?: DEFAULT_OTHER_PLAYER_PROMPT,
             deepSeekApiKey = prefs.getString(KEY_AI_DEEPSEEK_API_KEY, "") ?: "",
             deepSeekModel = prefs.getString(KEY_AI_DEEPSEEK_MODEL, "deepseek-chat") ?: "deepseek-chat",
-            deepSeekPrompt = prefs.getString(KEY_AI_DEEPSEEK_PROMPT, DEFAULT_AI_PROMPT) ?: DEFAULT_AI_PROMPT,
+            deepSeekPrompt = prefs.getString(KEY_AI_DEEPSEEK_PROMPT, DEFAULT_GAME_PROMPT) ?: DEFAULT_GAME_PROMPT,
+            deepSeekServerPlayerPrompt = prefs.getString(KEY_AI_DEEPSEEK_SERVER_PLAYER_PROMPT, DEFAULT_SERVER_PLAYER_PROMPT) ?: DEFAULT_SERVER_PLAYER_PROMPT,
+            deepSeekOtherPlayerPrompt = prefs.getString(KEY_AI_DEEPSEEK_OTHER_PLAYER_PROMPT, DEFAULT_OTHER_PLAYER_PROMPT) ?: DEFAULT_OTHER_PLAYER_PROMPT,
             mistralApiKey = prefs.getString(KEY_AI_MISTRAL_API_KEY, "") ?: "",
             mistralModel = prefs.getString(KEY_AI_MISTRAL_MODEL, "mistral-small-latest") ?: "mistral-small-latest",
-            mistralPrompt = prefs.getString(KEY_AI_MISTRAL_PROMPT, DEFAULT_AI_PROMPT) ?: DEFAULT_AI_PROMPT,
+            mistralPrompt = prefs.getString(KEY_AI_MISTRAL_PROMPT, DEFAULT_GAME_PROMPT) ?: DEFAULT_GAME_PROMPT,
+            mistralServerPlayerPrompt = prefs.getString(KEY_AI_MISTRAL_SERVER_PLAYER_PROMPT, DEFAULT_SERVER_PLAYER_PROMPT) ?: DEFAULT_SERVER_PLAYER_PROMPT,
+            mistralOtherPlayerPrompt = prefs.getString(KEY_AI_MISTRAL_OTHER_PLAYER_PROMPT, DEFAULT_OTHER_PLAYER_PROMPT) ?: DEFAULT_OTHER_PLAYER_PROMPT,
             dummyEnabled = prefs.getBoolean(KEY_AI_DUMMY_ENABLED, false)
         )
     }
@@ -325,21 +337,33 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             .putString(KEY_AI_CHATGPT_API_KEY, settings.chatGptApiKey)
             .putString(KEY_AI_CHATGPT_MODEL, settings.chatGptModel)
             .putString(KEY_AI_CHATGPT_PROMPT, settings.chatGptPrompt)
+            .putString(KEY_AI_CHATGPT_SERVER_PLAYER_PROMPT, settings.chatGptServerPlayerPrompt)
+            .putString(KEY_AI_CHATGPT_OTHER_PLAYER_PROMPT, settings.chatGptOtherPlayerPrompt)
             .putString(KEY_AI_CLAUDE_API_KEY, settings.claudeApiKey)
             .putString(KEY_AI_CLAUDE_MODEL, settings.claudeModel)
             .putString(KEY_AI_CLAUDE_PROMPT, settings.claudePrompt)
+            .putString(KEY_AI_CLAUDE_SERVER_PLAYER_PROMPT, settings.claudeServerPlayerPrompt)
+            .putString(KEY_AI_CLAUDE_OTHER_PLAYER_PROMPT, settings.claudeOtherPlayerPrompt)
             .putString(KEY_AI_GEMINI_API_KEY, settings.geminiApiKey)
             .putString(KEY_AI_GEMINI_MODEL, settings.geminiModel)
             .putString(KEY_AI_GEMINI_PROMPT, settings.geminiPrompt)
+            .putString(KEY_AI_GEMINI_SERVER_PLAYER_PROMPT, settings.geminiServerPlayerPrompt)
+            .putString(KEY_AI_GEMINI_OTHER_PLAYER_PROMPT, settings.geminiOtherPlayerPrompt)
             .putString(KEY_AI_GROK_API_KEY, settings.grokApiKey)
             .putString(KEY_AI_GROK_MODEL, settings.grokModel)
             .putString(KEY_AI_GROK_PROMPT, settings.grokPrompt)
+            .putString(KEY_AI_GROK_SERVER_PLAYER_PROMPT, settings.grokServerPlayerPrompt)
+            .putString(KEY_AI_GROK_OTHER_PLAYER_PROMPT, settings.grokOtherPlayerPrompt)
             .putString(KEY_AI_DEEPSEEK_API_KEY, settings.deepSeekApiKey)
             .putString(KEY_AI_DEEPSEEK_MODEL, settings.deepSeekModel)
             .putString(KEY_AI_DEEPSEEK_PROMPT, settings.deepSeekPrompt)
+            .putString(KEY_AI_DEEPSEEK_SERVER_PLAYER_PROMPT, settings.deepSeekServerPlayerPrompt)
+            .putString(KEY_AI_DEEPSEEK_OTHER_PLAYER_PROMPT, settings.deepSeekOtherPlayerPrompt)
             .putString(KEY_AI_MISTRAL_API_KEY, settings.mistralApiKey)
             .putString(KEY_AI_MISTRAL_MODEL, settings.mistralModel)
             .putString(KEY_AI_MISTRAL_PROMPT, settings.mistralPrompt)
+            .putString(KEY_AI_MISTRAL_SERVER_PLAYER_PROMPT, settings.mistralServerPlayerPrompt)
+            .putString(KEY_AI_MISTRAL_OTHER_PLAYER_PROMPT, settings.mistralOtherPlayerPrompt)
             .putBoolean(KEY_AI_DUMMY_ENABLED, settings.dummyEnabled)
             .apply()
     }
@@ -498,7 +522,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         private const val KEY_AI_DEEPSEEK_API_KEY = "ai_deepseek_api_key"
         private const val KEY_AI_DEEPSEEK_MODEL = "ai_deepseek_model"
 
-        // AI prompts
+        // AI prompts - Game prompts
         private const val KEY_AI_CHATGPT_PROMPT = "ai_chatgpt_prompt"
         private const val KEY_AI_CLAUDE_PROMPT = "ai_claude_prompt"
         private const val KEY_AI_GEMINI_PROMPT = "ai_gemini_prompt"
@@ -508,6 +532,22 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         private const val KEY_AI_MISTRAL_MODEL = "ai_mistral_model"
         private const val KEY_AI_MISTRAL_PROMPT = "ai_mistral_prompt"
         private const val KEY_AI_DUMMY_ENABLED = "ai_dummy_enabled"
+
+        // AI prompts - Server player prompts
+        private const val KEY_AI_CHATGPT_SERVER_PLAYER_PROMPT = "ai_chatgpt_server_player_prompt"
+        private const val KEY_AI_CLAUDE_SERVER_PLAYER_PROMPT = "ai_claude_server_player_prompt"
+        private const val KEY_AI_GEMINI_SERVER_PLAYER_PROMPT = "ai_gemini_server_player_prompt"
+        private const val KEY_AI_GROK_SERVER_PLAYER_PROMPT = "ai_grok_server_player_prompt"
+        private const val KEY_AI_DEEPSEEK_SERVER_PLAYER_PROMPT = "ai_deepseek_server_player_prompt"
+        private const val KEY_AI_MISTRAL_SERVER_PLAYER_PROMPT = "ai_mistral_server_player_prompt"
+
+        // AI prompts - Other player prompts
+        private const val KEY_AI_CHATGPT_OTHER_PLAYER_PROMPT = "ai_chatgpt_other_player_prompt"
+        private const val KEY_AI_CLAUDE_OTHER_PLAYER_PROMPT = "ai_claude_other_player_prompt"
+        private const val KEY_AI_GEMINI_OTHER_PLAYER_PROMPT = "ai_gemini_other_player_prompt"
+        private const val KEY_AI_GROK_OTHER_PLAYER_PROMPT = "ai_grok_other_player_prompt"
+        private const val KEY_AI_DEEPSEEK_OTHER_PLAYER_PROMPT = "ai_deepseek_other_player_prompt"
+        private const val KEY_AI_MISTRAL_OTHER_PLAYER_PROMPT = "ai_mistral_other_player_prompt"
 
         // AI report email
         const val KEY_AI_REPORT_EMAIL = "ai_report_email"

@@ -1,31 +1,46 @@
 package com.eval.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.widget.Toast
+import androidx.core.content.FileProvider
 import androidx.compose.foundation.background
+import java.io.File
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.eval.data.ApiTrace
 import com.eval.data.ApiTracer
 import com.eval.data.TraceFileInfo
 import java.text.SimpleDateFormat
 import java.util.*
 
 private const val PAGE_SIZE = 25
+
+/**
+ * Enum for trace detail sub-screens
+ */
+enum class TraceDetailSubScreen {
+    MAIN,
+    POST_DATA,
+    RESPONSE_DATA,
+    RESPONSE_HEADERS
+}
 
 /**
  * Screen showing the list of traced API calls.
@@ -275,9 +290,10 @@ fun TraceDetailScreen(
     filename: String,
     onBack: () -> Unit
 ) {
+    val context = LocalContext.current
     val trace = remember { ApiTracer.readTraceFile(filename) }
-    var showPostDataDialog by remember { mutableStateOf(false) }
-    var showResponseDataDialog by remember { mutableStateOf(false) }
+    val rawJson = remember { ApiTracer.readTraceFileRaw(filename) ?: "" }
+    var currentSubScreen by remember { mutableStateOf(TraceDetailSubScreen.MAIN) }
 
     if (trace == null) {
         Box(
@@ -290,6 +306,91 @@ fun TraceDetailScreen(
         }
         return
     }
+
+    when (currentSubScreen) {
+        TraceDetailSubScreen.MAIN -> {
+            TraceDetailMainScreen(
+                filename = filename,
+                rawJson = rawJson,
+                hasPostData = !trace.request.body.isNullOrBlank(),
+                hasResponseData = !trace.response.body.isNullOrBlank(),
+                hasResponseHeaders = trace.response.headers.isNotEmpty(),
+                onBack = onBack,
+                onShowPostData = { currentSubScreen = TraceDetailSubScreen.POST_DATA },
+                onShowResponseData = { currentSubScreen = TraceDetailSubScreen.RESPONSE_DATA },
+                onShowResponseHeaders = { currentSubScreen = TraceDetailSubScreen.RESPONSE_HEADERS },
+                onShare = {
+                    try {
+                        // Write JSON to a temp file
+                        val cacheDir = File(context.cacheDir, "shared_traces")
+                        cacheDir.mkdirs()
+                        val tempFile = File(cacheDir, filename)
+                        tempFile.writeText(rawJson)
+
+                        val uri = FileProvider.getUriForFile(
+                            context,
+                            "${context.packageName}.fileprovider",
+                            tempFile
+                        )
+
+                        val intent = Intent(Intent.ACTION_SEND).apply {
+                            type = "application/json"
+                            putExtra(Intent.EXTRA_SUBJECT, "API Trace: ${trace.hostname}")
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(Intent.createChooser(intent, "Share trace data"))
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Failed to share: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            )
+        }
+        TraceDetailSubScreen.POST_DATA -> {
+            DataViewScreen(
+                title = "Request Data",
+                filename = filename,
+                content = trace.request.body ?: "",
+                onBack = { currentSubScreen = TraceDetailSubScreen.MAIN }
+            )
+        }
+        TraceDetailSubScreen.RESPONSE_DATA -> {
+            DataViewScreen(
+                title = "Response Data",
+                filename = filename,
+                content = trace.response.body ?: "",
+                onBack = { currentSubScreen = TraceDetailSubScreen.MAIN }
+            )
+        }
+        TraceDetailSubScreen.RESPONSE_HEADERS -> {
+            val headersText = trace.response.headers.entries
+                .sortedBy { it.key.lowercase() }
+                .joinToString("\n") { "${it.key}: ${it.value}" }
+            DataViewScreen(
+                title = "Response Headers",
+                filename = filename,
+                content = headersText,
+                onBack = { currentSubScreen = TraceDetailSubScreen.MAIN }
+            )
+        }
+    }
+}
+
+@Composable
+private fun TraceDetailMainScreen(
+    filename: String,
+    rawJson: String,
+    hasPostData: Boolean,
+    hasResponseData: Boolean,
+    hasResponseHeaders: Boolean,
+    onBack: () -> Unit,
+    onShowPostData: () -> Unit,
+    onShowResponseData: () -> Unit,
+    onShowResponseHeaders: () -> Unit,
+    onShare: () -> Unit
+) {
+    val prettyJson = remember { ApiTracer.prettyPrintJson(rawJson) }
+    val lines = remember(prettyJson) { prettyJson.split("\n") }
 
     Column(
         modifier = Modifier
@@ -319,127 +420,191 @@ fun TraceDetailScreen(
             }
         }
 
+        // Filename display
+        Text(
+            text = filename,
+            color = Color(0xFFAAAAAA),
+            fontSize = 12.sp,
+            fontFamily = FontFamily.Monospace,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Action buttons
+        // Action buttons row 1: Request data and Response data
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            if (!trace.request.body.isNullOrBlank()) {
+            if (hasPostData) {
                 Button(
-                    onClick = { showPostDataDialog = true },
+                    onClick = onShowPostData,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFF3366BB)
                     ),
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("Show POST data", fontSize = 12.sp)
+                    Text("Request data", fontSize = 12.sp)
                 }
             }
-            if (!trace.response.body.isNullOrBlank()) {
+            if (hasResponseData) {
                 Button(
-                    onClick = { showResponseDataDialog = true },
+                    onClick = onShowResponseData,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFF3366BB)
                     ),
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("Show RESPONSE data", fontSize = 12.sp)
+                    Text("Response data", fontSize = 12.sp)
+                }
+            }
+            if (hasResponseHeaders) {
+                Button(
+                    onClick = onShowResponseHeaders,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF3366BB)
+                    ),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Response headers", fontSize = 12.sp)
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Full JSON pretty print
-        val prettyJson = remember { ApiTracer.prettyPrintJson(ApiTracer.readTraceFileRaw(filename)) }
-
+        // Full JSON pretty print - split into lines for LazyColumn to handle large content
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
                 .background(Color(0xFF1A1A1A))
         ) {
-            val verticalScrollState = rememberScrollState()
-            val horizontalScrollState = rememberScrollState()
-
-            Text(
-                text = prettyJson,
-                color = Color(0xFFE0E0E0),
-                fontFamily = FontFamily.Monospace,
-                fontSize = 11.sp,
+            LazyColumn(
                 modifier = Modifier
+                    .fillMaxSize()
                     .padding(8.dp)
-                    .verticalScroll(verticalScrollState)
-                    .horizontalScroll(horizontalScrollState)
-            )
+            ) {
+                itemsIndexed(lines) { _, line ->
+                    Text(
+                        text = line.ifEmpty { " " },  // Empty lines need a space for proper height
+                        color = Color(0xFFE0E0E0),
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.sp
+                    )
+                }
+            }
         }
-    }
 
-    // POST data dialog
-    if (showPostDataDialog && !trace.request.body.isNullOrBlank()) {
-        PrettyPrintDialog(
-            title = "POST Data",
-            content = trace.request.body,
-            onDismiss = { showPostDataDialog = false }
-        )
-    }
+        Spacer(modifier = Modifier.height(8.dp))
 
-    // Response data dialog
-    if (showResponseDataDialog && !trace.response.body.isNullOrBlank()) {
-        PrettyPrintDialog(
-            title = "Response Data",
-            content = trace.response.body,
-            onDismiss = { showResponseDataDialog = false }
-        )
+        // Share button
+        Button(
+            onClick = onShare,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF4CAF50)
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Share data")
+        }
     }
 }
 
+/**
+ * Full-screen view for POST or RESPONSE data with copy to clipboard functionality.
+ */
 @Composable
-private fun PrettyPrintDialog(
+private fun DataViewScreen(
     title: String,
+    filename: String,
     content: String,
-    onDismiss: () -> Unit
+    onBack: () -> Unit
 ) {
+    val context = LocalContext.current
     val prettyContent = remember { ApiTracer.prettyPrintJson(content) }
+    val lines = remember(prettyContent) { prettyContent.split("\n") }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Color(0xFF1E1E1E),
-        title = {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(16.dp)
+    ) {
+        // Header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(
                 text = title,
-                color = Color.White,
-                fontWeight = FontWeight.Bold
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
             )
-        },
-        text = {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 400.dp)
-                    .background(Color(0xFF141414))
+                    .size(44.dp)
+                    .clickable { onBack() },
+                contentAlignment = Alignment.Center
             ) {
-                val verticalScrollState = rememberScrollState()
-                val horizontalScrollState = rememberScrollState()
-
-                Text(
-                    text = prettyContent,
-                    color = Color(0xFFE0E0E0),
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp,
-                    modifier = Modifier
-                        .padding(8.dp)
-                        .verticalScroll(verticalScrollState)
-                        .horizontalScroll(horizontalScrollState)
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Close", color = Color(0xFF6B9BFF))
+                Text("✕", fontSize = 24.sp, color = Color.White)
             }
         }
-    )
+
+        // Filename display
+        Text(
+            text = filename,
+            color = Color(0xFFAAAAAA),
+            fontSize = 12.sp,
+            fontFamily = FontFamily.Monospace,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Content
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .background(Color(0xFF1A1A1A))
+        ) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(8.dp)
+            ) {
+                itemsIndexed(lines) { _, line ->
+                    Text(
+                        text = line.ifEmpty { " " },
+                        color = Color(0xFFE0E0E0),
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.sp
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Copy to clipboard button
+        Button(
+            onClick = {
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val clip = ClipData.newPlainText(title, prettyContent)
+                clipboard.setPrimaryClip(clip)
+                Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+            },
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF3366BB)
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Copy to clipboard")
+        }
+    }
 }

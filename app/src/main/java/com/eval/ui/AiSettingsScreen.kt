@@ -27,9 +27,9 @@ import com.google.gson.JsonSyntaxException
  * AI Settings data class for storing API keys for various AI services.
  */
 /**
- * Default prompt template for AI chess analysis.
+ * Default prompt template for AI chess game analysis.
  */
-const val DEFAULT_AI_PROMPT = """You are an expert chess analyst. Analyze the following chess position given in FEN notation.
+const val DEFAULT_GAME_PROMPT = """You are an expert chess analyst. Analyze the following chess position given in FEN notation.
 
 FEN: @FEN@
 
@@ -41,25 +41,50 @@ No need to use an chess engine to look for tactical opportunities, Stockfish is 
 
 Keep your analysis concise but insightful, suitable for a chess player looking to understand the position better."""
 
+// Keep old constant name for backwards compatibility
+const val DEFAULT_AI_PROMPT = DEFAULT_GAME_PROMPT
+
+/**
+ * Default prompt template for lichess.org & chess.com player analysis.
+ */
+const val DEFAULT_SERVER_PLAYER_PROMPT = """What do you know about user @PLAYER@ on chess server @SERVER@ ?. What is the real name of this player? What is good and the bad about this player? Is there any gossip on the internet?"""
+
+/**
+ * Default prompt template for other player analysis.
+ */
+const val DEFAULT_OTHER_PLAYER_PROMPT = """Please give a report about chess player @PLAYER@. What is the good and the bad about this player? Is there any gossip on the internet?"""
+
 data class AiSettings(
     val chatGptApiKey: String = "",
     val chatGptModel: String = "gpt-4o-mini",
-    val chatGptPrompt: String = DEFAULT_AI_PROMPT,
+    val chatGptPrompt: String = DEFAULT_GAME_PROMPT,
+    val chatGptServerPlayerPrompt: String = DEFAULT_SERVER_PLAYER_PROMPT,
+    val chatGptOtherPlayerPrompt: String = DEFAULT_OTHER_PLAYER_PROMPT,
     val claudeApiKey: String = "",
     val claudeModel: String = "claude-sonnet-4-20250514",
-    val claudePrompt: String = DEFAULT_AI_PROMPT,
+    val claudePrompt: String = DEFAULT_GAME_PROMPT,
+    val claudeServerPlayerPrompt: String = DEFAULT_SERVER_PLAYER_PROMPT,
+    val claudeOtherPlayerPrompt: String = DEFAULT_OTHER_PLAYER_PROMPT,
     val geminiApiKey: String = "",
     val geminiModel: String = "gemini-2.0-flash",
-    val geminiPrompt: String = DEFAULT_AI_PROMPT,
+    val geminiPrompt: String = DEFAULT_GAME_PROMPT,
+    val geminiServerPlayerPrompt: String = DEFAULT_SERVER_PLAYER_PROMPT,
+    val geminiOtherPlayerPrompt: String = DEFAULT_OTHER_PLAYER_PROMPT,
     val grokApiKey: String = "",
     val grokModel: String = "grok-3-mini",
-    val grokPrompt: String = DEFAULT_AI_PROMPT,
+    val grokPrompt: String = DEFAULT_GAME_PROMPT,
+    val grokServerPlayerPrompt: String = DEFAULT_SERVER_PLAYER_PROMPT,
+    val grokOtherPlayerPrompt: String = DEFAULT_OTHER_PLAYER_PROMPT,
     val deepSeekApiKey: String = "",
     val deepSeekModel: String = "deepseek-chat",
-    val deepSeekPrompt: String = DEFAULT_AI_PROMPT,
+    val deepSeekPrompt: String = DEFAULT_GAME_PROMPT,
+    val deepSeekServerPlayerPrompt: String = DEFAULT_SERVER_PLAYER_PROMPT,
+    val deepSeekOtherPlayerPrompt: String = DEFAULT_OTHER_PLAYER_PROMPT,
     val mistralApiKey: String = "",
     val mistralModel: String = "mistral-small-latest",
-    val mistralPrompt: String = DEFAULT_AI_PROMPT,
+    val mistralPrompt: String = DEFAULT_GAME_PROMPT,
+    val mistralServerPlayerPrompt: String = DEFAULT_SERVER_PLAYER_PROMPT,
+    val mistralOtherPlayerPrompt: String = DEFAULT_OTHER_PLAYER_PROMPT,
     val dummyEnabled: Boolean = false
 ) {
     fun getApiKey(service: AiService): String {
@@ -86,7 +111,9 @@ data class AiSettings(
         }
     }
 
-    fun getPrompt(service: AiService): String {
+    fun getPrompt(service: AiService): String = getGamePrompt(service)
+
+    fun getGamePrompt(service: AiService): String {
         return when (service) {
             AiService.CHATGPT -> chatGptPrompt
             AiService.CLAUDE -> claudePrompt
@@ -94,6 +121,30 @@ data class AiSettings(
             AiService.GROK -> grokPrompt
             AiService.DEEPSEEK -> deepSeekPrompt
             AiService.MISTRAL -> mistralPrompt
+            AiService.DUMMY -> ""
+        }
+    }
+
+    fun getServerPlayerPrompt(service: AiService): String {
+        return when (service) {
+            AiService.CHATGPT -> chatGptServerPlayerPrompt
+            AiService.CLAUDE -> claudeServerPlayerPrompt
+            AiService.GEMINI -> geminiServerPlayerPrompt
+            AiService.GROK -> grokServerPlayerPrompt
+            AiService.DEEPSEEK -> deepSeekServerPlayerPrompt
+            AiService.MISTRAL -> mistralServerPlayerPrompt
+            AiService.DUMMY -> ""
+        }
+    }
+
+    fun getOtherPlayerPrompt(service: AiService): String {
+        return when (service) {
+            AiService.CHATGPT -> chatGptOtherPlayerPrompt
+            AiService.CLAUDE -> claudeOtherPlayerPrompt
+            AiService.GEMINI -> geminiOtherPlayerPrompt
+            AiService.GROK -> grokOtherPlayerPrompt
+            AiService.DEEPSEEK -> deepSeekOtherPlayerPrompt
+            AiService.MISTRAL -> mistralOtherPlayerPrompt
             AiService.DUMMY -> ""
         }
     }
@@ -613,7 +664,9 @@ fun ChatGptSettingsScreen(
 ) {
     var apiKey by remember { mutableStateOf(aiSettings.chatGptApiKey) }
     var selectedModel by remember { mutableStateOf(aiSettings.chatGptModel) }
-    var prompt by remember { mutableStateOf(aiSettings.chatGptPrompt) }
+    var gamePrompt by remember { mutableStateOf(aiSettings.chatGptPrompt) }
+    var serverPlayerPrompt by remember { mutableStateOf(aiSettings.chatGptServerPlayerPrompt) }
+    var otherPlayerPrompt by remember { mutableStateOf(aiSettings.chatGptOtherPlayerPrompt) }
     var showKey by remember { mutableStateOf(false) }
 
     AiServiceSettingsScreenTemplate(
@@ -643,16 +696,34 @@ fun ChatGptSettingsScreen(
                 onFetchModels = { onFetchModels(apiKey) }
             )
 
-            // Prompt editing
-            PromptEditSection(
-                prompt = prompt,
-                onPromptChange = {
-                    prompt = it
+            // All prompts editing
+            AllPromptsSection(
+                gamePrompt = gamePrompt,
+                serverPlayerPrompt = serverPlayerPrompt,
+                otherPlayerPrompt = otherPlayerPrompt,
+                onGamePromptChange = {
+                    gamePrompt = it
                     onSave(aiSettings.copy(chatGptPrompt = it))
                 },
-                onResetToDefault = {
-                    prompt = DEFAULT_AI_PROMPT
-                    onSave(aiSettings.copy(chatGptPrompt = DEFAULT_AI_PROMPT))
+                onServerPlayerPromptChange = {
+                    serverPlayerPrompt = it
+                    onSave(aiSettings.copy(chatGptServerPlayerPrompt = it))
+                },
+                onOtherPlayerPromptChange = {
+                    otherPlayerPrompt = it
+                    onSave(aiSettings.copy(chatGptOtherPlayerPrompt = it))
+                },
+                onResetGamePrompt = {
+                    gamePrompt = DEFAULT_GAME_PROMPT
+                    onSave(aiSettings.copy(chatGptPrompt = DEFAULT_GAME_PROMPT))
+                },
+                onResetServerPlayerPrompt = {
+                    serverPlayerPrompt = DEFAULT_SERVER_PLAYER_PROMPT
+                    onSave(aiSettings.copy(chatGptServerPlayerPrompt = DEFAULT_SERVER_PLAYER_PROMPT))
+                },
+                onResetOtherPlayerPrompt = {
+                    otherPlayerPrompt = DEFAULT_OTHER_PLAYER_PROMPT
+                    onSave(aiSettings.copy(chatGptOtherPlayerPrompt = DEFAULT_OTHER_PLAYER_PROMPT))
                 }
             )
         }
@@ -671,7 +742,9 @@ fun ClaudeSettingsScreen(
 ) {
     var apiKey by remember { mutableStateOf(aiSettings.claudeApiKey) }
     var selectedModel by remember { mutableStateOf(aiSettings.claudeModel) }
-    var prompt by remember { mutableStateOf(aiSettings.claudePrompt) }
+    var gamePrompt by remember { mutableStateOf(aiSettings.claudePrompt) }
+    var serverPlayerPrompt by remember { mutableStateOf(aiSettings.claudeServerPlayerPrompt) }
+    var otherPlayerPrompt by remember { mutableStateOf(aiSettings.claudeOtherPlayerPrompt) }
     var showKey by remember { mutableStateOf(false) }
 
     AiServiceSettingsScreenTemplate(
@@ -699,16 +772,34 @@ fun ClaudeSettingsScreen(
                 }
             )
 
-            // Prompt editing
-            PromptEditSection(
-                prompt = prompt,
-                onPromptChange = {
-                    prompt = it
+            // All prompts editing
+            AllPromptsSection(
+                gamePrompt = gamePrompt,
+                serverPlayerPrompt = serverPlayerPrompt,
+                otherPlayerPrompt = otherPlayerPrompt,
+                onGamePromptChange = {
+                    gamePrompt = it
                     onSave(aiSettings.copy(claudePrompt = it))
                 },
-                onResetToDefault = {
-                    prompt = DEFAULT_AI_PROMPT
-                    onSave(aiSettings.copy(claudePrompt = DEFAULT_AI_PROMPT))
+                onServerPlayerPromptChange = {
+                    serverPlayerPrompt = it
+                    onSave(aiSettings.copy(claudeServerPlayerPrompt = it))
+                },
+                onOtherPlayerPromptChange = {
+                    otherPlayerPrompt = it
+                    onSave(aiSettings.copy(claudeOtherPlayerPrompt = it))
+                },
+                onResetGamePrompt = {
+                    gamePrompt = DEFAULT_GAME_PROMPT
+                    onSave(aiSettings.copy(claudePrompt = DEFAULT_GAME_PROMPT))
+                },
+                onResetServerPlayerPrompt = {
+                    serverPlayerPrompt = DEFAULT_SERVER_PLAYER_PROMPT
+                    onSave(aiSettings.copy(claudeServerPlayerPrompt = DEFAULT_SERVER_PLAYER_PROMPT))
+                },
+                onResetOtherPlayerPrompt = {
+                    otherPlayerPrompt = DEFAULT_OTHER_PLAYER_PROMPT
+                    onSave(aiSettings.copy(claudeOtherPlayerPrompt = DEFAULT_OTHER_PLAYER_PROMPT))
                 }
             )
         }
@@ -730,7 +821,9 @@ fun GeminiSettingsScreen(
 ) {
     var apiKey by remember { mutableStateOf(aiSettings.geminiApiKey) }
     var selectedModel by remember { mutableStateOf(aiSettings.geminiModel) }
-    var prompt by remember { mutableStateOf(aiSettings.geminiPrompt) }
+    var gamePrompt by remember { mutableStateOf(aiSettings.geminiPrompt) }
+    var serverPlayerPrompt by remember { mutableStateOf(aiSettings.geminiServerPlayerPrompt) }
+    var otherPlayerPrompt by remember { mutableStateOf(aiSettings.geminiOtherPlayerPrompt) }
     var showKey by remember { mutableStateOf(false) }
 
     AiServiceSettingsScreenTemplate(
@@ -760,16 +853,34 @@ fun GeminiSettingsScreen(
                 onFetchModels = { onFetchModels(apiKey) }
             )
 
-            // Prompt editing
-            PromptEditSection(
-                prompt = prompt,
-                onPromptChange = {
-                    prompt = it
+            // All prompts editing
+            AllPromptsSection(
+                gamePrompt = gamePrompt,
+                serverPlayerPrompt = serverPlayerPrompt,
+                otherPlayerPrompt = otherPlayerPrompt,
+                onGamePromptChange = {
+                    gamePrompt = it
                     onSave(aiSettings.copy(geminiPrompt = it))
                 },
-                onResetToDefault = {
-                    prompt = DEFAULT_AI_PROMPT
-                    onSave(aiSettings.copy(geminiPrompt = DEFAULT_AI_PROMPT))
+                onServerPlayerPromptChange = {
+                    serverPlayerPrompt = it
+                    onSave(aiSettings.copy(geminiServerPlayerPrompt = it))
+                },
+                onOtherPlayerPromptChange = {
+                    otherPlayerPrompt = it
+                    onSave(aiSettings.copy(geminiOtherPlayerPrompt = it))
+                },
+                onResetGamePrompt = {
+                    gamePrompt = DEFAULT_GAME_PROMPT
+                    onSave(aiSettings.copy(geminiPrompt = DEFAULT_GAME_PROMPT))
+                },
+                onResetServerPlayerPrompt = {
+                    serverPlayerPrompt = DEFAULT_SERVER_PLAYER_PROMPT
+                    onSave(aiSettings.copy(geminiServerPlayerPrompt = DEFAULT_SERVER_PLAYER_PROMPT))
+                },
+                onResetOtherPlayerPrompt = {
+                    otherPlayerPrompt = DEFAULT_OTHER_PLAYER_PROMPT
+                    onSave(aiSettings.copy(geminiOtherPlayerPrompt = DEFAULT_OTHER_PLAYER_PROMPT))
                 }
             )
         }
@@ -791,7 +902,9 @@ fun GrokSettingsScreen(
 ) {
     var apiKey by remember { mutableStateOf(aiSettings.grokApiKey) }
     var selectedModel by remember { mutableStateOf(aiSettings.grokModel) }
-    var prompt by remember { mutableStateOf(aiSettings.grokPrompt) }
+    var gamePrompt by remember { mutableStateOf(aiSettings.grokPrompt) }
+    var serverPlayerPrompt by remember { mutableStateOf(aiSettings.grokServerPlayerPrompt) }
+    var otherPlayerPrompt by remember { mutableStateOf(aiSettings.grokOtherPlayerPrompt) }
     var showKey by remember { mutableStateOf(false) }
 
     AiServiceSettingsScreenTemplate(
@@ -821,16 +934,34 @@ fun GrokSettingsScreen(
                 onFetchModels = { onFetchModels(apiKey) }
             )
 
-            // Prompt editing
-            PromptEditSection(
-                prompt = prompt,
-                onPromptChange = {
-                    prompt = it
+            // All prompts editing
+            AllPromptsSection(
+                gamePrompt = gamePrompt,
+                serverPlayerPrompt = serverPlayerPrompt,
+                otherPlayerPrompt = otherPlayerPrompt,
+                onGamePromptChange = {
+                    gamePrompt = it
                     onSave(aiSettings.copy(grokPrompt = it))
                 },
-                onResetToDefault = {
-                    prompt = DEFAULT_AI_PROMPT
-                    onSave(aiSettings.copy(grokPrompt = DEFAULT_AI_PROMPT))
+                onServerPlayerPromptChange = {
+                    serverPlayerPrompt = it
+                    onSave(aiSettings.copy(grokServerPlayerPrompt = it))
+                },
+                onOtherPlayerPromptChange = {
+                    otherPlayerPrompt = it
+                    onSave(aiSettings.copy(grokOtherPlayerPrompt = it))
+                },
+                onResetGamePrompt = {
+                    gamePrompt = DEFAULT_GAME_PROMPT
+                    onSave(aiSettings.copy(grokPrompt = DEFAULT_GAME_PROMPT))
+                },
+                onResetServerPlayerPrompt = {
+                    serverPlayerPrompt = DEFAULT_SERVER_PLAYER_PROMPT
+                    onSave(aiSettings.copy(grokServerPlayerPrompt = DEFAULT_SERVER_PLAYER_PROMPT))
+                },
+                onResetOtherPlayerPrompt = {
+                    otherPlayerPrompt = DEFAULT_OTHER_PLAYER_PROMPT
+                    onSave(aiSettings.copy(grokOtherPlayerPrompt = DEFAULT_OTHER_PLAYER_PROMPT))
                 }
             )
         }
@@ -852,7 +983,9 @@ fun DeepSeekSettingsScreen(
 ) {
     var apiKey by remember { mutableStateOf(aiSettings.deepSeekApiKey) }
     var selectedModel by remember { mutableStateOf(aiSettings.deepSeekModel) }
-    var prompt by remember { mutableStateOf(aiSettings.deepSeekPrompt) }
+    var gamePrompt by remember { mutableStateOf(aiSettings.deepSeekPrompt) }
+    var serverPlayerPrompt by remember { mutableStateOf(aiSettings.deepSeekServerPlayerPrompt) }
+    var otherPlayerPrompt by remember { mutableStateOf(aiSettings.deepSeekOtherPlayerPrompt) }
     var showKey by remember { mutableStateOf(false) }
 
     AiServiceSettingsScreenTemplate(
@@ -882,16 +1015,34 @@ fun DeepSeekSettingsScreen(
                 onFetchModels = { onFetchModels(apiKey) }
             )
 
-            // Prompt editing
-            PromptEditSection(
-                prompt = prompt,
-                onPromptChange = {
-                    prompt = it
+            // All prompts editing
+            AllPromptsSection(
+                gamePrompt = gamePrompt,
+                serverPlayerPrompt = serverPlayerPrompt,
+                otherPlayerPrompt = otherPlayerPrompt,
+                onGamePromptChange = {
+                    gamePrompt = it
                     onSave(aiSettings.copy(deepSeekPrompt = it))
                 },
-                onResetToDefault = {
-                    prompt = DEFAULT_AI_PROMPT
-                    onSave(aiSettings.copy(deepSeekPrompt = DEFAULT_AI_PROMPT))
+                onServerPlayerPromptChange = {
+                    serverPlayerPrompt = it
+                    onSave(aiSettings.copy(deepSeekServerPlayerPrompt = it))
+                },
+                onOtherPlayerPromptChange = {
+                    otherPlayerPrompt = it
+                    onSave(aiSettings.copy(deepSeekOtherPlayerPrompt = it))
+                },
+                onResetGamePrompt = {
+                    gamePrompt = DEFAULT_GAME_PROMPT
+                    onSave(aiSettings.copy(deepSeekPrompt = DEFAULT_GAME_PROMPT))
+                },
+                onResetServerPlayerPrompt = {
+                    serverPlayerPrompt = DEFAULT_SERVER_PLAYER_PROMPT
+                    onSave(aiSettings.copy(deepSeekServerPlayerPrompt = DEFAULT_SERVER_PLAYER_PROMPT))
+                },
+                onResetOtherPlayerPrompt = {
+                    otherPlayerPrompt = DEFAULT_OTHER_PLAYER_PROMPT
+                    onSave(aiSettings.copy(deepSeekOtherPlayerPrompt = DEFAULT_OTHER_PLAYER_PROMPT))
                 }
             )
         }
@@ -913,7 +1064,9 @@ fun MistralSettingsScreen(
 ) {
     var apiKey by remember { mutableStateOf(aiSettings.mistralApiKey) }
     var selectedModel by remember { mutableStateOf(aiSettings.mistralModel) }
-    var prompt by remember { mutableStateOf(aiSettings.mistralPrompt) }
+    var gamePrompt by remember { mutableStateOf(aiSettings.mistralPrompt) }
+    var serverPlayerPrompt by remember { mutableStateOf(aiSettings.mistralServerPlayerPrompt) }
+    var otherPlayerPrompt by remember { mutableStateOf(aiSettings.mistralOtherPlayerPrompt) }
     var showKey by remember { mutableStateOf(false) }
 
     AiServiceSettingsScreenTemplate(
@@ -943,16 +1096,34 @@ fun MistralSettingsScreen(
                 onFetchModels = { onFetchModels(apiKey) }
             )
 
-            // Prompt editing
-            PromptEditSection(
-                prompt = prompt,
-                onPromptChange = {
-                    prompt = it
+            // All prompts editing
+            AllPromptsSection(
+                gamePrompt = gamePrompt,
+                serverPlayerPrompt = serverPlayerPrompt,
+                otherPlayerPrompt = otherPlayerPrompt,
+                onGamePromptChange = {
+                    gamePrompt = it
                     onSave(aiSettings.copy(mistralPrompt = it))
                 },
-                onResetToDefault = {
-                    prompt = DEFAULT_AI_PROMPT
-                    onSave(aiSettings.copy(mistralPrompt = DEFAULT_AI_PROMPT))
+                onServerPlayerPromptChange = {
+                    serverPlayerPrompt = it
+                    onSave(aiSettings.copy(mistralServerPlayerPrompt = it))
+                },
+                onOtherPlayerPromptChange = {
+                    otherPlayerPrompt = it
+                    onSave(aiSettings.copy(mistralOtherPlayerPrompt = it))
+                },
+                onResetGamePrompt = {
+                    gamePrompt = DEFAULT_GAME_PROMPT
+                    onSave(aiSettings.copy(mistralPrompt = DEFAULT_GAME_PROMPT))
+                },
+                onResetServerPlayerPrompt = {
+                    serverPlayerPrompt = DEFAULT_SERVER_PLAYER_PROMPT
+                    onSave(aiSettings.copy(mistralServerPlayerPrompt = DEFAULT_SERVER_PLAYER_PROMPT))
+                },
+                onResetOtherPlayerPrompt = {
+                    otherPlayerPrompt = DEFAULT_OTHER_PLAYER_PROMPT
+                    onSave(aiSettings.copy(mistralOtherPlayerPrompt = DEFAULT_OTHER_PLAYER_PROMPT))
                 }
             )
         }
@@ -1401,10 +1572,51 @@ private fun HardcodedModelSelectionSection(
 }
 
 /**
- * Prompt editing section for AI service settings.
+ * Placeholder information card for prompts.
  */
 @Composable
-fun PromptEditSection(
+fun PromptPlaceholdersInfo() {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFF2A3A4A)
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "Placeholder Variables",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White
+            )
+            Text(
+                text = "@FEN@ - Will be replaced by the chess position in FEN notation",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFFAAAAAA)
+            )
+            Text(
+                text = "@PLAYER@ - Will be replaced by the player name",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFFAAAAAA)
+            )
+            Text(
+                text = "@SERVER@ - Will be replaced by 'lichess.org' or 'chess.com'",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFFAAAAAA)
+            )
+        }
+    }
+}
+
+/**
+ * Single prompt editing card.
+ */
+@Composable
+fun SinglePromptCard(
+    title: String,
     prompt: String,
     onPromptChange: (String) -> Unit,
     onResetToDefault: () -> Unit
@@ -1425,7 +1637,7 @@ fun PromptEditSection(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Custom Prompt",
+                    text = title,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White
@@ -1438,18 +1650,12 @@ fun PromptEditSection(
                 }
             }
 
-            Text(
-                text = "Use @FEN@ where you want the position to be inserted",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFFAAAAAA)
-            )
-
             OutlinedTextField(
                 value = prompt,
                 onValueChange = onPromptChange,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 200.dp, max = 400.dp),
+                    .heightIn(min = 150.dp, max = 300.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = Color.White,
                     unfocusedTextColor = Color.White,
@@ -1462,4 +1668,69 @@ fun PromptEditSection(
             )
         }
     }
+}
+
+/**
+ * All prompts editing section for AI service settings.
+ */
+@Composable
+fun AllPromptsSection(
+    gamePrompt: String,
+    serverPlayerPrompt: String,
+    otherPlayerPrompt: String,
+    onGamePromptChange: (String) -> Unit,
+    onServerPlayerPromptChange: (String) -> Unit,
+    onOtherPlayerPromptChange: (String) -> Unit,
+    onResetGamePrompt: () -> Unit,
+    onResetServerPlayerPrompt: () -> Unit,
+    onResetOtherPlayerPrompt: () -> Unit
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Placeholder info card
+        PromptPlaceholdersInfo()
+
+        // Game prompt
+        SinglePromptCard(
+            title = "Game prompt",
+            prompt = gamePrompt,
+            onPromptChange = onGamePromptChange,
+            onResetToDefault = onResetGamePrompt
+        )
+
+        // Server player prompt
+        SinglePromptCard(
+            title = "lichess.org & chess.com player prompt",
+            prompt = serverPlayerPrompt,
+            onPromptChange = onServerPlayerPromptChange,
+            onResetToDefault = onResetServerPlayerPrompt
+        )
+
+        // Other player prompt
+        SinglePromptCard(
+            title = "Other player prompt",
+            prompt = otherPlayerPrompt,
+            onPromptChange = onOtherPlayerPromptChange,
+            onResetToDefault = onResetOtherPlayerPrompt
+        )
+    }
+}
+
+/**
+ * Legacy prompt editing section for AI service settings.
+ * @deprecated Use AllPromptsSection instead
+ */
+@Composable
+fun PromptEditSection(
+    prompt: String,
+    onPromptChange: (String) -> Unit,
+    onResetToDefault: () -> Unit
+) {
+    SinglePromptCard(
+        title = "Game prompt",
+        prompt = prompt,
+        onPromptChange = onPromptChange,
+        onResetToDefault = onResetToDefault
+    )
 }
