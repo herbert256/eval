@@ -13,13 +13,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 /**
- * General settings data class.
- */
-data class GeneralSettings(
-    val longTapForFullScreen: Boolean = false
-)
-
-/**
  * General settings screen for app-wide settings.
  */
 @Composable

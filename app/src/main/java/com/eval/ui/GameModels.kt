@@ -1,0 +1,298 @@
+package com.eval.ui
+
+import com.eval.chess.ChessBoard
+import com.eval.data.AiAnalysisResponse
+import com.eval.data.ChessServer
+import com.eval.data.LichessGame
+import com.eval.stockfish.AnalysisResult
+
+// Analysis stage - the 3 sequential stages of game analysis
+enum class AnalysisStage {
+    PREVIEW,        // Quick analysis pass - not interruptible
+    ANALYSE,        // Deep analysis pass - interruptible
+    MANUAL          // Manual exploration - final stage
+}
+
+// Settings for Preview Stage (quick analysis during navigation)
+data class PreviewStageSettings(
+    val secondsForMove: Float = 0.05f,  // 0.01, 0.05, 0.10, 0.25, 0.50
+    val threads: Int = 1,               // 1-4
+    val hashMb: Int = 8,                // 8, 16, 64
+    val useNnue: Boolean = false
+)
+
+// Settings for Analyse Stage (auto-analysis)
+data class AnalyseStageSettings(
+    val secondsForMove: Float = 1.00f,  // 0.50, 0.75, 1.00, 1.50, 2.50, 5.00, 10.00
+    val threads: Int = 2,               // 1-8
+    val hashMb: Int = 64,               // 16, 64, 96, 128, 192, 256
+    val useNnue: Boolean = true
+)
+
+// Arrow drawing modes
+enum class ArrowMode {
+    NONE,        // No arrows
+    MAIN_LINE,   // Draw arrows from PV line (current behavior)
+    MULTI_LINES  // Draw one arrow per Stockfish line with score
+}
+
+// Default arrow colors (with alpha for semi-transparency)
+const val DEFAULT_WHITE_ARROW_COLOR = 0xCC3399FFL  // Semi-transparent blue
+const val DEFAULT_BLACK_ARROW_COLOR = 0xCC44BB44L  // Semi-transparent green
+const val DEFAULT_MULTI_LINES_ARROW_COLOR = 0xCCFFFF00L  // Semi-transparent yellow
+
+// Settings for Manual Stage (interactive deep analysis)
+data class ManualStageSettings(
+    val depth: Int = 32,                // 16-64
+    val threads: Int = 4,               // 1-16
+    val hashMb: Int = 128,              // 32, 64, 96, 128, 192, 256, 384, 512
+    val multiPv: Int = 3,               // 1-32
+    val useNnue: Boolean = true,
+    // Main line arrow settings
+    val arrowMode: ArrowMode = ArrowMode.NONE,
+    val numArrows: Int = 4,             // 1-8 arrows from PV
+    val showArrowNumbers: Boolean = true,
+    val whiteArrowColor: Long = DEFAULT_WHITE_ARROW_COLOR,
+    val blackArrowColor: Long = DEFAULT_BLACK_ARROW_COLOR,
+    // Multi lines arrow settings
+    val multiLinesArrowColor: Long = DEFAULT_MULTI_LINES_ARROW_COLOR
+)
+
+// Combined Stockfish settings for all stages
+data class StockfishSettings(
+    val previewStage: PreviewStageSettings = PreviewStageSettings(),
+    val analyseStage: AnalyseStageSettings = AnalyseStageSettings(),
+    val manualStage: ManualStageSettings = ManualStageSettings()
+)
+
+// Default board colors
+const val DEFAULT_WHITE_SQUARE_COLOR = 0xFFF0D9B5L  // Light brown
+const val DEFAULT_BLACK_SQUARE_COLOR = 0xFFB58863L  // Dark brown
+const val DEFAULT_WHITE_PIECE_COLOR = 0xFFFFFFFF   // White
+const val DEFAULT_BLACK_PIECE_COLOR = 0xFF000000L  // Black
+
+// Evaluation bar defaults
+const val DEFAULT_EVAL_BAR_COLOR_1 = 0xFFFFFFFF   // White (score color)
+const val DEFAULT_EVAL_BAR_COLOR_2 = 0xFF000000L  // Black (filler color)
+
+// Graph color defaults
+const val DEFAULT_GRAPH_PLUS_SCORE_COLOR = 0xFF00E676L    // Bright green
+const val DEFAULT_GRAPH_NEGATIVE_SCORE_COLOR = 0xFFFF5252L // Bright red
+const val DEFAULT_GRAPH_BACKGROUND_COLOR = 0xFF1A1A1AL    // Dark gray
+const val DEFAULT_GRAPH_ANALYSE_LINE_COLOR = 0xFFFFFFFFL  // White
+const val DEFAULT_GRAPH_VERTICAL_LINE_COLOR = 0xFF2196F3L // Blue
+
+// Graph settings
+data class GraphSettings(
+    val plusScoreColor: Long = DEFAULT_GRAPH_PLUS_SCORE_COLOR,
+    val negativeScoreColor: Long = DEFAULT_GRAPH_NEGATIVE_SCORE_COLOR,
+    val backgroundColor: Long = DEFAULT_GRAPH_BACKGROUND_COLOR,
+    val analyseLineColor: Long = DEFAULT_GRAPH_ANALYSE_LINE_COLOR,
+    val verticalLineColor: Long = DEFAULT_GRAPH_VERTICAL_LINE_COLOR,
+    val lineGraphRange: Int = 7,    // Range for line graph (-7 to +7)
+    val barGraphRange: Int = 3      // Range for bar graph (-3 to +3)
+)
+
+// Player bar display mode
+enum class PlayerBarMode {
+    NONE,    // No player bars
+    TOP,     // Single combined bar at top
+    BOTTOM,  // Single combined bar at bottom
+    BOTH     // Separate bars above and below board (default)
+}
+
+// Evaluation bar position
+enum class EvalBarPosition {
+    NONE,    // No evaluation bar
+    LEFT,    // Evaluation bar on the left of the board
+    RIGHT    // Evaluation bar on the right of the board (default)
+}
+
+// Board layout settings
+data class BoardLayoutSettings(
+    val showCoordinates: Boolean = true,
+    val showLastMove: Boolean = true,
+    val playerBarMode: PlayerBarMode = PlayerBarMode.BOTH,
+    val showRedBorderForPlayerToMove: Boolean = false,
+    val whiteSquareColor: Long = DEFAULT_WHITE_SQUARE_COLOR,
+    val blackSquareColor: Long = DEFAULT_BLACK_SQUARE_COLOR,
+    val whitePieceColor: Long = DEFAULT_WHITE_PIECE_COLOR,
+    val blackPieceColor: Long = DEFAULT_BLACK_PIECE_COLOR,
+    // Evaluation bar settings
+    val evalBarPosition: EvalBarPosition = EvalBarPosition.RIGHT,
+    val evalBarColor1: Long = DEFAULT_EVAL_BAR_COLOR_1,
+    val evalBarColor2: Long = DEFAULT_EVAL_BAR_COLOR_2,
+    val evalBarRange: Int = 5
+)
+
+// Interface visibility settings for Preview stage
+// Note: Score Line graph and Game Information are always shown in Preview
+data class PreviewStageVisibility(
+    val showScoreBarsGraph: Boolean = false,
+    val showResultBar: Boolean = false,
+    val showBoard: Boolean = false,
+    val showMoveList: Boolean = false,
+    val showPgn: Boolean = false
+)
+
+// Interface visibility settings for Analyse stage
+data class AnalyseStageVisibility(
+    val showScoreLineGraph: Boolean = true,
+    val showScoreBarsGraph: Boolean = true,
+    val showBoard: Boolean = true,
+    val showStockfishAnalyse: Boolean = true,
+    val showResultBar: Boolean = false,
+    val showMoveList: Boolean = false,
+    val showGameInfo: Boolean = false,
+    val showPgn: Boolean = false
+)
+
+// Interface visibility settings for Manual stage
+// Note: Board, Navigation bar, and Stockfish panel are always shown in Manual
+data class ManualStageVisibility(
+    val showResultBar: Boolean = true,
+    val showScoreLineGraph: Boolean = true,
+    val showScoreBarsGraph: Boolean = true,
+    val showMoveList: Boolean = true,
+    val showGameInfo: Boolean = false,
+    val showPgn: Boolean = false
+)
+
+// Combined interface visibility settings
+data class InterfaceVisibilitySettings(
+    val previewStage: PreviewStageVisibility = PreviewStageVisibility(),
+    val analyseStage: AnalyseStageVisibility = AnalyseStageVisibility(),
+    val manualStage: ManualStageVisibility = ManualStageVisibility()
+)
+
+// General app settings
+data class GeneralSettings(
+    val longTapForFullScreen: Boolean = false
+)
+
+data class MoveScore(
+    val score: Float,
+    val isMate: Boolean,
+    val mateIn: Int,
+    val depth: Int = 0,
+    val nodes: Long = 0,
+    val nps: Long = 0
+)
+
+data class MoveDetails(
+    val san: String,
+    val from: String,
+    val to: String,
+    val isCapture: Boolean,
+    val pieceType: String, // K, Q, R, B, N, P
+    val clockTime: String? = null  // Format: "H:MM:SS" or "M:SS" or null if not available
+)
+
+// Stored analysed game with all analysis data
+data class AnalysedGame(
+    val timestamp: Long,                      // When the analysis was completed
+    val whiteName: String,                    // White player name
+    val blackName: String,                    // Black player name
+    val result: String,                       // "1-0", "0-1", "1/2-1/2"
+    val pgn: String,                          // Original PGN
+    val moves: List<String>,                  // Move list in UCI format
+    val moveDetails: List<MoveDetails>,       // Detailed move info
+    val previewScores: Map<Int, MoveScore>,   // Preview stage scores (graph 1)
+    val analyseScores: Map<Int, MoveScore>,   // Analyse stage scores (graph 2)
+    val openingName: String? = null,          // Opening name if available
+    val speed: String? = null,                // Game speed (bullet, blitz, etc.)
+    val activePlayer: String? = null,         // Username who was viewing (for score perspective)
+    val activeServer: ChessServer? = null     // Chess server (Lichess/Chess.com) for the active player
+)
+
+// Entry in the list of previous game retrieves
+data class RetrievedGamesEntry(
+    val accountName: String,
+    val server: ChessServer
+)
+
+data class GameUiState(
+    val stockfishInstalled: Boolean = true,  // Assume true until checked
+    val isLoading: Boolean = false,
+    val errorMessage: String? = null,
+    // Game list for selection
+    val gameList: List<LichessGame> = emptyList(),
+    val showGameSelection: Boolean = false,
+    // Currently loaded game
+    val game: LichessGame? = null,
+    val openingName: String? = null,  // Extracted from PGN headers
+    val currentBoard: ChessBoard = ChessBoard(),
+    val moves: List<String> = emptyList(),
+    val moveDetails: List<MoveDetails> = emptyList(),
+    val currentMoveIndex: Int = -1,
+    val analysisEnabled: Boolean = true,
+    val analysisResult: AnalysisResult? = null,
+    val analysisResultFen: String? = null,  // FEN for which analysisResult is valid
+    val stockfishReady: Boolean = false,
+    val flippedBoard: Boolean = false,
+    val userPlayedBlack: Boolean = false,  // True if active player played black (for score perspective)
+    val activePlayer: String? = null,      // Username of the active player (for score perspective)
+    val activeServer: ChessServer? = null, // Chess server (Lichess/Chess.com) for the active player
+    val activePlayerError: String? = null, // Error message if activePlayer validation fails
+    val stockfishSettings: StockfishSettings = StockfishSettings(),
+    val boardLayoutSettings: BoardLayoutSettings = BoardLayoutSettings(),
+    val graphSettings: GraphSettings = GraphSettings(),
+    val interfaceVisibility: InterfaceVisibilitySettings = InterfaceVisibilitySettings(),
+    val showSettingsDialog: Boolean = false,
+    val showHelpScreen: Boolean = false,
+    // Exploring line state
+    val isExploringLine: Boolean = false,
+    val exploringLineMoves: List<String> = emptyList(),
+    val exploringLineMoveIndex: Int = -1,
+    val savedGameMoveIndex: Int = -1,
+    // Analysis stage state
+    val currentStage: AnalysisStage = AnalysisStage.PREVIEW,
+    val autoAnalysisIndex: Int = -1,
+    val previewScores: Map<Int, MoveScore> = emptyMap(),     // Preview stage scores
+    val analyseScores: Map<Int, MoveScore> = emptyMap(),     // Analyse stage scores
+    val autoAnalysisCurrentScore: MoveScore? = null,
+    val remainingAnalysisMoves: List<Int> = emptyList(),
+    // Lichess settings
+    val lichessMaxGames: Int = 10,
+    // Chess.com settings
+    val chessComMaxGames: Int = 10,
+    // Active player/server for reload button
+    val hasActive: Boolean = false,
+    // General settings (fullScreenMode is stored here, not persistent)
+    val generalSettings: GeneralSettings = GeneralSettings(),
+    // Game selection info for full screen display
+    val gameSelectionUsername: String = "",
+    val gameSelectionServer: ChessServer = ChessServer.LICHESS,
+    // Previous game retrieves (list of lists)
+    val hasPreviousRetrieves: Boolean = false,
+    val showPreviousRetrievesSelection: Boolean = false,
+    val previousRetrievesList: List<RetrievedGamesEntry> = emptyList(),
+    // Selected retrieve - for showing games from a previous retrieve
+    val showSelectedRetrieveGames: Boolean = false,
+    val selectedRetrieveEntry: RetrievedGamesEntry? = null,
+    val selectedRetrieveGames: List<LichessGame> = emptyList(),
+    // Analysed games
+    val hasAnalysedGames: Boolean = false,
+    val showAnalysedGamesSelection: Boolean = false,
+    val analysedGamesList: List<AnalysedGame> = emptyList(),
+    // Retrieve screen navigation
+    val showRetrieveScreen: Boolean = false,
+    // AI Analysis settings and state
+    val aiSettings: AiSettings = AiSettings(),
+    val showAiAnalysisDialog: Boolean = false,
+    val aiAnalysisResult: AiAnalysisResponse? = null,
+    val aiAnalysisLoading: Boolean = false,
+    val aiAnalysisServiceName: String = "",
+    // ChatGPT model selection
+    val availableChatGptModels: List<String> = emptyList(),
+    val isLoadingChatGptModels: Boolean = false,
+    // Gemini model selection
+    val availableGeminiModels: List<String> = emptyList(),
+    val isLoadingGeminiModels: Boolean = false,
+    // Grok model selection
+    val availableGrokModels: List<String> = emptyList(),
+    val isLoadingGrokModels: Boolean = false,
+    // DeepSeek model selection
+    val availableDeepSeekModels: List<String> = emptyList(),
+    val isLoadingDeepSeekModels: Boolean = false
+)

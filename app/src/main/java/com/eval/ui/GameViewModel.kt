@@ -14,8 +14,6 @@ import com.eval.data.ChessServer
 import com.eval.data.LichessGame
 import com.eval.data.Result
 import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
-import com.eval.stockfish.AnalysisResult
 import com.eval.stockfish.StockfishEngine
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -24,298 +22,16 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-// Analysis stage - the 3 sequential stages of game analysis
-enum class AnalysisStage {
-    PREVIEW,        // Quick analysis pass - not interruptible
-    ANALYSE,        // Deep analysis pass - interruptible
-    MANUAL          // Manual exploration - final stage
-}
-
-// Settings for Preview Stage (quick analysis during navigation)
-data class PreviewStageSettings(
-    val secondsForMove: Float = 0.05f,  // 0.01, 0.05, 0.10, 0.25, 0.50
-    val threads: Int = 1,               // 1-4
-    val hashMb: Int = 8,                // 8, 16, 64
-    val useNnue: Boolean = false
-)
-
-// Settings for Analyse Stage (auto-analysis)
-data class AnalyseStageSettings(
-    val secondsForMove: Float = 1.00f,  // 0.50, 0.75, 1.00, 1.50, 2.50, 5.00, 10.00
-    val threads: Int = 2,               // 1-8
-    val hashMb: Int = 64,               // 16, 64, 96, 128, 192, 256
-    val useNnue: Boolean = true
-)
-
-// Arrow drawing modes
-enum class ArrowMode {
-    NONE,        // No arrows
-    MAIN_LINE,   // Draw arrows from PV line (current behavior)
-    MULTI_LINES  // Draw one arrow per Stockfish line with score
-}
-
-// Default arrow colors (with alpha for semi-transparency)
-const val DEFAULT_WHITE_ARROW_COLOR = 0xCC3399FFL  // Semi-transparent blue
-const val DEFAULT_BLACK_ARROW_COLOR = 0xCC44BB44L  // Semi-transparent green
-const val DEFAULT_MULTI_LINES_ARROW_COLOR = 0xCCFFFF00L  // Semi-transparent yellow
-
-// Settings for Manual Stage (interactive deep analysis)
-data class ManualStageSettings(
-    val depth: Int = 32,                // 16-64
-    val threads: Int = 4,               // 1-16
-    val hashMb: Int = 128,              // 32, 64, 96, 128, 192, 256, 384, 512
-    val multiPv: Int = 3,               // 1-32
-    val useNnue: Boolean = true,
-    // Main line arrow settings
-    val arrowMode: ArrowMode = ArrowMode.NONE,
-    val numArrows: Int = 4,             // 1-8 arrows from PV
-    val showArrowNumbers: Boolean = true,
-    val whiteArrowColor: Long = DEFAULT_WHITE_ARROW_COLOR,
-    val blackArrowColor: Long = DEFAULT_BLACK_ARROW_COLOR,
-    // Multi lines arrow settings
-    val multiLinesArrowColor: Long = DEFAULT_MULTI_LINES_ARROW_COLOR
-)
-
-// Combined Stockfish settings for all stages
-data class StockfishSettings(
-    val previewStage: PreviewStageSettings = PreviewStageSettings(),
-    val analyseStage: AnalyseStageSettings = AnalyseStageSettings(),
-    val manualStage: ManualStageSettings = ManualStageSettings()
-)
-
-// Default board colors
-const val DEFAULT_WHITE_SQUARE_COLOR = 0xFFF0D9B5L  // Light brown
-const val DEFAULT_BLACK_SQUARE_COLOR = 0xFFB58863L  // Dark brown
-const val DEFAULT_WHITE_PIECE_COLOR = 0xFFFFFFFF   // White
-const val DEFAULT_BLACK_PIECE_COLOR = 0xFF000000L  // Black
-
-// Evaluation bar defaults
-const val DEFAULT_EVAL_BAR_COLOR_1 = 0xFFFFFFFF   // White (score color)
-const val DEFAULT_EVAL_BAR_COLOR_2 = 0xFF000000L  // Black (filler color)
-
-// Graph color defaults
-const val DEFAULT_GRAPH_PLUS_SCORE_COLOR = 0xFF00E676L    // Bright green
-const val DEFAULT_GRAPH_NEGATIVE_SCORE_COLOR = 0xFFFF5252L // Bright red
-const val DEFAULT_GRAPH_BACKGROUND_COLOR = 0xFF1A1A1AL    // Dark gray
-const val DEFAULT_GRAPH_ANALYSE_LINE_COLOR = 0xFFFFFFFFL  // White
-const val DEFAULT_GRAPH_VERTICAL_LINE_COLOR = 0xFF2196F3L // Blue
-
-// Graph settings
-data class GraphSettings(
-    val plusScoreColor: Long = DEFAULT_GRAPH_PLUS_SCORE_COLOR,
-    val negativeScoreColor: Long = DEFAULT_GRAPH_NEGATIVE_SCORE_COLOR,
-    val backgroundColor: Long = DEFAULT_GRAPH_BACKGROUND_COLOR,
-    val analyseLineColor: Long = DEFAULT_GRAPH_ANALYSE_LINE_COLOR,
-    val verticalLineColor: Long = DEFAULT_GRAPH_VERTICAL_LINE_COLOR,
-    val lineGraphRange: Int = 7,    // Range for line graph (-7 to +7)
-    val barGraphRange: Int = 3      // Range for bar graph (-3 to +3)
-)
-
-// Player bar display mode
-enum class PlayerBarMode {
-    NONE,    // No player bars
-    TOP,     // Single combined bar at top
-    BOTTOM,  // Single combined bar at bottom
-    BOTH     // Separate bars above and below board (default)
-}
-
-// Evaluation bar position
-enum class EvalBarPosition {
-    NONE,    // No evaluation bar
-    LEFT,    // Evaluation bar on the left of the board
-    RIGHT    // Evaluation bar on the right of the board (default)
-}
-
-// Board layout settings
-data class BoardLayoutSettings(
-    val showCoordinates: Boolean = true,
-    val showLastMove: Boolean = true,
-    val playerBarMode: PlayerBarMode = PlayerBarMode.BOTH,
-    val showRedBorderForPlayerToMove: Boolean = false,
-    val whiteSquareColor: Long = DEFAULT_WHITE_SQUARE_COLOR,
-    val blackSquareColor: Long = DEFAULT_BLACK_SQUARE_COLOR,
-    val whitePieceColor: Long = DEFAULT_WHITE_PIECE_COLOR,
-    val blackPieceColor: Long = DEFAULT_BLACK_PIECE_COLOR,
-    // Evaluation bar settings
-    val evalBarPosition: EvalBarPosition = EvalBarPosition.RIGHT,
-    val evalBarColor1: Long = DEFAULT_EVAL_BAR_COLOR_1,
-    val evalBarColor2: Long = DEFAULT_EVAL_BAR_COLOR_2,
-    val evalBarRange: Int = 5
-)
-
-// Interface visibility settings for Preview stage
-// Note: Score Line graph and Game Information are always shown in Preview
-data class PreviewStageVisibility(
-    val showScoreBarsGraph: Boolean = false,
-    val showResultBar: Boolean = false,
-    val showBoard: Boolean = false,
-    val showMoveList: Boolean = false,
-    val showPgn: Boolean = false
-)
-
-// Interface visibility settings for Analyse stage
-data class AnalyseStageVisibility(
-    val showScoreLineGraph: Boolean = true,
-    val showScoreBarsGraph: Boolean = true,
-    val showBoard: Boolean = true,
-    val showStockfishAnalyse: Boolean = true,
-    val showResultBar: Boolean = false,
-    val showMoveList: Boolean = false,
-    val showGameInfo: Boolean = false,
-    val showPgn: Boolean = false
-)
-
-// Interface visibility settings for Manual stage
-// Note: Board, Navigation bar, and Stockfish panel are always shown in Manual
-data class ManualStageVisibility(
-    val showResultBar: Boolean = true,
-    val showScoreLineGraph: Boolean = true,
-    val showScoreBarsGraph: Boolean = true,
-    val showMoveList: Boolean = true,
-    val showGameInfo: Boolean = false,
-    val showPgn: Boolean = false
-)
-
-// Combined interface visibility settings
-data class InterfaceVisibilitySettings(
-    val previewStage: PreviewStageVisibility = PreviewStageVisibility(),
-    val analyseStage: AnalyseStageVisibility = AnalyseStageVisibility(),
-    val manualStage: ManualStageVisibility = ManualStageVisibility()
-)
-
-data class MoveScore(
-    val score: Float,
-    val isMate: Boolean,
-    val mateIn: Int,
-    val depth: Int = 0,
-    val nodes: Long = 0,
-    val nps: Long = 0
-)
-
-data class MoveDetails(
-    val san: String,
-    val from: String,
-    val to: String,
-    val isCapture: Boolean,
-    val pieceType: String, // K, Q, R, B, N, P
-    val clockTime: String? = null  // Format: "H:MM:SS" or "M:SS" or null if not available
-)
-
-// Stored analysed game with all analysis data
-data class AnalysedGame(
-    val timestamp: Long,                      // When the analysis was completed
-    val whiteName: String,                    // White player name
-    val blackName: String,                    // Black player name
-    val result: String,                       // "1-0", "0-1", "1/2-1/2"
-    val pgn: String,                          // Original PGN
-    val moves: List<String>,                  // Move list in UCI format
-    val moveDetails: List<MoveDetails>,       // Detailed move info
-    val previewScores: Map<Int, MoveScore>,   // Preview stage scores (graph 1)
-    val analyseScores: Map<Int, MoveScore>,   // Analyse stage scores (graph 2)
-    val openingName: String? = null,          // Opening name if available
-    val speed: String? = null,                // Game speed (bullet, blitz, etc.)
-    val activePlayer: String? = null,         // Username who was viewing (for score perspective)
-    val activeServer: ChessServer? = null     // Chess server (Lichess/Chess.com) for the active player
-)
-
-// Entry in the list of previous game retrieves
-data class RetrievedGamesEntry(
-    val accountName: String,
-    val server: ChessServer
-)
-
-data class GameUiState(
-    val stockfishInstalled: Boolean = true,  // Assume true until checked
-    val isLoading: Boolean = false,
-    val errorMessage: String? = null,
-    // Game list for selection
-    val gameList: List<LichessGame> = emptyList(),
-    val showGameSelection: Boolean = false,
-    // Currently loaded game
-    val game: LichessGame? = null,
-    val openingName: String? = null,  // Extracted from PGN headers
-    val currentBoard: ChessBoard = ChessBoard(),
-    val moves: List<String> = emptyList(),
-    val moveDetails: List<MoveDetails> = emptyList(),
-    val currentMoveIndex: Int = -1,
-    val analysisEnabled: Boolean = true,
-    val analysisResult: AnalysisResult? = null,
-    val analysisResultFen: String? = null,  // FEN for which analysisResult is valid
-    val stockfishReady: Boolean = false,
-    val flippedBoard: Boolean = false,
-    val userPlayedBlack: Boolean = false,  // True if active player played black (for score perspective)
-    val activePlayer: String? = null,      // Username of the active player (for score perspective)
-    val activeServer: ChessServer? = null, // Chess server (Lichess/Chess.com) for the active player
-    val activePlayerError: String? = null, // Error message if activePlayer validation fails
-    val stockfishSettings: StockfishSettings = StockfishSettings(),
-    val boardLayoutSettings: BoardLayoutSettings = BoardLayoutSettings(),
-    val graphSettings: GraphSettings = GraphSettings(),
-    val interfaceVisibility: InterfaceVisibilitySettings = InterfaceVisibilitySettings(),
-    val showSettingsDialog: Boolean = false,
-    val showHelpScreen: Boolean = false,
-    // Exploring line state
-    val isExploringLine: Boolean = false,
-    val exploringLineMoves: List<String> = emptyList(),
-    val exploringLineMoveIndex: Int = -1,
-    val savedGameMoveIndex: Int = -1,
-    // Analysis stage state
-    val currentStage: AnalysisStage = AnalysisStage.PREVIEW,
-    val autoAnalysisIndex: Int = -1,
-    val previewScores: Map<Int, MoveScore> = emptyMap(),     // Preview stage scores
-    val analyseScores: Map<Int, MoveScore> = emptyMap(),     // Analyse stage scores
-    val autoAnalysisCurrentScore: MoveScore? = null,
-    val remainingAnalysisMoves: List<Int> = emptyList(),
-    // Lichess settings
-    val lichessMaxGames: Int = 10,
-    // Chess.com settings
-    val chessComMaxGames: Int = 10,
-    // Active player/server for reload button
-    val hasActive: Boolean = false,
-    // General settings (fullScreenMode is stored here, not persistent)
-    val generalSettings: GeneralSettings = GeneralSettings(),
-    // Game selection info for full screen display
-    val gameSelectionUsername: String = "",
-    val gameSelectionServer: ChessServer = ChessServer.LICHESS,
-    // Previous game retrieves (list of lists)
-    val hasPreviousRetrieves: Boolean = false,
-    val showPreviousRetrievesSelection: Boolean = false,
-    val previousRetrievesList: List<RetrievedGamesEntry> = emptyList(),
-    // Selected retrieve - for showing games from a previous retrieve
-    val showSelectedRetrieveGames: Boolean = false,
-    val selectedRetrieveEntry: RetrievedGamesEntry? = null,
-    val selectedRetrieveGames: List<LichessGame> = emptyList(),
-    // Analysed games
-    val hasAnalysedGames: Boolean = false,
-    val showAnalysedGamesSelection: Boolean = false,
-    val analysedGamesList: List<AnalysedGame> = emptyList(),
-    // Retrieve screen navigation
-    val showRetrieveScreen: Boolean = false,
-    // AI Analysis settings and state
-    val aiSettings: AiSettings = AiSettings(),
-    val showAiAnalysisDialog: Boolean = false,
-    val aiAnalysisResult: AiAnalysisResponse? = null,
-    val aiAnalysisLoading: Boolean = false,
-    val aiAnalysisServiceName: String = "",
-    // ChatGPT model selection
-    val availableChatGptModels: List<String> = emptyList(),
-    val isLoadingChatGptModels: Boolean = false,
-    // Gemini model selection
-    val availableGeminiModels: List<String> = emptyList(),
-    val isLoadingGeminiModels: Boolean = false,
-    // Grok model selection
-    val availableGrokModels: List<String> = emptyList(),
-    val isLoadingGrokModels: Boolean = false,
-    // DeepSeek model selection
-    val availableDeepSeekModels: List<String> = emptyList(),
-    val isLoadingDeepSeekModels: Boolean = false
-)
-
 class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = ChessRepository()
     private val stockfish = StockfishEngine(application)
     private val aiAnalysisRepository = AiAnalysisRepository()
-    private val prefs = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val prefs = application.getSharedPreferences(SettingsPreferences.PREFS_NAME, Context.MODE_PRIVATE)
     private val gson = Gson()
+
+    // Helper classes for settings and game storage
+    private val settingsPrefs = SettingsPreferences(prefs)
+    private val gameStorage = GameStorageManager(prefs, gson)
 
     private val _uiState = MutableStateFlow(GameUiState())
     val uiState: StateFlow<GameUiState> = _uiState.asStateFlow()
@@ -334,384 +50,36 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     val savedLichessUsername: String
-        get() = prefs.getString(KEY_LICHESS_USERNAME, "DrNykterstein") ?: "DrNykterstein"
+        get() = settingsPrefs.savedLichessUsername
 
     val savedChessComUsername: String
-        get() = prefs.getString(KEY_CHESSCOM_USERNAME, "magnuscarlsen") ?: "magnuscarlsen"
+        get() = settingsPrefs.savedChessComUsername
 
     val savedActiveServer: ChessServer?
-        get() {
-            val serverName = prefs.getString(KEY_ACTIVE_SERVER, null) ?: return null
-            return try {
-                ChessServer.valueOf(serverName)
-            } catch (e: Exception) {
-                null
-            }
-        }
+        get() = settingsPrefs.savedActiveServer
 
     val savedActivePlayer: String?
-        get() = prefs.getString(KEY_ACTIVE_PLAYER, null)
+        get() = settingsPrefs.savedActivePlayer
 
-    companion object {
-        private const val PREFS_NAME = "eval_prefs"
-        // Current game storage
-        private const val KEY_CURRENT_GAME_JSON = "current_game_json"
-        // Lichess settings
-        private const val KEY_LICHESS_USERNAME = "lichess_username"
-        private const val KEY_LICHESS_MAX_GAMES = "lichess_max_games"
-        // Chess.com settings
-        private const val KEY_CHESSCOM_USERNAME = "chesscom_username"
-        private const val KEY_CHESSCOM_MAX_GAMES = "chesscom_max_games"
-        // Active player/server for reload button
-        private const val KEY_ACTIVE_SERVER = "active_server"
-        private const val KEY_ACTIVE_PLAYER = "active_player"
-        // Retrieved games storage - list of lists
-        private const val KEY_RETRIEVES_LIST = "retrieves_list"  // List of RetrievedGamesEntry
-        private const val KEY_RETRIEVED_GAMES_PREFIX = "retrieved_games_"  // Prefix for individual lists
-        private const val MAX_RETRIEVES = 25
-        // Analysed games storage
-        private const val KEY_ANALYSED_GAMES = "analysed_games"
-        private const val MAX_ANALYSED_GAMES = 50
-        // Preview stage settings
-        private const val KEY_PREVIEW_SECONDS = "preview_seconds"
-        private const val KEY_PREVIEW_THREADS = "preview_threads"
-        private const val KEY_PREVIEW_HASH = "preview_hash"
-        private const val KEY_PREVIEW_NNUE = "preview_nnue"
-        // Analyse stage settings
-        private const val KEY_ANALYSE_SECONDS = "analyse_seconds"
-        private const val KEY_ANALYSE_THREADS = "analyse_threads"
-        private const val KEY_ANALYSE_HASH = "analyse_hash"
-        private const val KEY_ANALYSE_NNUE = "analyse_nnue"
-        // Manual stage settings
-        private const val KEY_MANUAL_DEPTH = "manual_depth"
-        private const val KEY_MANUAL_THREADS = "manual_threads"
-        private const val KEY_MANUAL_HASH = "manual_hash"
-        private const val KEY_MANUAL_MULTIPV = "manual_multipv"
-        private const val KEY_MANUAL_NNUE = "manual_nnue"
-        private const val KEY_MANUAL_ARROW_MODE = "manual_arrow_mode"
-        private const val KEY_MANUAL_NUMARROWS = "manual_numarrows"
-        private const val KEY_MANUAL_SHOWNUMBERS = "manual_shownumbers"
-        private const val KEY_MANUAL_WHITE_ARROW_COLOR = "manual_white_arrow_color"
-        private const val KEY_MANUAL_BLACK_ARROW_COLOR = "manual_black_arrow_color"
-        private const val KEY_MANUAL_MULTILINES_ARROW_COLOR = "manual_multilines_arrow_color"
-        // Board layout settings
-        private const val KEY_BOARD_SHOW_COORDINATES = "board_show_coordinates"
-        private const val KEY_BOARD_SHOW_LAST_MOVE = "board_show_last_move"
-        private const val KEY_BOARD_PLAYER_BAR_MODE = "board_player_bar_mode"
-        private const val KEY_BOARD_RED_BORDER_PLAYER_TO_MOVE = "board_red_border_player_to_move"
-        private const val KEY_BOARD_WHITE_SQUARE_COLOR = "board_white_square_color"
-        private const val KEY_BOARD_BLACK_SQUARE_COLOR = "board_black_square_color"
-        private const val KEY_BOARD_WHITE_PIECE_COLOR = "board_white_piece_color"
-        private const val KEY_BOARD_BLACK_PIECE_COLOR = "board_black_piece_color"
-        // Evaluation bar settings
-        private const val KEY_EVAL_BAR_POSITION = "eval_bar_position"
-        private const val KEY_EVAL_BAR_COLOR_1 = "eval_bar_color_1"
-        private const val KEY_EVAL_BAR_COLOR_2 = "eval_bar_color_2"
-        private const val KEY_EVAL_BAR_RANGE = "eval_bar_range"
-        // Graph settings
-        private const val KEY_GRAPH_PLUS_SCORE_COLOR = "graph_plus_score_color"
-        private const val KEY_GRAPH_NEGATIVE_SCORE_COLOR = "graph_negative_score_color"
-        private const val KEY_GRAPH_BACKGROUND_COLOR = "graph_background_color"
-        private const val KEY_GRAPH_ANALYSE_LINE_COLOR = "graph_analyse_line_color"
-        private const val KEY_GRAPH_VERTICAL_LINE_COLOR = "graph_vertical_line_color"
-        private const val KEY_GRAPH_LINE_RANGE = "graph_line_range"
-        private const val KEY_GRAPH_BAR_RANGE = "graph_bar_range"
-        // Interface visibility settings - Preview stage
-        private const val KEY_PREVIEW_VIS_SCOREBARSGRAPH = "preview_vis_scorebarsgraph"
-        private const val KEY_PREVIEW_VIS_RESULTBAR = "preview_vis_resultbar"
-        private const val KEY_PREVIEW_VIS_BOARD = "preview_vis_board"
-        private const val KEY_PREVIEW_VIS_MOVELIST = "preview_vis_movelist"
-        private const val KEY_PREVIEW_VIS_PGN = "preview_vis_pgn"
-        // Interface visibility settings - Analyse stage
-        private const val KEY_ANALYSE_VIS_SCORELINEGRAPH = "analyse_vis_scorelinegraph"
-        private const val KEY_ANALYSE_VIS_SCOREBARSGRAPH = "analyse_vis_scorebarsgraph"
-        private const val KEY_ANALYSE_VIS_BOARD = "analyse_vis_board"
-        private const val KEY_ANALYSE_VIS_STOCKFISHANALYSE = "analyse_vis_stockfishanalyse"
-        private const val KEY_ANALYSE_VIS_RESULTBAR = "analyse_vis_resultbar"
-        private const val KEY_ANALYSE_VIS_MOVELIST = "analyse_vis_movelist"
-        private const val KEY_ANALYSE_VIS_GAMEINFO = "analyse_vis_gameinfo"
-        private const val KEY_ANALYSE_VIS_PGN = "analyse_vis_pgn"
-        // Interface visibility settings - Manual stage
-        private const val KEY_MANUAL_VIS_RESULTBAR = "manual_vis_resultbar"
-        private const val KEY_MANUAL_VIS_SCORELINEGRAPH = "manual_vis_scorelinegraph"
-        private const val KEY_MANUAL_VIS_SCOREBARSGRAPH = "manual_vis_scorebarsgraph"
-        private const val KEY_MANUAL_VIS_MOVELIST = "manual_vis_movelist"
-        private const val KEY_MANUAL_VIS_GAMEINFO = "manual_vis_gameinfo"
-        private const val KEY_MANUAL_VIS_PGN = "manual_vis_pgn"
-        // First run tracking - stores the app version code when user first made a choice
-        private const val KEY_FIRST_GAME_RETRIEVED_VERSION = "first_game_retrieved_version"
-        // AI Analysis settings
-        private const val KEY_AI_SHOW_LOGOS = "ai_show_logos"
-        private const val KEY_AI_CHATGPT_API_KEY = "ai_chatgpt_api_key"
-        private const val KEY_AI_CHATGPT_MODEL = "ai_chatgpt_model"
-        private const val KEY_AI_CLAUDE_API_KEY = "ai_claude_api_key"
-        private const val KEY_AI_CLAUDE_MODEL = "ai_claude_model"
-        private const val KEY_AI_GEMINI_API_KEY = "ai_gemini_api_key"
-        private const val KEY_AI_GEMINI_MODEL = "ai_gemini_model"
-        private const val KEY_AI_GROK_API_KEY = "ai_grok_api_key"
-        private const val KEY_AI_GROK_MODEL = "ai_grok_model"
-        private const val KEY_AI_DEEPSEEK_API_KEY = "ai_deepseek_api_key"
-        private const val KEY_AI_DEEPSEEK_MODEL = "ai_deepseek_model"
-        // AI prompts
-        private const val KEY_AI_CHATGPT_PROMPT = "ai_chatgpt_prompt"
-        private const val KEY_AI_CLAUDE_PROMPT = "ai_claude_prompt"
-        private const val KEY_AI_GEMINI_PROMPT = "ai_gemini_prompt"
-        private const val KEY_AI_GROK_PROMPT = "ai_grok_prompt"
-        private const val KEY_AI_DEEPSEEK_PROMPT = "ai_deepseek_prompt"
-    }
-
-    private fun loadStockfishSettings(): StockfishSettings {
-        return StockfishSettings(
-            previewStage = PreviewStageSettings(
-                secondsForMove = prefs.getFloat(KEY_PREVIEW_SECONDS, 0.05f),
-                threads = prefs.getInt(KEY_PREVIEW_THREADS, 1),
-                hashMb = prefs.getInt(KEY_PREVIEW_HASH, 8),
-                useNnue = prefs.getBoolean(KEY_PREVIEW_NNUE, false)
-            ),
-            analyseStage = AnalyseStageSettings(
-                secondsForMove = prefs.getFloat(KEY_ANALYSE_SECONDS, 1.00f),
-                threads = prefs.getInt(KEY_ANALYSE_THREADS, 2),
-                hashMb = prefs.getInt(KEY_ANALYSE_HASH, 32),
-                useNnue = prefs.getBoolean(KEY_ANALYSE_NNUE, true)
-            ),
-            manualStage = ManualStageSettings(
-                depth = prefs.getInt(KEY_MANUAL_DEPTH, 32),
-                threads = prefs.getInt(KEY_MANUAL_THREADS, 4),
-                hashMb = prefs.getInt(KEY_MANUAL_HASH, 64),
-                multiPv = prefs.getInt(KEY_MANUAL_MULTIPV, 3),
-                useNnue = prefs.getBoolean(KEY_MANUAL_NNUE, true),
-                arrowMode = ArrowMode.valueOf(prefs.getString(KEY_MANUAL_ARROW_MODE, ArrowMode.MAIN_LINE.name) ?: ArrowMode.MAIN_LINE.name),
-                numArrows = prefs.getInt(KEY_MANUAL_NUMARROWS, 4),
-                showArrowNumbers = prefs.getBoolean(KEY_MANUAL_SHOWNUMBERS, true),
-                whiteArrowColor = prefs.getLong(KEY_MANUAL_WHITE_ARROW_COLOR, DEFAULT_WHITE_ARROW_COLOR),
-                blackArrowColor = prefs.getLong(KEY_MANUAL_BLACK_ARROW_COLOR, DEFAULT_BLACK_ARROW_COLOR),
-                multiLinesArrowColor = prefs.getLong(KEY_MANUAL_MULTILINES_ARROW_COLOR, DEFAULT_MULTI_LINES_ARROW_COLOR)
-            )
-        )
-    }
-
-    private fun saveStockfishSettings(settings: StockfishSettings) {
-        prefs.edit()
-            // Preview stage
-            .putFloat(KEY_PREVIEW_SECONDS, settings.previewStage.secondsForMove)
-            .putInt(KEY_PREVIEW_THREADS, settings.previewStage.threads)
-            .putInt(KEY_PREVIEW_HASH, settings.previewStage.hashMb)
-            .putBoolean(KEY_PREVIEW_NNUE, settings.previewStage.useNnue)
-            // Analyse stage
-            .putFloat(KEY_ANALYSE_SECONDS, settings.analyseStage.secondsForMove)
-            .putInt(KEY_ANALYSE_THREADS, settings.analyseStage.threads)
-            .putInt(KEY_ANALYSE_HASH, settings.analyseStage.hashMb)
-            .putBoolean(KEY_ANALYSE_NNUE, settings.analyseStage.useNnue)
-            // Manual stage
-            .putInt(KEY_MANUAL_DEPTH, settings.manualStage.depth)
-            .putInt(KEY_MANUAL_THREADS, settings.manualStage.threads)
-            .putInt(KEY_MANUAL_HASH, settings.manualStage.hashMb)
-            .putInt(KEY_MANUAL_MULTIPV, settings.manualStage.multiPv)
-            .putBoolean(KEY_MANUAL_NNUE, settings.manualStage.useNnue)
-            .putString(KEY_MANUAL_ARROW_MODE, settings.manualStage.arrowMode.name)
-            .putInt(KEY_MANUAL_NUMARROWS, settings.manualStage.numArrows)
-            .putBoolean(KEY_MANUAL_SHOWNUMBERS, settings.manualStage.showArrowNumbers)
-            .putLong(KEY_MANUAL_WHITE_ARROW_COLOR, settings.manualStage.whiteArrowColor)
-            .putLong(KEY_MANUAL_BLACK_ARROW_COLOR, settings.manualStage.blackArrowColor)
-            .putLong(KEY_MANUAL_MULTILINES_ARROW_COLOR, settings.manualStage.multiLinesArrowColor)
-            .apply()
-    }
-
-    private fun loadBoardLayoutSettings(): BoardLayoutSettings {
-        val playerBarModeOrdinal = prefs.getInt(KEY_BOARD_PLAYER_BAR_MODE, PlayerBarMode.BOTH.ordinal)
-        val playerBarMode = PlayerBarMode.entries.getOrElse(playerBarModeOrdinal) { PlayerBarMode.BOTH }
-        val evalBarPositionOrdinal = prefs.getInt(KEY_EVAL_BAR_POSITION, EvalBarPosition.RIGHT.ordinal)
-        val evalBarPosition = EvalBarPosition.entries.getOrElse(evalBarPositionOrdinal) { EvalBarPosition.RIGHT }
-        return BoardLayoutSettings(
-            showCoordinates = prefs.getBoolean(KEY_BOARD_SHOW_COORDINATES, true),
-            showLastMove = prefs.getBoolean(KEY_BOARD_SHOW_LAST_MOVE, true),
-            playerBarMode = playerBarMode,
-            showRedBorderForPlayerToMove = prefs.getBoolean(KEY_BOARD_RED_BORDER_PLAYER_TO_MOVE, false),
-            whiteSquareColor = prefs.getLong(KEY_BOARD_WHITE_SQUARE_COLOR, DEFAULT_WHITE_SQUARE_COLOR),
-            blackSquareColor = prefs.getLong(KEY_BOARD_BLACK_SQUARE_COLOR, DEFAULT_BLACK_SQUARE_COLOR),
-            whitePieceColor = prefs.getLong(KEY_BOARD_WHITE_PIECE_COLOR, DEFAULT_WHITE_PIECE_COLOR),
-            blackPieceColor = prefs.getLong(KEY_BOARD_BLACK_PIECE_COLOR, DEFAULT_BLACK_PIECE_COLOR),
-            evalBarPosition = evalBarPosition,
-            evalBarColor1 = prefs.getLong(KEY_EVAL_BAR_COLOR_1, DEFAULT_EVAL_BAR_COLOR_1),
-            evalBarColor2 = prefs.getLong(KEY_EVAL_BAR_COLOR_2, DEFAULT_EVAL_BAR_COLOR_2),
-            evalBarRange = prefs.getInt(KEY_EVAL_BAR_RANGE, 5)
-        )
-    }
-
-    private fun saveBoardLayoutSettings(settings: BoardLayoutSettings) {
-        prefs.edit()
-            .putBoolean(KEY_BOARD_SHOW_COORDINATES, settings.showCoordinates)
-            .putBoolean(KEY_BOARD_SHOW_LAST_MOVE, settings.showLastMove)
-            .putInt(KEY_BOARD_PLAYER_BAR_MODE, settings.playerBarMode.ordinal)
-            .putBoolean(KEY_BOARD_RED_BORDER_PLAYER_TO_MOVE, settings.showRedBorderForPlayerToMove)
-            .putLong(KEY_BOARD_WHITE_SQUARE_COLOR, settings.whiteSquareColor)
-            .putLong(KEY_BOARD_BLACK_SQUARE_COLOR, settings.blackSquareColor)
-            .putLong(KEY_BOARD_WHITE_PIECE_COLOR, settings.whitePieceColor)
-            .putLong(KEY_BOARD_BLACK_PIECE_COLOR, settings.blackPieceColor)
-            .putInt(KEY_EVAL_BAR_POSITION, settings.evalBarPosition.ordinal)
-            .putLong(KEY_EVAL_BAR_COLOR_1, settings.evalBarColor1)
-            .putLong(KEY_EVAL_BAR_COLOR_2, settings.evalBarColor2)
-            .putInt(KEY_EVAL_BAR_RANGE, settings.evalBarRange)
-            .apply()
-    }
-
-    private fun loadGraphSettings(): GraphSettings {
-        return GraphSettings(
-            plusScoreColor = prefs.getLong(KEY_GRAPH_PLUS_SCORE_COLOR, DEFAULT_GRAPH_PLUS_SCORE_COLOR),
-            negativeScoreColor = prefs.getLong(KEY_GRAPH_NEGATIVE_SCORE_COLOR, DEFAULT_GRAPH_NEGATIVE_SCORE_COLOR),
-            backgroundColor = prefs.getLong(KEY_GRAPH_BACKGROUND_COLOR, DEFAULT_GRAPH_BACKGROUND_COLOR),
-            analyseLineColor = prefs.getLong(KEY_GRAPH_ANALYSE_LINE_COLOR, DEFAULT_GRAPH_ANALYSE_LINE_COLOR),
-            verticalLineColor = prefs.getLong(KEY_GRAPH_VERTICAL_LINE_COLOR, DEFAULT_GRAPH_VERTICAL_LINE_COLOR),
-            lineGraphRange = prefs.getInt(KEY_GRAPH_LINE_RANGE, 7),
-            barGraphRange = prefs.getInt(KEY_GRAPH_BAR_RANGE, 3)
-        )
-    }
-
-    private fun saveGraphSettings(settings: GraphSettings) {
-        prefs.edit()
-            .putLong(KEY_GRAPH_PLUS_SCORE_COLOR, settings.plusScoreColor)
-            .putLong(KEY_GRAPH_NEGATIVE_SCORE_COLOR, settings.negativeScoreColor)
-            .putLong(KEY_GRAPH_BACKGROUND_COLOR, settings.backgroundColor)
-            .putLong(KEY_GRAPH_ANALYSE_LINE_COLOR, settings.analyseLineColor)
-            .putLong(KEY_GRAPH_VERTICAL_LINE_COLOR, settings.verticalLineColor)
-            .putInt(KEY_GRAPH_LINE_RANGE, settings.lineGraphRange)
-            .putInt(KEY_GRAPH_BAR_RANGE, settings.barGraphRange)
-            .apply()
-    }
-
-    private fun loadInterfaceVisibilitySettings(): InterfaceVisibilitySettings {
-        return InterfaceVisibilitySettings(
-            previewStage = PreviewStageVisibility(
-                showScoreBarsGraph = prefs.getBoolean(KEY_PREVIEW_VIS_SCOREBARSGRAPH, false),
-                showResultBar = prefs.getBoolean(KEY_PREVIEW_VIS_RESULTBAR, false),
-                showBoard = prefs.getBoolean(KEY_PREVIEW_VIS_BOARD, false),
-                showMoveList = prefs.getBoolean(KEY_PREVIEW_VIS_MOVELIST, false),
-                showPgn = prefs.getBoolean(KEY_PREVIEW_VIS_PGN, false)
-            ),
-            analyseStage = AnalyseStageVisibility(
-                showScoreLineGraph = prefs.getBoolean(KEY_ANALYSE_VIS_SCORELINEGRAPH, true),
-                showScoreBarsGraph = prefs.getBoolean(KEY_ANALYSE_VIS_SCOREBARSGRAPH, true),
-                showBoard = prefs.getBoolean(KEY_ANALYSE_VIS_BOARD, true),
-                showStockfishAnalyse = prefs.getBoolean(KEY_ANALYSE_VIS_STOCKFISHANALYSE, true),
-                showResultBar = prefs.getBoolean(KEY_ANALYSE_VIS_RESULTBAR, false),
-                showMoveList = prefs.getBoolean(KEY_ANALYSE_VIS_MOVELIST, false),
-                showGameInfo = prefs.getBoolean(KEY_ANALYSE_VIS_GAMEINFO, false),
-                showPgn = prefs.getBoolean(KEY_ANALYSE_VIS_PGN, false)
-            ),
-            manualStage = ManualStageVisibility(
-                showResultBar = prefs.getBoolean(KEY_MANUAL_VIS_RESULTBAR, true),
-                showScoreLineGraph = prefs.getBoolean(KEY_MANUAL_VIS_SCORELINEGRAPH, true),
-                showScoreBarsGraph = prefs.getBoolean(KEY_MANUAL_VIS_SCOREBARSGRAPH, true),
-                showMoveList = prefs.getBoolean(KEY_MANUAL_VIS_MOVELIST, true),
-                showGameInfo = prefs.getBoolean(KEY_MANUAL_VIS_GAMEINFO, false),
-                showPgn = prefs.getBoolean(KEY_MANUAL_VIS_PGN, false)
-            )
-        )
-    }
-
-    private fun saveInterfaceVisibilitySettings(settings: InterfaceVisibilitySettings) {
-        prefs.edit()
-            // Preview stage
-            .putBoolean(KEY_PREVIEW_VIS_SCOREBARSGRAPH, settings.previewStage.showScoreBarsGraph)
-            .putBoolean(KEY_PREVIEW_VIS_RESULTBAR, settings.previewStage.showResultBar)
-            .putBoolean(KEY_PREVIEW_VIS_BOARD, settings.previewStage.showBoard)
-            .putBoolean(KEY_PREVIEW_VIS_MOVELIST, settings.previewStage.showMoveList)
-            .putBoolean(KEY_PREVIEW_VIS_PGN, settings.previewStage.showPgn)
-            // Analyse stage
-            .putBoolean(KEY_ANALYSE_VIS_SCORELINEGRAPH, settings.analyseStage.showScoreLineGraph)
-            .putBoolean(KEY_ANALYSE_VIS_SCOREBARSGRAPH, settings.analyseStage.showScoreBarsGraph)
-            .putBoolean(KEY_ANALYSE_VIS_BOARD, settings.analyseStage.showBoard)
-            .putBoolean(KEY_ANALYSE_VIS_STOCKFISHANALYSE, settings.analyseStage.showStockfishAnalyse)
-            .putBoolean(KEY_ANALYSE_VIS_RESULTBAR, settings.analyseStage.showResultBar)
-            .putBoolean(KEY_ANALYSE_VIS_MOVELIST, settings.analyseStage.showMoveList)
-            .putBoolean(KEY_ANALYSE_VIS_GAMEINFO, settings.analyseStage.showGameInfo)
-            .putBoolean(KEY_ANALYSE_VIS_PGN, settings.analyseStage.showPgn)
-            // Manual stage
-            .putBoolean(KEY_MANUAL_VIS_RESULTBAR, settings.manualStage.showResultBar)
-            .putBoolean(KEY_MANUAL_VIS_SCORELINEGRAPH, settings.manualStage.showScoreLineGraph)
-            .putBoolean(KEY_MANUAL_VIS_SCOREBARSGRAPH, settings.manualStage.showScoreBarsGraph)
-            .putBoolean(KEY_MANUAL_VIS_MOVELIST, settings.manualStage.showMoveList)
-            .putBoolean(KEY_MANUAL_VIS_GAMEINFO, settings.manualStage.showGameInfo)
-            .putBoolean(KEY_MANUAL_VIS_PGN, settings.manualStage.showPgn)
-            .apply()
-    }
-
-    private fun loadGeneralSettings(): GeneralSettings {
-        // Full screen mode is not persistent - always starts as false
-        return GeneralSettings(
-            longTapForFullScreen = false
-        )
-    }
-
+    private fun loadStockfishSettings(): StockfishSettings = settingsPrefs.loadStockfishSettings()
+    private fun saveStockfishSettings(settings: StockfishSettings) = settingsPrefs.saveStockfishSettings(settings)
+    private fun loadBoardLayoutSettings(): BoardLayoutSettings = settingsPrefs.loadBoardLayoutSettings()
+    private fun saveBoardLayoutSettings(settings: BoardLayoutSettings) = settingsPrefs.saveBoardLayoutSettings(settings)
+    private fun loadGraphSettings(): GraphSettings = settingsPrefs.loadGraphSettings()
+    private fun saveGraphSettings(settings: GraphSettings) = settingsPrefs.saveGraphSettings(settings)
+    private fun loadInterfaceVisibilitySettings(): InterfaceVisibilitySettings = settingsPrefs.loadInterfaceVisibilitySettings()
+    private fun saveInterfaceVisibilitySettings(settings: InterfaceVisibilitySettings) = settingsPrefs.saveInterfaceVisibilitySettings(settings)
+    private fun loadGeneralSettings(): GeneralSettings = settingsPrefs.loadGeneralSettings()
     @Suppress("UNUSED_PARAMETER")
-    private fun saveGeneralSettings(settings: GeneralSettings) {
-        // Full screen mode is not persistent - do not save
-        // Just update the UI state
-    }
+    private fun saveGeneralSettings(settings: GeneralSettings) = settingsPrefs.saveGeneralSettings(settings)
+    private fun loadAiSettings(): AiSettings = settingsPrefs.loadAiSettings()
+    private fun saveAiSettings(settings: AiSettings) = settingsPrefs.saveAiSettings(settings)
 
-    private fun loadAiSettings(): AiSettings {
-        return AiSettings(
-            showAiLogos = prefs.getBoolean(KEY_AI_SHOW_LOGOS, true),
-            chatGptApiKey = prefs.getString(KEY_AI_CHATGPT_API_KEY, "") ?: "",
-            chatGptModel = prefs.getString(KEY_AI_CHATGPT_MODEL, "gpt-4o-mini") ?: "gpt-4o-mini",
-            chatGptPrompt = prefs.getString(KEY_AI_CHATGPT_PROMPT, DEFAULT_AI_PROMPT) ?: DEFAULT_AI_PROMPT,
-            claudeApiKey = prefs.getString(KEY_AI_CLAUDE_API_KEY, "") ?: "",
-            claudeModel = prefs.getString(KEY_AI_CLAUDE_MODEL, "claude-sonnet-4-20250514") ?: "claude-sonnet-4-20250514",
-            claudePrompt = prefs.getString(KEY_AI_CLAUDE_PROMPT, DEFAULT_AI_PROMPT) ?: DEFAULT_AI_PROMPT,
-            geminiApiKey = prefs.getString(KEY_AI_GEMINI_API_KEY, "") ?: "",
-            geminiModel = prefs.getString(KEY_AI_GEMINI_MODEL, "gemini-2.0-flash") ?: "gemini-2.0-flash",
-            geminiPrompt = prefs.getString(KEY_AI_GEMINI_PROMPT, DEFAULT_AI_PROMPT) ?: DEFAULT_AI_PROMPT,
-            grokApiKey = prefs.getString(KEY_AI_GROK_API_KEY, "") ?: "",
-            grokModel = prefs.getString(KEY_AI_GROK_MODEL, "grok-3-mini") ?: "grok-3-mini",
-            grokPrompt = prefs.getString(KEY_AI_GROK_PROMPT, DEFAULT_AI_PROMPT) ?: DEFAULT_AI_PROMPT,
-            deepSeekApiKey = prefs.getString(KEY_AI_DEEPSEEK_API_KEY, "") ?: "",
-            deepSeekModel = prefs.getString(KEY_AI_DEEPSEEK_MODEL, "deepseek-chat") ?: "deepseek-chat",
-            deepSeekPrompt = prefs.getString(KEY_AI_DEEPSEEK_PROMPT, DEFAULT_AI_PROMPT) ?: DEFAULT_AI_PROMPT
-        )
-    }
-
-    private fun saveAiSettings(settings: AiSettings) {
-        prefs.edit()
-            .putBoolean(KEY_AI_SHOW_LOGOS, settings.showAiLogos)
-            .putString(KEY_AI_CHATGPT_API_KEY, settings.chatGptApiKey)
-            .putString(KEY_AI_CHATGPT_MODEL, settings.chatGptModel)
-            .putString(KEY_AI_CHATGPT_PROMPT, settings.chatGptPrompt)
-            .putString(KEY_AI_CLAUDE_API_KEY, settings.claudeApiKey)
-            .putString(KEY_AI_CLAUDE_MODEL, settings.claudeModel)
-            .putString(KEY_AI_CLAUDE_PROMPT, settings.claudePrompt)
-            .putString(KEY_AI_GEMINI_API_KEY, settings.geminiApiKey)
-            .putString(KEY_AI_GEMINI_MODEL, settings.geminiModel)
-            .putString(KEY_AI_GEMINI_PROMPT, settings.geminiPrompt)
-            .putString(KEY_AI_GROK_API_KEY, settings.grokApiKey)
-            .putString(KEY_AI_GROK_MODEL, settings.grokModel)
-            .putString(KEY_AI_GROK_PROMPT, settings.grokPrompt)
-            .putString(KEY_AI_DEEPSEEK_API_KEY, settings.deepSeekApiKey)
-            .putString(KEY_AI_DEEPSEEK_MODEL, settings.deepSeekModel)
-            .putString(KEY_AI_DEEPSEEK_PROMPT, settings.deepSeekPrompt)
-            .apply()
-    }
-
-    /**
-     * Save the current analysed game to SharedPreferences as JSON.
-     * Called when entering Manual stage.
-     */
-    private fun saveCurrentAnalysedGame(analysedGame: AnalysedGame) {
-        val json = gson.toJson(analysedGame)
-        prefs.edit().putString(KEY_CURRENT_GAME_JSON, json).apply()
-    }
-
-    /**
-     * Load the current analysed game from SharedPreferences.
-     * Returns null if no game is stored.
-     */
-    private fun loadCurrentAnalysedGame(): AnalysedGame? {
-        val json = prefs.getString(KEY_CURRENT_GAME_JSON, null) ?: return null
-        return try {
-            gson.fromJson(json, AnalysedGame::class.java)
-        } catch (e: Exception) {
-            null
-        }
-    }
+    private fun saveCurrentAnalysedGame(analysedGame: AnalysedGame) = gameStorage.saveCurrentAnalysedGame(analysedGame)
+    private fun loadCurrentAnalysedGame(): AnalysedGame? = gameStorage.loadCurrentAnalysedGame()
+    private fun loadRetrievesList(): List<RetrievedGamesEntry> = gameStorage.loadRetrievesList()
+    private fun loadGamesForRetrieve(entry: RetrievedGamesEntry): List<LichessGame> = gameStorage.loadGamesForRetrieve(entry)
+    private fun loadAnalysedGames(): List<AnalysedGame> = gameStorage.loadAnalysedGames()
 
     private fun configureForPreviewStage() {
         val settings = _uiState.value.stockfishSettings.previewStage
@@ -799,7 +167,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
      * Returns true if user hasn't made a game retrieval choice for this app version.
      */
     private fun isFirstRun(): Boolean {
-        val savedVersionCode = prefs.getLong(KEY_FIRST_GAME_RETRIEVED_VERSION, 0L)
+        val savedVersionCode = settingsPrefs.getFirstGameRetrievedVersion()
         return savedVersionCode != getAppVersionCode()
     }
 
@@ -807,7 +175,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
      * Mark that the user has made their first game retrieval choice for this app version.
      */
     private fun markFirstRunComplete() {
-        prefs.edit().putLong(KEY_FIRST_GAME_RETRIEVED_VERSION, getAppVersionCode()).apply()
+        settingsPrefs.setFirstGameRetrievedVersion(getAppVersionCode())
     }
 
     /**
@@ -815,27 +183,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
      * Called on first run after fresh install or app update.
      */
     private fun resetSettingsToDefaults() {
-        prefs.edit()
-            // Clear all settings (except version tracking)
-            // Preview stage
-            .remove(KEY_PREVIEW_SECONDS)
-            .remove(KEY_PREVIEW_THREADS)
-            .remove(KEY_PREVIEW_HASH)
-            .remove(KEY_PREVIEW_NNUE)
-            // Analyse stage
-            .remove(KEY_ANALYSE_SECONDS)
-            .remove(KEY_ANALYSE_THREADS)
-            .remove(KEY_ANALYSE_HASH)
-            .remove(KEY_ANALYSE_NNUE)
-            // Manual stage
-            .remove(KEY_MANUAL_DEPTH)
-            .remove(KEY_MANUAL_THREADS)
-            .remove(KEY_MANUAL_HASH)
-            .remove(KEY_MANUAL_MULTIPV)
-            .remove(KEY_MANUAL_NNUE)
-            // Lichess settings
-            .remove(KEY_LICHESS_MAX_GAMES)
-            .apply()
+        settingsPrefs.resetAllSettingsToDefaults()
     }
 
     init {
@@ -857,14 +205,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val interfaceVisibility = loadInterfaceVisibilitySettings()
             val generalSettings = loadGeneralSettings()
             val aiSettings = loadAiSettings()
-            val lichessMaxGames = prefs.getInt(KEY_LICHESS_MAX_GAMES, 10)
-            val chessComMaxGames = prefs.getInt(KEY_CHESSCOM_MAX_GAMES, 10)
+            val lichessMaxGames = settingsPrefs.lichessMaxGames
+            val chessComMaxGames = settingsPrefs.chessComMaxGames
             val hasActive = savedActiveServer != null && savedActivePlayer != null
             // Check for previous retrieves
             val retrievesList = loadRetrievesList()
             val hasPreviousRetrieves = retrievesList.isNotEmpty()
             // Check for stored analysed games
-            val hasAnalysedGames = prefs.getString(KEY_ANALYSED_GAMES, null) != null
+            val hasAnalysedGames = gameStorage.hasAnalysedGames()
             _uiState.value = _uiState.value.copy(
                 stockfishSettings = settings,
                 boardLayoutSettings = boardSettings,
@@ -957,8 +305,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val interfaceVisibility = loadInterfaceVisibilitySettings()
         val generalSettings = loadGeneralSettings()
         val aiSettings = loadAiSettings()
-        val lichessMaxGames = prefs.getInt(KEY_LICHESS_MAX_GAMES, 10)
-        val chessComMaxGames = prefs.getInt(KEY_CHESSCOM_MAX_GAMES, 10)
+        val lichessMaxGames = settingsPrefs.lichessMaxGames
+        val chessComMaxGames = settingsPrefs.chessComMaxGames
         val hasActive = savedActiveServer != null && savedActivePlayer != null
         _uiState.value = _uiState.value.copy(
             stockfishSettings = settings,
@@ -1104,21 +452,21 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setLichessMaxGames(max: Int) {
         val validMax = max.coerceIn(1, 25)
-        prefs.edit().putInt(KEY_LICHESS_MAX_GAMES, validMax).apply()
+        settingsPrefs.saveLichessMaxGames(validMax)
         _uiState.value = _uiState.value.copy(lichessMaxGames = validMax)
     }
 
     fun setChessComMaxGames(max: Int) {
         val validMax = max.coerceIn(1, 25)
-        prefs.edit().putInt(KEY_CHESSCOM_MAX_GAMES, validMax).apply()
+        settingsPrefs.saveChessComMaxGames(validMax)
         _uiState.value = _uiState.value.copy(chessComMaxGames = validMax)
     }
 
     fun fetchGames(server: ChessServer, username: String, maxGames: Int) {
         // Save the username for next time
         when (server) {
-            ChessServer.LICHESS -> prefs.edit().putString(KEY_LICHESS_USERNAME, username).apply()
-            ChessServer.CHESS_COM -> prefs.edit().putString(KEY_CHESSCOM_USERNAME, username).apply()
+            ChessServer.LICHESS -> settingsPrefs.saveLichessUsername(username)
+            ChessServer.CHESS_COM -> settingsPrefs.saveChessComUsername(username)
         }
 
         // Mark first run complete - user has made their game retrieval choice
@@ -1183,22 +531,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     // ===== RETRIEVED GAMES LIST STORAGE =====
 
     /**
-     * Generate storage key for a specific account/server combination.
-     */
-    private fun getRetrievedGamesKey(accountName: String, server: ChessServer): String {
-        val serverName = if (server == ChessServer.LICHESS) "lichess.org" else "chess.com"
-        return "${KEY_RETRIEVED_GAMES_PREFIX}${accountName}_$serverName"
-    }
-
-    /**
      * Store the Active player/server for the reload button.
      * Called whenever activePlayer or activeServer changes.
      */
     private fun storeActive(player: String, server: ChessServer) {
-        prefs.edit()
-            .putString(KEY_ACTIVE_PLAYER, player)
-            .putString(KEY_ACTIVE_SERVER, server.name)
-            .apply()
+        settingsPrefs.saveActivePlayerAndServer(player, server)
         _uiState.value = _uiState.value.copy(hasActive = true)
     }
 
@@ -1207,64 +544,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
      * Updates the retrieves list and maintains max 25 entries.
      */
     private fun storeRetrievedGames(games: List<LichessGame>, username: String, server: ChessServer) {
-        val gamesJson = gson.toJson(games)
-        val storageKey = getRetrievedGamesKey(username, server)
-
-        // Load existing retrieves list
-        val retrievesList = loadRetrievesList().toMutableList()
-
-        // Create new entry
-        val newEntry = RetrievedGamesEntry(accountName = username, server = server)
-
-        // Remove existing entry for same account/server if present
-        retrievesList.removeAll { it.accountName == username && it.server == server }
-
-        // Add new entry at the beginning
-        retrievesList.add(0, newEntry)
-
-        // If we exceed max, remove the oldest and its stored games
-        while (retrievesList.size > MAX_RETRIEVES) {
-            val removed = retrievesList.removeAt(retrievesList.size - 1)
-            val removedKey = getRetrievedGamesKey(removed.accountName, removed.server)
-            prefs.edit().remove(removedKey).apply()
-        }
-
-        // Save the games list and updated retrieves list
-        val retrievesJson = gson.toJson(retrievesList)
-        prefs.edit()
-            .putString(storageKey, gamesJson)
-            .putString(KEY_RETRIEVES_LIST, retrievesJson)
-            .apply()
-
+        gameStorage.storeRetrievedGames(games, username, server)
+        val retrievesList = loadRetrievesList()
         _uiState.value = _uiState.value.copy(
             hasPreviousRetrieves = retrievesList.isNotEmpty(),
             previousRetrievesList = retrievesList
         )
-    }
-
-    /**
-     * Load the list of previous retrieves.
-     */
-    private fun loadRetrievesList(): List<RetrievedGamesEntry> {
-        val json = prefs.getString(KEY_RETRIEVES_LIST, null) ?: return emptyList()
-        return try {
-            gson.fromJson(json, object : TypeToken<List<RetrievedGamesEntry>>() {}.type)
-        } catch (e: Exception) {
-            emptyList()
-        }
-    }
-
-    /**
-     * Load games for a specific retrieve entry.
-     */
-    private fun loadGamesForRetrieve(entry: RetrievedGamesEntry): List<LichessGame> {
-        val storageKey = getRetrievedGamesKey(entry.accountName, entry.server)
-        val json = prefs.getString(storageKey, null) ?: return emptyList()
-        return try {
-            gson.fromJson(json, object : TypeToken<List<LichessGame>>() {}.type)
-        } catch (e: Exception) {
-            emptyList()
-        }
     }
 
     /**
@@ -1349,71 +634,20 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private fun storeAnalysedGame() {
         val game = _uiState.value.game ?: return
         val moves = _uiState.value.moves
-        val moveDetails = _uiState.value.moveDetails
-        val previewScores = _uiState.value.previewScores
-        val analyseScores = _uiState.value.analyseScores
-
         if (moves.isEmpty()) return
 
-        // Get player names
-        val whiteName = game.players.white.user?.name
-            ?: game.players.white.aiLevel?.let { "Stockfish $it" }
-            ?: "Anonymous"
-        val blackName = game.players.black.user?.name
-            ?: game.players.black.aiLevel?.let { "Stockfish $it" }
-            ?: "Anonymous"
-
-        // Determine result
-        val result = when (game.winner) {
-            "white" -> "1-0"
-            "black" -> "0-1"
-            else -> "1/2-1/2"
-        }
-
-        val analysedGame = AnalysedGame(
-            timestamp = System.currentTimeMillis(),
-            whiteName = whiteName,
-            blackName = blackName,
-            result = result,
-            pgn = game.pgn ?: "",
+        gameStorage.storeAnalysedGame(
+            game = game,
             moves = moves,
-            moveDetails = moveDetails,
-            previewScores = previewScores,
-            analyseScores = analyseScores,
+            moveDetails = _uiState.value.moveDetails,
+            previewScores = _uiState.value.previewScores,
+            analyseScores = _uiState.value.analyseScores,
             openingName = _uiState.value.openingName,
-            speed = game.speed,
             activePlayer = _uiState.value.activePlayer,
             activeServer = _uiState.value.activeServer
         )
 
-        // Save as current game for next app startup
-        saveCurrentAnalysedGame(analysedGame)
-
-        // Load existing games
-        val existingGames = loadAnalysedGames().toMutableList()
-
-        // Add new game at the beginning
-        existingGames.add(0, analysedGame)
-
-        // Keep only the last MAX_ANALYSED_GAMES
-        while (existingGames.size > MAX_ANALYSED_GAMES) {
-            existingGames.removeAt(existingGames.size - 1)
-        }
-
-        // Save back to storage
-        val gamesJson = gson.toJson(existingGames)
-        prefs.edit().putString(KEY_ANALYSED_GAMES, gamesJson).apply()
-
         _uiState.value = _uiState.value.copy(hasAnalysedGames = true)
-    }
-
-    private fun loadAnalysedGames(): List<AnalysedGame> {
-        val gamesJson = prefs.getString(KEY_ANALYSED_GAMES, null) ?: return emptyList()
-        return try {
-            gson.fromJson(gamesJson, object : TypeToken<List<AnalysedGame>>() {}.type)
-        } catch (e: Exception) {
-            emptyList()
-        }
     }
 
     fun showAnalysedGames() {
