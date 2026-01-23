@@ -722,7 +722,7 @@ class ChessRepository(
             variant = "standard",
             speed = "classical",
             perf = "classical",
-            status = if (result == "*") "started" else "ended",
+            status = result ?: "unknown",
             winner = winner,
             players = Players(
                 white = Player(

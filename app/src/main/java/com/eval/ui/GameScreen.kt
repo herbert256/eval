@@ -135,6 +135,18 @@ fun GameScreen(
         }
     }
 
+    // Handle Google search for player when activeServer is null (PGN file games)
+    LaunchedEffect(uiState.googleSearchPlayerName) {
+        uiState.googleSearchPlayerName?.let { playerName ->
+            val searchQuery = "chess player $playerName"
+            val encodedQuery = java.net.URLEncoder.encode(searchQuery, "UTF-8")
+            val searchUrl = "https://www.google.com/search?q=$encodedQuery"
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(searchUrl))
+            context.startActivity(intent)
+            viewModel.clearGoogleSearch()
+        }
+    }
+
     // Show settings screen or main game screen
     if (uiState.showSettingsDialog) {
         SettingsScreen(

@@ -42,7 +42,8 @@ private enum class RetrieveSubScreen {
     BROADCASTS,
     LICHESS_TV,
     DAILY_PUZZLE,
-    STREAMERS
+    STREAMERS,
+    PGN_FILE
 }
 
 /**
@@ -57,6 +58,13 @@ fun RetrieveScreen(
     var currentScreen by remember { mutableStateOf(RetrieveSubScreen.MAIN) }
     // Track which screen we came from when showing player info
     var previousScreen by remember { mutableStateOf(RetrieveSubScreen.MAIN) }
+
+    // Navigate to PGN file screen when PGN events are loaded
+    LaunchedEffect(uiState.showPgnEventSelection) {
+        if (uiState.showPgnEventSelection && currentScreen == RetrieveSubScreen.MAIN) {
+            currentScreen = RetrieveSubScreen.PGN_FILE
+        }
+    }
 
     // Show player info screen if requested (from top rankings)
     if (uiState.showPlayerInfoScreen) {
@@ -90,6 +98,14 @@ fun RetrieveScreen(
             RetrieveSubScreen.BROADCASTS, RetrieveSubScreen.LICHESS_TV -> currentScreen = RetrieveSubScreen.LICHESS
             RetrieveSubScreen.TOP_RANKINGS_CHESS_COM, RetrieveSubScreen.DAILY_PUZZLE,
             RetrieveSubScreen.STREAMERS -> currentScreen = RetrieveSubScreen.CHESS_COM
+            RetrieveSubScreen.PGN_FILE -> {
+                if (uiState.selectedPgnEvent != null) {
+                    viewModel.backToPgnEventList()
+                } else {
+                    viewModel.dismissPgnEventSelection()
+                    currentScreen = RetrieveSubScreen.MAIN
+                }
+            }
         }
     }
 
@@ -99,7 +115,12 @@ fun RetrieveScreen(
             viewModel = viewModel,
             onBack = onBack,
             onLichessClick = { currentScreen = RetrieveSubScreen.LICHESS },
-            onChessComClick = { currentScreen = RetrieveSubScreen.CHESS_COM }
+            onChessComClick = { currentScreen = RetrieveSubScreen.CHESS_COM },
+            onPgnFileLoaded = { hasMultipleEvents ->
+                if (hasMultipleEvents) {
+                    currentScreen = RetrieveSubScreen.PGN_FILE
+                }
+            }
         )
         RetrieveSubScreen.LICHESS -> LichessRetrieveScreen(
             viewModel = viewModel,
@@ -201,6 +222,14 @@ fun RetrieveScreen(
                 currentScreen = RetrieveSubScreen.CHESS_COM
             }
         )
+        RetrieveSubScreen.PGN_FILE -> PgnFileScreen(
+            viewModel = viewModel,
+            uiState = uiState,
+            onBack = {
+                viewModel.dismissPgnEventSelection()
+                currentScreen = RetrieveSubScreen.MAIN
+            }
+        )
     }
 }
 
@@ -213,7 +242,8 @@ private fun RetrieveMainScreen(
     viewModel: GameViewModel,
     onBack: () -> Unit,
     onLichessClick: () -> Unit,
-    onChessComClick: () -> Unit
+    onChessComClick: () -> Unit,
+    onPgnFileLoaded: (hasMultipleEvents: Boolean) -> Unit
 ) {
     val context = LocalContext.current
 
@@ -246,7 +276,7 @@ private fun RetrieveMainScreen(
                     bufferedStream.close()
 
                     if (pgnContent != null && pgnContent.isNotBlank()) {
-                        viewModel.loadGamesFromPgnContent(pgnContent)
+                        viewModel.loadGamesFromPgnContent(pgnContent, onPgnFileLoaded)
                     }
                 }
             } catch (e: Exception) {
@@ -1507,6 +1537,203 @@ private fun BroadcastRoundRow(
                 )
             }
         }
+    }
+}
+
+// ==================== PGN FILE SCREEN ====================
+
+/**
+ * PGN file screen for selecting events and games from a PGN file.
+ * Similar layout to BroadcastsScreen.
+ */
+@Composable
+private fun PgnFileScreen(
+    viewModel: GameViewModel,
+    uiState: GameUiState,
+    onBack: () -> Unit
+) {
+    val accentColor = Color(0xFF3A5A7C)
+
+    // Determine current level: events -> games
+    val showingGames = uiState.selectedPgnEvent != null
+    val hasMultipleEvents = uiState.pgnEvents.size > 1
+
+    BackHandler {
+        if (showingGames && hasMultipleEvents) {
+            viewModel.backToPgnEventList()
+        } else {
+            onBack()
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF1A1A2E))
+            .padding(16.dp)
+    ) {
+        // Header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(onClick = {
+                if (showingGames && hasMultipleEvents) {
+                    viewModel.backToPgnEventList()
+                } else {
+                    onBack()
+                }
+            }) {
+                Text("< Back", color = Color.White)
+            }
+            Text(
+                text = if (showingGames) "Games" else "Events",
+                style = MaterialTheme.typography.titleLarge,
+                color = accentColor,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        // Subtitle
+        if (showingGames) {
+            Text(
+                text = uiState.selectedPgnEvent ?: "",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFFAAAAAA),
+                modifier = Modifier.padding(start = 8.dp, bottom = 16.dp)
+            )
+        } else {
+            Text(
+                text = "Select an event from PGN file",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFFAAAAAA),
+                modifier = Modifier.padding(start = 8.dp, bottom = 16.dp)
+            )
+        }
+
+        // Content
+        when {
+            showingGames -> {
+                // Show games for selected event
+                if (uiState.pgnGamesForSelectedEvent.isEmpty()) {
+                    Text(
+                        text = "No games found",
+                        color = Color(0xFFAAAAAA),
+                        modifier = Modifier.padding(16.dp)
+                    )
+                } else {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        items(uiState.pgnGamesForSelectedEvent) { game ->
+                            PgnGameRow(
+                                game = game,
+                                onClick = { viewModel.selectPgnGameFromEvent(game) }
+                            )
+                        }
+                    }
+                }
+            }
+            else -> {
+                // Show event list
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(uiState.pgnEvents) { event ->
+                        val gameCount = uiState.pgnGamesByEvent[event]?.size ?: 0
+                        PgnEventRow(
+                            eventName = event,
+                            gameCount = gameCount,
+                            accentColor = accentColor,
+                            onClick = { viewModel.selectPgnEvent(event) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PgnEventRow(
+    eventName: String,
+    gameCount: Int,
+    accentColor: Color,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2A2A))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = eventName,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Text(
+                    text = "$gameCount games",
+                    color = accentColor,
+                    fontSize = 12.sp
+                )
+            }
+            Text(
+                text = ">",
+                color = accentColor,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
+private fun PgnGameRow(
+    game: com.eval.data.LichessGame,
+    onClick: () -> Unit
+) {
+    val whiteName = game.players.white.user?.name ?: "White"
+    val blackName = game.players.black.user?.name ?: "Black"
+    val result = game.status ?: "?"
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .background(Color(0xFF2A2A2A))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = whiteName,
+            color = Color.White,
+            fontSize = 14.sp,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = result,
+            color = Color(0xFFAAAAAA),
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 12.dp)
+        )
+        Text(
+            text = blackName,
+            color = Color.White,
+            fontSize = 14.sp,
+            modifier = Modifier.weight(1f),
+            textAlign = TextAlign.End
+        )
     }
 }
 

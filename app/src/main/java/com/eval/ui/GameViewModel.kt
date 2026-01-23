@@ -893,9 +893,21 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     // Temporary storage for server/username when showing game selection dialog
     private var pendingGameSelectionServer: ChessServer? = null
     private var pendingGameSelectionUsername: String? = null
+    private var isPgnFileSelection: Boolean = false
 
     fun selectGame(game: LichessGame) {
         _uiState.value = _uiState.value.copy(showGameSelection = false, showRetrieveScreen = false)
+
+        // For PGN file selection, use white player as active player and don't store Active
+        if (isPgnFileSelection) {
+            isPgnFileSelection = false
+            pendingGameSelectionServer = null
+            pendingGameSelectionUsername = null
+            val whiteName = game.players.white.user?.name ?: "White"
+            loadGame(game, null, whiteName)
+            return
+        }
+
         val server = pendingGameSelectionServer
         val username = pendingGameSelectionUsername
         pendingGameSelectionServer = null
@@ -905,6 +917,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     fun dismissGameSelection() {
         _uiState.value = _uiState.value.copy(showGameSelection = false)
+        isPgnFileSelection = false
     }
 
     fun clearGame() {
@@ -1620,10 +1633,27 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * Show player info for the specified username.
      * Determines the server from the current game context.
+     * If activeServer is null (e.g., PGN file), triggers a Google search instead.
      */
     fun showPlayerInfo(username: String) {
-        val server = _uiState.value.activeServer ?: ChessServer.LICHESS
-        showPlayerInfo(username, server)
+        val server = _uiState.value.activeServer
+        if (server != null) {
+            showPlayerInfo(username, server)
+        } else {
+            // No server context (PGN file) - trigger Google search
+            _uiState.value = _uiState.value.copy(
+                googleSearchPlayerName = username
+            )
+        }
+    }
+
+    /**
+     * Clear the Google search state after it's been handled.
+     */
+    fun clearGoogleSearch() {
+        _uiState.value = _uiState.value.copy(
+            googleSearchPlayerName = null
+        )
     }
 
     /**
@@ -2096,10 +2126,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     /**
      * Load games from PGN file content.
+     * Groups games by Event - if multiple events, navigates to PGN file screen.
      * If single game, loads it directly.
-     * If multiple games, shows game selection dialog.
+     * If single event with multiple games, navigates to PGN file screen.
      */
-    fun loadGamesFromPgnContent(pgnContent: String) {
+    fun loadGamesFromPgnContent(pgnContent: String, onMultipleEvents: ((Boolean) -> Unit)? = null) {
         when (val result = repository.parseGamesFromPgnContent(pgnContent)) {
             is Result.Success -> {
                 val games = result.data
@@ -2107,16 +2138,21 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     // Single game - load directly
                     selectPgnGame(games.first())
                 } else {
-                    // Multiple games - show selection
+                    // Group games by Event
+                    val gamesByEvent = games.groupBy { game ->
+                        game.pgn?.let { PgnParser.parseHeaders(it)["Event"] } ?: "Unknown Event"
+                    }
+
+                    // Store all games and navigate to PGN file screen
+                    // Note: Keep showRetrieveScreen = true so RetrieveScreen can navigate internally to PGN_FILE
                     _uiState.value = _uiState.value.copy(
-                        gameList = games,
-                        showGameSelection = true,
-                        showRetrieveScreen = false,
-                        gameSelectionUsername = "PGN File",
-                        gameSelectionServer = ChessServer.LICHESS // Default, not really used
+                        showPgnEventSelection = true,
+                        pgnEvents = gamesByEvent.keys.toList().sorted(),
+                        pgnGamesByEvent = gamesByEvent,
+                        selectedPgnEvent = if (gamesByEvent.size == 1) gamesByEvent.keys.first() else null,
+                        pgnGamesForSelectedEvent = if (gamesByEvent.size == 1) games else emptyList()
                     )
-                    pendingGameSelectionServer = null
-                    pendingGameSelectionUsername = null
+                    onMultipleEvents?.invoke(true)
                 }
             }
             is Result.Error -> {
@@ -2128,12 +2164,58 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * Select an event from PGN file to show its games.
+     */
+    fun selectPgnEvent(event: String) {
+        val games = _uiState.value.pgnGamesByEvent[event] ?: return
+        _uiState.value = _uiState.value.copy(
+            selectedPgnEvent = event,
+            pgnGamesForSelectedEvent = games
+        )
+    }
+
+    /**
+     * Go back from PGN games to event list.
+     */
+    fun backToPgnEventList() {
+        _uiState.value = _uiState.value.copy(
+            selectedPgnEvent = null,
+            pgnGamesForSelectedEvent = emptyList()
+        )
+    }
+
+    /**
+     * Dismiss PGN event selection.
+     */
+    fun dismissPgnEventSelection() {
+        _uiState.value = _uiState.value.copy(
+            showPgnEventSelection = false,
+            pgnEvents = emptyList(),
+            pgnGamesByEvent = emptyMap(),
+            selectedPgnEvent = null,
+            pgnGamesForSelectedEvent = emptyList()
+        )
+    }
+
+    /**
+     * Select a game from PGN event screen.
+     */
+    fun selectPgnGameFromEvent(game: LichessGame) {
+        dismissPgnEventSelection()
+        val whiteName = game.players.white.user?.name ?: "White"
+        loadGame(game, null, whiteName)
+    }
+
+    /**
      * Select a game from PGN file (white is active player).
      */
     fun selectPgnGame(game: LichessGame) {
         _uiState.value = _uiState.value.copy(
             showGameSelection = false,
-            showRetrieveScreen = false
+            showRetrieveScreen = false,
+            showPgnEventSelection = false,
+            pgnEvents = emptyList(),
+            pgnGamesByEvent = emptyMap()
         )
         val whiteName = game.players.white.user?.name ?: "White"
         loadGame(game, null, whiteName)

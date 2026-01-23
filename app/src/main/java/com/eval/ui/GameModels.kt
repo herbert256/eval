@@ -356,5 +356,13 @@ data class GameUiState(
     // Streamers (Chess.com)
     val showStreamersScreen: Boolean = false,
     val streamersLoading: Boolean = false,
-    val streamersList: List<StreamerInfo> = emptyList()
+    val streamersList: List<StreamerInfo> = emptyList(),
+    // PGN file event selection
+    val showPgnEventSelection: Boolean = false,
+    val pgnEvents: List<String> = emptyList(),
+    val pgnGamesByEvent: Map<String, List<LichessGame>> = emptyMap(),
+    val selectedPgnEvent: String? = null,
+    val pgnGamesForSelectedEvent: List<LichessGame> = emptyList(),
+    // Google search for player (when activeServer is null)
+    val googleSearchPlayerName: String? = null
 )
