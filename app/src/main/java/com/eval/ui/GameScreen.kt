@@ -151,6 +151,8 @@ fun GameScreen(
             isLoadingDeepSeekModels = uiState.isLoadingDeepSeekModels,
             availableMistralModels = uiState.availableMistralModels,
             isLoadingMistralModels = uiState.isLoadingMistralModels,
+            availableCohereModels = uiState.availableCohereModels,
+            isLoadingCohereModels = uiState.isLoadingCohereModels,
             onBack = { viewModel.hideSettingsDialog() },
             onSaveStockfish = { viewModel.updateStockfishSettings(it) },
             onSaveBoardLayout = { viewModel.updateBoardLayoutSettings(it) },
@@ -162,7 +164,8 @@ fun GameScreen(
             onFetchGeminiModels = { viewModel.fetchGeminiModels(it) },
             onFetchGrokModels = { viewModel.fetchGrokModels(it) },
             onFetchDeepSeekModels = { viewModel.fetchDeepSeekModels(it) },
-            onFetchMistralModels = { viewModel.fetchMistralModels(it) }
+            onFetchMistralModels = { viewModel.fetchMistralModels(it) },
+            onFetchCohereModels = { viewModel.fetchCohereModels(it) }
         )
         return
     }

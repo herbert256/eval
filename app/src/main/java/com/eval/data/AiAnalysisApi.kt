@@ -22,6 +22,7 @@ enum class AiService(val displayName: String, val baseUrl: String) {
     GROK("Grok", "https://api.x.ai/"),
     DEEPSEEK("DeepSeek", "https://api.deepseek.com/"),
     MISTRAL("Mistral", "https://api.mistral.ai/"),
+    COHERE("Cohere", "https://api.cohere.com/"),
     DUMMY("Dummy", "")
 }
 
@@ -128,6 +129,43 @@ data class MistralRequest(
     val model: String = "mistral-small-latest",
     val messages: List<OpenAiMessage>,
     val max_tokens: Int = 1024
+)
+
+// Cohere models
+data class CohereMessage(
+    val role: String,
+    val content: String
+)
+
+data class CohereRequest(
+    val model: String = "command-r",
+    val messages: List<CohereMessage>,
+    val max_tokens: Int = 1024
+)
+
+data class CohereResponseMessage(
+    val role: String?,
+    val content: List<CohereContentItem>?
+)
+
+data class CohereContentItem(
+    val type: String?,
+    val text: String?
+)
+
+data class CohereResponse(
+    val id: String?,
+    val message: CohereResponseMessage?,
+    val finish_reason: String?
+)
+
+data class CohereModelsResponse(
+    val models: List<CohereModel>?
+)
+
+data class CohereModel(
+    val name: String?,
+    val endpoints: List<String>?
 )
 
 /**
@@ -245,6 +283,22 @@ interface MistralApi {
 }
 
 /**
+ * Retrofit interface for Cohere API.
+ */
+interface CohereApi {
+    @POST("v2/chat")
+    suspend fun chat(
+        @Header("Authorization") authorization: String,
+        @Body request: CohereRequest
+    ): Response<CohereResponse>
+
+    @retrofit2.http.GET("v1/models")
+    suspend fun listModels(
+        @Header("Authorization") authorization: String
+    ): Response<CohereModelsResponse>
+}
+
+/**
  * Factory for creating API instances.
  */
 object AiApiFactory {
@@ -289,5 +343,9 @@ object AiApiFactory {
 
     fun createMistralApi(): MistralApi {
         return getRetrofit(AiService.MISTRAL.baseUrl).create(MistralApi::class.java)
+    }
+
+    fun createCohereApi(): CohereApi {
+        return getRetrofit(AiService.COHERE.baseUrl).create(CohereApi::class.java)
     }
 }

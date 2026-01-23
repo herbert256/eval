@@ -1507,6 +1507,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 AiService.GROK -> aiSettings.grokPrompt
                 AiService.DEEPSEEK -> aiSettings.deepSeekPrompt
                 AiService.MISTRAL -> aiSettings.mistralPrompt
+                AiService.COHERE -> aiSettings.coherePrompt
                 AiService.DUMMY -> ""  // Dummy doesn't use prompt
             }
             val result = aiAnalysisRepository.analyzePosition(
@@ -1519,7 +1520,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 geminiModel = aiSettings.geminiModel,
                 grokModel = aiSettings.grokModel,
                 deepSeekModel = aiSettings.deepSeekModel,
-                mistralModel = aiSettings.mistralModel
+                mistralModel = aiSettings.mistralModel,
+                cohereModel = aiSettings.cohereModel
             )
             _uiState.value = _uiState.value.copy(
                 aiAnalysisLoading = false,
@@ -1611,6 +1613,20 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.value = _uiState.value.copy(
                 availableMistralModels = models,
                 isLoadingMistralModels = false
+            )
+        }
+    }
+
+    fun fetchCohereModels(apiKey: String) {
+        if (apiKey.isBlank()) return
+
+        _uiState.value = _uiState.value.copy(isLoadingCohereModels = true)
+
+        viewModelScope.launch {
+            val models = aiAnalysisRepository.fetchCohereModels(apiKey)
+            _uiState.value = _uiState.value.copy(
+                availableCohereModels = models,
+                isLoadingCohereModels = false
             )
         }
     }

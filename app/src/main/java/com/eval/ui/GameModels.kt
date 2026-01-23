@@ -297,5 +297,8 @@ data class GameUiState(
     val isLoadingDeepSeekModels: Boolean = false,
     // Mistral model selection
     val availableMistralModels: List<String> = emptyList(),
-    val isLoadingMistralModels: Boolean = false
+    val isLoadingMistralModels: Boolean = false,
+    // Cohere model selection
+    val availableCohereModels: List<String> = emptyList(),
+    val isLoadingCohereModels: Boolean = false
 )

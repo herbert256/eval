@@ -59,6 +59,9 @@ data class AiSettings(
     val mistralApiKey: String = "",
     val mistralModel: String = "mistral-small-latest",
     val mistralPrompt: String = DEFAULT_AI_PROMPT,
+    val cohereApiKey: String = "",
+    val cohereModel: String = "command-r",
+    val coherePrompt: String = DEFAULT_AI_PROMPT,
     val dummyEnabled: Boolean = false
 ) {
     fun getApiKey(service: AiService): String {
@@ -69,6 +72,7 @@ data class AiSettings(
             AiService.GROK -> grokApiKey
             AiService.DEEPSEEK -> deepSeekApiKey
             AiService.MISTRAL -> mistralApiKey
+            AiService.COHERE -> cohereApiKey
             AiService.DUMMY -> if (dummyEnabled) "enabled" else ""
         }
     }
@@ -80,6 +84,7 @@ data class AiSettings(
                 grokApiKey.isNotBlank() ||
                 deepSeekApiKey.isNotBlank() ||
                 mistralApiKey.isNotBlank() ||
+                cohereApiKey.isNotBlank() ||
                 dummyEnabled
     }
 
@@ -230,6 +235,16 @@ fun AiSettingsScreen(
             isConfigured = aiSettings.mistralApiKey.isNotBlank(),
             selectedModel = if (aiSettings.mistralApiKey.isNotBlank()) aiSettings.mistralModel else null,
             onClick = { onNavigate(SettingsSubScreen.AI_MISTRAL) }
+        )
+
+        // Cohere
+        AiServiceNavigationCard(
+            title = "Cohere",
+            subtitle = "Cohere",
+            accentColor = Color(0xFF39594D),
+            isConfigured = aiSettings.cohereApiKey.isNotBlank(),
+            selectedModel = if (aiSettings.cohereApiKey.isNotBlank()) aiSettings.cohereModel else null,
+            onClick = { onNavigate(SettingsSubScreen.AI_COHERE) }
         )
 
         // Dummy (for testing)
@@ -402,6 +417,13 @@ private fun sendApiKeysEmail(context: Context, email: String, aiSettings: AiSett
             appendLine("Mistral (Mistral AI):")
             appendLine("  API Key: ${aiSettings.mistralApiKey}")
             appendLine("  Model: ${aiSettings.mistralModel}")
+            appendLine()
+        }
+
+        if (aiSettings.cohereApiKey.isNotBlank()) {
+            appendLine("Cohere:")
+            appendLine("  API Key: ${aiSettings.cohereApiKey}")
+            appendLine("  Model: ${aiSettings.cohereModel}")
             appendLine()
         }
 
@@ -868,6 +890,67 @@ fun MistralSettingsScreen(
                 onResetToDefault = {
                     prompt = DEFAULT_AI_PROMPT
                     onSave(aiSettings.copy(mistralPrompt = DEFAULT_AI_PROMPT))
+                }
+            )
+        }
+    }
+}
+
+/**
+ * Cohere settings screen.
+ */
+@Composable
+fun CohereSettingsScreen(
+    aiSettings: AiSettings,
+    availableModels: List<String>,
+    isLoadingModels: Boolean,
+    onBackToAiSettings: () -> Unit,
+    onBackToGame: () -> Unit,
+    onSave: (AiSettings) -> Unit,
+    onFetchModels: (String) -> Unit
+) {
+    var apiKey by remember { mutableStateOf(aiSettings.cohereApiKey) }
+    var selectedModel by remember { mutableStateOf(aiSettings.cohereModel) }
+    var prompt by remember { mutableStateOf(aiSettings.coherePrompt) }
+    var showKey by remember { mutableStateOf(false) }
+
+    AiServiceSettingsScreenTemplate(
+        title = "Cohere",
+        subtitle = "Cohere",
+        accentColor = Color(0xFF39594D),
+        apiKey = apiKey,
+        showKey = showKey,
+        onApiKeyChange = {
+            apiKey = it
+            onSave(aiSettings.copy(cohereApiKey = it.trim()))
+        },
+        onToggleVisibility = { showKey = !showKey },
+        onBackToAiSettings = onBackToAiSettings,
+        onBackToGame = onBackToGame
+    ) {
+        // Model selection
+        if (apiKey.isNotBlank()) {
+            ModelSelectionSection(
+                selectedModel = selectedModel,
+                availableModels = availableModels,
+                isLoadingModels = isLoadingModels,
+                onModelChange = {
+                    selectedModel = it
+                    onSave(aiSettings.copy(cohereModel = it))
+                },
+                onFetchModels = { onFetchModels(apiKey) }
+            )
+
+            // Prompt editing
+            PromptEditSection(
+                prompt = prompt,
+                onPromptChange = {
+                    prompt = it
+                    onSave(aiSettings.copy(coherePrompt = it))
+                },
+                onResetToDefault = {
+                    prompt = DEFAULT_AI_PROMPT
+                    onSave(aiSettings.copy(coherePrompt = DEFAULT_AI_PROMPT))
                 }
             )
         }

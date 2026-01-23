@@ -1394,6 +1394,7 @@ private fun AiServiceLogo(
         AiService.GROK -> Color(0xFF000000)     // X/Twitter black
         AiService.DEEPSEEK -> Color(0xFF0066FF) // DeepSeek blue
         AiService.MISTRAL -> Color(0xFFFF7000)  // Mistral orange
+        AiService.COHERE -> Color(0xFF39594D)   // Cohere green
         AiService.DUMMY -> Color(0xFF888888)    // Gray for testing
     }
 
@@ -1410,6 +1411,7 @@ private fun AiServiceLogo(
         AiService.GROK -> "X"
         AiService.DEEPSEEK -> "D"
         AiService.MISTRAL -> "M"
+        AiService.COHERE -> "C"
         AiService.DUMMY -> "?"
     }
 
