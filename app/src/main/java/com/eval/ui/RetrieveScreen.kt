@@ -81,6 +81,16 @@ fun RetrieveScreen(
             onNextPage = { viewModel.nextPlayerGamesPage() },
             onPreviousPage = { viewModel.previousPlayerGamesPage() },
             onGameSelected = { game -> viewModel.selectGameFromPlayerInfo(game) },
+            onAiReportsClick = {
+                uiState.playerInfo?.let { info ->
+                    val serverName = when (info.server) {
+                        com.eval.data.ChessServer.LICHESS -> "lichess.org"
+                        com.eval.data.ChessServer.CHESS_COM -> "chess.com"
+                    }
+                    viewModel.showPlayerAiReportsSelectionDialog(info.username, serverName, info)
+                }
+            },
+            hasAiApiKeys = uiState.aiSettings.hasAnyApiKey(),
             onDismiss = {
                 viewModel.dismissPlayerInfo()
                 // Go back to the top rankings screen we came from

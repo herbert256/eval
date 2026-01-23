@@ -384,6 +384,132 @@ fun GameScreen(
         )
     }
 
+    // Show Player AI Reports provider selection dialog
+    if (uiState.showPlayerAiReportsSelectionDialog) {
+        AiReportsSelectionDialog(
+            aiSettings = uiState.aiSettings,
+            savedProviders = viewModel.loadAiReportProviders(),
+            availableChatGptModels = uiState.availableChatGptModels,
+            availableGeminiModels = uiState.availableGeminiModels,
+            availableGrokModels = uiState.availableGrokModels,
+            availableDeepSeekModels = uiState.availableDeepSeekModels,
+            availableMistralModels = uiState.availableMistralModels,
+            onModelChange = { service, model ->
+                viewModel.updateAiSettings(uiState.aiSettings.withModel(service, model))
+            },
+            onGenerate = { selectedProviders ->
+                viewModel.saveAiReportProviders(selectedProviders.map { it.name }.toSet())
+                viewModel.startPlayerAiReports(selectedProviders)
+            },
+            onDismiss = { viewModel.dismissPlayerAiReportsSelectionDialog() },
+            title = "AI Reports: ${uiState.playerAiReportsPlayerName}"
+        )
+    }
+
+    // Show Player AI Reports generation dialog
+    if (uiState.showPlayerAiReportsDialog) {
+        val isComplete = uiState.playerAiReportsProgress >= uiState.playerAiReportsTotal && uiState.playerAiReportsTotal > 0
+        AlertDialog(
+            onDismissRequest = { if (isComplete) viewModel.dismissPlayerAiReportsDialog() },
+            title = {
+                Text(
+                    text = if (isComplete) "Player AI Reports Ready" else "Generating Player AI Reports",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Show player name
+                    Text(
+                        text = "Player: ${uiState.playerAiReportsPlayerName}",
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFF8B5CF6)
+                    )
+                    if (uiState.playerAiReportsServer != null) {
+                        Text(
+                            text = "Server: ${uiState.playerAiReportsServer}",
+                            fontSize = 12.sp,
+                            color = Color.Gray
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Show all selected services with their status
+                    uiState.playerAiReportsSelectedServices.forEach { service ->
+                        val result = uiState.playerAiReportsResults[service]
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(service.displayName, fontWeight = FontWeight.Medium)
+                            when {
+                                result == null -> {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp,
+                                        color = Color.Gray
+                                    )
+                                }
+                                result.isSuccess -> {
+                                    Text(
+                                        text = "✓",
+                                        color = Color(0xFF4CAF50),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                else -> {
+                                    Text(
+                                        text = "✗",
+                                        color = Color(0xFFF44336),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                if (isComplete) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                sharePlayerAiReports(context, uiState)
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF4CAF50)
+                            )
+                        ) {
+                            Text("Share")
+                        }
+                        Button(
+                            onClick = {
+                                openPlayerAiReportsInChrome(context, uiState)
+                                viewModel.dismissPlayerAiReportsDialog()
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF8B5CF6)
+                            )
+                        ) {
+                            Text("View in Chrome")
+                        }
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissPlayerAiReportsDialog() }) {
+                    Text(if (isComplete) "Close" else "Cancel")
+                }
+            }
+        )
+    }
+
     // Show AI analysis screen (full screen)
     if (uiState.showAiAnalysisDialog) {
         AiAnalysisScreen(
@@ -410,6 +536,16 @@ fun GameScreen(
             onNextPage = { viewModel.nextPlayerGamesPage() },
             onPreviousPage = { viewModel.previousPlayerGamesPage() },
             onGameSelected = { game -> viewModel.selectGameFromPlayerInfo(game) },
+            onAiReportsClick = {
+                uiState.playerInfo?.let { info ->
+                    val serverName = when (info.server) {
+                        com.eval.data.ChessServer.LICHESS -> "lichess.org"
+                        com.eval.data.ChessServer.CHESS_COM -> "chess.com"
+                    }
+                    viewModel.showPlayerAiReportsSelectionDialog(info.username, serverName, info)
+                }
+            },
+            hasAiApiKeys = uiState.aiSettings.hasAnyApiKey(),
             onDismiss = { viewModel.dismissPlayerInfo() }
         )
         return
@@ -1106,6 +1242,8 @@ fun PlayerInfoScreen(
     onNextPage: () -> Unit,
     onPreviousPage: () -> Unit,
     onGameSelected: (com.eval.data.LichessGame) -> Unit,
+    onAiReportsClick: () -> Unit,
+    hasAiApiKeys: Boolean,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -1651,6 +1789,24 @@ fun PlayerInfoScreen(
             }
         }
 
+        // AI reports about player button (only show if we have API keys and player info)
+        if (hasAiApiKeys && playerInfo != null) {
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = onAiReportsClick,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF8B5CF6)  // Purple color for AI
+                )
+            ) {
+                Text(
+                    text = "AI reports about player",
+                    fontSize = 16.sp,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+            }
+        }
+
         // Back to game button at the bottom
         Spacer(modifier = Modifier.height(16.dp))
         Button(
@@ -2033,6 +2189,567 @@ private fun shareAiReports(context: android.content.Context, uiState: GameUiStat
             android.widget.Toast.LENGTH_SHORT
         ).show()
     }
+}
+
+/**
+ * Opens the player AI reports HTML in Chrome browser.
+ */
+private fun openPlayerAiReportsInChrome(context: android.content.Context, uiState: GameUiState) {
+    try {
+        val appVersion = try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "unknown"
+        } catch (e: Exception) { "unknown" }
+        val html = convertPlayerAiReportsToHtml(uiState, appVersion)
+
+        val cacheDir = java.io.File(context.cacheDir, "ai_analysis")
+        if (!cacheDir.exists()) {
+            cacheDir.mkdirs()
+        }
+
+        val htmlFile = java.io.File(cacheDir, "player_ai_reports.html")
+        htmlFile.writeText(html)
+
+        val contentUri = androidx.core.content.FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            htmlFile
+        )
+
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(contentUri, "text/html")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            setPackage("com.android.chrome")
+        }
+
+        try {
+            context.startActivity(intent)
+        } catch (e: android.content.ActivityNotFoundException) {
+            intent.setPackage(null)
+            context.startActivity(intent)
+        }
+    } catch (e: Exception) {
+        android.widget.Toast.makeText(
+            context,
+            "Failed to open in Chrome: ${e.message}",
+            android.widget.Toast.LENGTH_SHORT
+        ).show()
+    }
+}
+
+/**
+ * Shares the player AI reports HTML via Android share sheet.
+ */
+private fun sharePlayerAiReports(context: android.content.Context, uiState: GameUiState) {
+    try {
+        val appVersion = try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "unknown"
+        } catch (e: Exception) { "unknown" }
+        val html = convertPlayerAiReportsToHtml(uiState, appVersion)
+
+        val cacheDir = java.io.File(context.cacheDir, "ai_analysis")
+        if (!cacheDir.exists()) {
+            cacheDir.mkdirs()
+        }
+
+        val playerName = uiState.playerAiReportsPlayerName
+
+        val htmlFile = java.io.File(cacheDir, "player_ai_reports.html")
+        htmlFile.writeText(html)
+
+        val contentUri = androidx.core.content.FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            htmlFile
+        )
+
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/html"
+            putExtra(Intent.EXTRA_SUBJECT, "AI Report - Player: $playerName")
+            putExtra(Intent.EXTRA_TEXT, "AI analysis report for chess player: $playerName.\n\nOpen the attached HTML file in a browser to view the report.")
+            putExtra(Intent.EXTRA_STREAM, contentUri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        context.startActivity(Intent.createChooser(intent, "Share Player AI Report"))
+    } catch (e: Exception) {
+        android.widget.Toast.makeText(
+            context,
+            "Failed to share: ${e.message}",
+            android.widget.Toast.LENGTH_SHORT
+        ).show()
+    }
+}
+
+/**
+ * Converts player AI analysis results from multiple services to a tabbed HTML document.
+ */
+private fun convertPlayerAiReportsToHtml(uiState: GameUiState, appVersion: String): String {
+    val generatedDate = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+        .format(java.util.Date())
+    val playerName = uiState.playerAiReportsPlayerName
+    val server = uiState.playerAiReportsServer
+    val playerInfo = uiState.playerAiReportsPlayerInfo
+    val aiSettings = uiState.aiSettings
+
+    // Build player info HTML section
+    val playerInfoHtml = buildPlayerInfoHtml(playerInfo, server)
+
+    val results = uiState.playerAiReportsResults
+    val serviceNames = results.keys.sortedBy { it.ordinal }
+
+    // Generate tabs HTML
+    val tabsHtml = serviceNames.mapIndexed { index, service ->
+        val isActive = if (index == 0) "active" else ""
+        """<button class="tab-btn $isActive" onclick="showTab('${service.name}')">${service.displayName}</button>"""
+    }.joinToString("\n")
+
+    // Generate content panels for each service
+    val panelsHtml = serviceNames.mapIndexed { index, service ->
+        val result = results[service]!!
+        val isActive = if (index == 0) "active" else ""
+        val content = if (result.isSuccess && result.analysis != null) {
+            convertMarkdownContentToHtml(result.analysis)
+        } else {
+            """<pre class="error">${escapeHtml(result.error ?: "Unknown error")}</pre>"""
+        }
+        // Get the prompt used for this service
+        val prompt = if (server != null) {
+            aiSettings.getServerPlayerPrompt(service)
+        } else {
+            aiSettings.getOtherPlayerPrompt(service)
+        }
+        val promptHtml = if (prompt.isNotBlank()) {
+            """
+            <div class="prompt-section">
+                <h3>Prompt Used</h3>
+                <pre class="prompt-text">${escapeHtml(prompt)}</pre>
+            </div>
+            """
+        } else ""
+        """
+        <div id="panel-${service.name}" class="tab-panel $isActive">
+            <h2>${service.displayName} Analysis</h2>
+            $content
+            $promptHtml
+        </div>
+        """
+    }.joinToString("\n")
+
+    return """
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Report - $playerName</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            padding: 16px;
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+        }
+        h1, h2, h3 {
+            color: #ffffff;
+            margin-top: 1.5em;
+            margin-bottom: 0.5em;
+        }
+        h1 { font-size: 1.8em; border-bottom: 2px solid #8B5CF6; padding-bottom: 8px; }
+        h2 { font-size: 1.4em; color: #8B5CF6; margin-top: 1em; }
+        h3 { font-size: 1.2em; color: #A78BFA; }
+        p { margin: 1em 0; }
+        ul { padding-left: 20px; }
+        li { margin: 0.5em 0; }
+        strong { color: #ffffff; }
+        em { color: #b0b0b0; }
+
+        /* Player info section */
+        .player-section {
+            background: #242424;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+        .player-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+        .player-name {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #fff;
+        }
+        .player-title {
+            background: #FFD700;
+            color: #000;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+        .server-badge {
+            display: inline-block;
+            padding: 6px 14px;
+            border-radius: 6px;
+            color: #fff;
+            font-weight: 500;
+            margin-bottom: 12px;
+        }
+        .server-lichess { background: #629924; }
+        .server-chesscom { background: #769656; }
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+            margin-top: 16px;
+        }
+        .info-item {
+            background: #2d2d2d;
+            padding: 12px;
+            border-radius: 8px;
+        }
+        .info-label {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 4px;
+        }
+        .info-value {
+            font-size: 16px;
+            color: #fff;
+            font-weight: 500;
+        }
+        .ratings-section {
+            margin-top: 16px;
+        }
+        .ratings-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        .rating-badge {
+            background: #3d3d3d;
+            padding: 8px 16px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .rating-type {
+            font-size: 11px;
+            color: #888;
+        }
+        .rating-value {
+            font-size: 18px;
+            font-weight: bold;
+            color: #64B5F6;
+        }
+        .stats-section {
+            margin-top: 16px;
+        }
+        .stats-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        .stat-badge {
+            padding: 8px 16px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .stat-badge.wins { background: rgba(0, 230, 118, 0.2); }
+        .stat-badge.losses { background: rgba(244, 67, 54, 0.2); }
+        .stat-badge.draws { background: rgba(144, 164, 174, 0.2); }
+        .stat-badge.total { background: rgba(100, 181, 246, 0.2); }
+        .stat-label { font-size: 11px; color: #888; }
+        .stat-value { font-size: 18px; font-weight: bold; }
+        .stat-value.wins { color: #00E676; }
+        .stat-value.losses { color: #FF5252; }
+        .stat-value.draws { color: #90A4AE; }
+        .stat-value.total { color: #64B5F6; }
+
+        /* Prompt section */
+        .prompt-section {
+            margin-top: 24px;
+            padding-top: 16px;
+            border-top: 1px solid #444;
+        }
+        .prompt-section h3 {
+            color: #888;
+            font-size: 1em;
+            margin-bottom: 8px;
+        }
+        .prompt-text {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 12px;
+            font-family: monospace;
+            font-size: 11px;
+            color: #aaa;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            line-height: 1.5;
+        }
+
+        /* Tabs */
+        .tabs-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 24px 0 16px 0;
+            border-bottom: 2px solid #333;
+            padding-bottom: 8px;
+        }
+        .tab-btn {
+            padding: 10px 20px;
+            background: #2d2d2d;
+            border: none;
+            border-radius: 8px 8px 0 0;
+            color: #888;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .tab-btn:hover {
+            background: #3d3d3d;
+            color: #ccc;
+        }
+        .tab-btn.active {
+            background: #8B5CF6;
+            color: #fff;
+        }
+
+        /* Tab panels */
+        .tab-panel {
+            display: none;
+            padding: 16px 0;
+        }
+        .tab-panel.active {
+            display: block;
+        }
+
+        /* Error styling */
+        pre.error {
+            background: #2d1f1f;
+            border: 1px solid #5c2020;
+            border-radius: 8px;
+            padding: 16px;
+            color: #ff6b6b;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: monospace;
+            font-size: 13px;
+        }
+
+        /* Footer */
+        .generated-footer {
+            margin-top: 40px;
+            padding-top: 16px;
+            border-top: 1px solid #444;
+            text-align: center;
+            color: #666;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>AI Report: $playerName</h1>
+
+    <!-- Player Info Section -->
+    $playerInfoHtml
+
+    <!-- AI Analysis Tabs -->
+    <div class="tabs-container">
+        $tabsHtml
+    </div>
+
+    $panelsHtml
+
+    <div class="generated-footer">
+        Generated by Eval $appVersion on $generatedDate
+    </div>
+
+    <script>
+    function showTab(serviceName) {
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('active'));
+        document.querySelector('.tab-btn[onclick*="' + serviceName + '"]').classList.add('active');
+        document.getElementById('panel-' + serviceName).classList.add('active');
+    }
+    </script>
+</body>
+</html>
+""".trimIndent()
+}
+
+/**
+ * Builds the player info HTML section from PlayerInfo data.
+ */
+private fun buildPlayerInfoHtml(playerInfo: com.eval.data.PlayerInfo?, server: String?): String {
+    if (playerInfo == null) {
+        return """
+        <div class="player-section">
+            <div class="player-header">
+                <span class="player-name">Unknown Player</span>
+            </div>
+        </div>
+        """
+    }
+
+    val serverBadge = when (server) {
+        "lichess.org" -> """<span class="server-badge server-lichess">Lichess</span>"""
+        "chess.com" -> """<span class="server-badge server-chesscom">Chess.com</span>"""
+        else -> ""
+    }
+
+    val titleBadge = playerInfo.title?.let {
+        """<span class="player-title">$it</span>"""
+    } ?: ""
+
+    val infoItems = mutableListOf<String>()
+
+    playerInfo.name?.let {
+        infoItems.add("""
+            <div class="info-item">
+                <div class="info-label">Real Name</div>
+                <div class="info-value">$it</div>
+            </div>
+        """)
+    }
+
+    val location = listOfNotNull(playerInfo.location, playerInfo.country).joinToString(", ")
+    if (location.isNotBlank()) {
+        infoItems.add("""
+            <div class="info-item">
+                <div class="info-label">Location</div>
+                <div class="info-value">$location</div>
+            </div>
+        """)
+    }
+
+    playerInfo.createdAt?.let { timestamp ->
+        val date = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+            .format(java.util.Date(timestamp))
+        infoItems.add("""
+            <div class="info-item">
+                <div class="info-label">Member Since</div>
+                <div class="info-value">$date</div>
+            </div>
+        """)
+    }
+
+    playerInfo.followers?.let {
+        infoItems.add("""
+            <div class="info-item">
+                <div class="info-label">Followers</div>
+                <div class="info-value">$it</div>
+            </div>
+        """)
+    }
+
+    val infoGridHtml = if (infoItems.isNotEmpty()) {
+        """<div class="info-grid">${infoItems.joinToString("\n")}</div>"""
+    } else ""
+
+    // Ratings section
+    val ratings = mutableListOf<Pair<String, Int>>()
+    playerInfo.bulletRating?.let { ratings.add("Bullet" to it) }
+    playerInfo.blitzRating?.let { ratings.add("Blitz" to it) }
+    playerInfo.rapidRating?.let { ratings.add("Rapid" to it) }
+    playerInfo.classicalRating?.let { ratings.add("Classical" to it) }
+    playerInfo.dailyRating?.let { ratings.add("Daily" to it) }
+
+    val ratingsHtml = if (ratings.isNotEmpty()) {
+        val badgesHtml = ratings.joinToString("\n") { (type, value) ->
+            """
+            <div class="rating-badge">
+                <div class="rating-type">$type</div>
+                <div class="rating-value">$value</div>
+            </div>
+            """
+        }
+        """
+        <div class="ratings-section">
+            <h3 style="color: #888; margin-bottom: 0;">Ratings</h3>
+            <div class="ratings-grid">$badgesHtml</div>
+        </div>
+        """
+    } else ""
+
+    // Stats section
+    val hasStats = playerInfo.totalGames != null || playerInfo.wins != null
+    val statsHtml = if (hasStats) {
+        val statBadges = mutableListOf<String>()
+        playerInfo.totalGames?.let {
+            statBadges.add("""
+                <div class="stat-badge total">
+                    <div class="stat-label">Total</div>
+                    <div class="stat-value total">$it</div>
+                </div>
+            """)
+        }
+        playerInfo.wins?.let {
+            statBadges.add("""
+                <div class="stat-badge wins">
+                    <div class="stat-label">Wins</div>
+                    <div class="stat-value wins">$it</div>
+                </div>
+            """)
+        }
+        playerInfo.losses?.let {
+            statBadges.add("""
+                <div class="stat-badge losses">
+                    <div class="stat-label">Losses</div>
+                    <div class="stat-value losses">$it</div>
+                </div>
+            """)
+        }
+        playerInfo.draws?.let {
+            statBadges.add("""
+                <div class="stat-badge draws">
+                    <div class="stat-label">Draws</div>
+                    <div class="stat-value draws">$it</div>
+                </div>
+            """)
+        }
+        """
+        <div class="stats-section">
+            <h3 style="color: #888; margin-bottom: 0;">Game Statistics</h3>
+            <div class="stats-grid">${statBadges.joinToString("\n")}</div>
+        </div>
+        """
+    } else ""
+
+    // Bio section
+    val bioHtml = playerInfo.bio?.takeIf { it.isNotBlank() }?.let {
+        """
+        <div style="margin-top: 16px;">
+            <h3 style="color: #888; margin-bottom: 8px;">Bio</h3>
+            <p style="color: #ccc; margin: 0;">${escapeHtml(it)}</p>
+        </div>
+        """
+    } ?: ""
+
+    return """
+    <div class="player-section">
+        $serverBadge
+        <div class="player-header">
+            <span class="player-name">${playerInfo.username}</span>
+            $titleBadge
+        </div>
+        $infoGridHtml
+        $ratingsHtml
+        $statsHtml
+        $bioHtml
+    </div>
+    """
 }
 
 /**
@@ -3197,7 +3914,8 @@ private fun AiReportsSelectionDialog(
     availableMistralModels: List<String>,
     onModelChange: (com.eval.data.AiService, String) -> Unit,
     onGenerate: (Set<com.eval.data.AiService>) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    title: String = "Select AI Providers"
 ) {
     // Initialize selected providers from saved preferences, or default to all configured services
     val allServices = com.eval.data.AiService.entries.toList()
@@ -3224,7 +3942,7 @@ private fun AiReportsSelectionDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "Select AI Providers",
+                text = title,
                 fontWeight = FontWeight.Bold
             )
         },

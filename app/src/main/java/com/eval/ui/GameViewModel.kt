@@ -1234,6 +1234,140 @@ ${opening.moves} *
         )
     }
 
+    // ===== PLAYER AI REPORTS =====
+
+    /**
+     * Show the provider selection dialog for player AI reports.
+     * @param playerName The name of the player to analyze
+     * @param server The chess server (e.g., "lichess.org", "chess.com") or null for other players
+     * @param playerInfo The full player info for HTML generation
+     */
+    fun showPlayerAiReportsSelectionDialog(playerName: String, server: String?, playerInfo: com.eval.data.PlayerInfo?) {
+        _uiState.value = _uiState.value.copy(
+            showPlayerAiReportsSelectionDialog = true,
+            playerAiReportsPlayerName = playerName,
+            playerAiReportsServer = server,
+            playerAiReportsPlayerInfo = playerInfo
+        )
+    }
+
+    fun dismissPlayerAiReportsSelectionDialog() {
+        _uiState.value = _uiState.value.copy(
+            showPlayerAiReportsSelectionDialog = false
+        )
+    }
+
+    /**
+     * Start player AI reports with selected providers.
+     */
+    fun startPlayerAiReports(selectedProviders: Set<AiService>) {
+        val aiSettings = _uiState.value.aiSettings
+        val playerName = _uiState.value.playerAiReportsPlayerName
+        val server = _uiState.value.playerAiReportsServer
+
+        // Filter to only selected providers that have API keys configured
+        val servicesToCall = selectedProviders.filter { service ->
+            aiSettings.getApiKey(service).isNotBlank()
+        }
+
+        if (servicesToCall.isEmpty()) {
+            _uiState.value = _uiState.value.copy(
+                errorMessage = "No AI services selected or configured. Please add API keys in Settings > AI Analysis."
+            )
+            return
+        }
+
+        _uiState.value = _uiState.value.copy(
+            showPlayerAiReportsSelectionDialog = false,
+            showPlayerAiReportsDialog = true,
+            playerAiReportsProgress = 0,
+            playerAiReportsTotal = servicesToCall.size,
+            playerAiReportsResults = emptyMap(),
+            playerAiReportsSelectedServices = servicesToCall.toSet()
+        )
+
+        viewModelScope.launch {
+            val results = mutableMapOf<AiService, AiAnalysisResponse>()
+            val mutex = Mutex()
+            var completedCount = 0
+
+            // Launch all API calls in parallel
+            val deferredResults = servicesToCall.map { service ->
+                async {
+                    val apiKey = aiSettings.getApiKey(service)
+                    // Choose prompt based on whether we have a server (lichess/chess.com) or not
+                    val prompt = if (server != null) {
+                        aiSettings.getServerPlayerPrompt(service)
+                    } else {
+                        aiSettings.getOtherPlayerPrompt(service)
+                    }
+
+                    var result = aiAnalysisRepository.analyzePlayer(
+                        service = service,
+                        playerName = playerName,
+                        server = server,
+                        apiKey = apiKey,
+                        prompt = prompt,
+                        chatGptModel = aiSettings.chatGptModel,
+                        claudeModel = aiSettings.claudeModel,
+                        geminiModel = aiSettings.geminiModel,
+                        grokModel = aiSettings.grokModel,
+                        deepSeekModel = aiSettings.deepSeekModel,
+                        mistralModel = aiSettings.mistralModel
+                    )
+
+                    // If failed, retry once after 1 second delay
+                    if (!result.isSuccess) {
+                        kotlinx.coroutines.delay(1000)
+                        result = aiAnalysisRepository.analyzePlayer(
+                            service = service,
+                            playerName = playerName,
+                            server = server,
+                            apiKey = apiKey,
+                            prompt = prompt,
+                            chatGptModel = aiSettings.chatGptModel,
+                            claudeModel = aiSettings.claudeModel,
+                            geminiModel = aiSettings.geminiModel,
+                            grokModel = aiSettings.grokModel,
+                            deepSeekModel = aiSettings.deepSeekModel,
+                            mistralModel = aiSettings.mistralModel
+                        )
+                    }
+
+                    // Update progress as each call completes
+                    mutex.withLock {
+                        results[service] = result
+                        completedCount++
+                        _uiState.value = _uiState.value.copy(
+                            playerAiReportsProgress = completedCount,
+                            playerAiReportsResults = results.toMap()
+                        )
+                    }
+
+                    service to result
+                }
+            }
+
+            // Wait for all calls to complete
+            deferredResults.awaitAll()
+
+            // All done - keep dialog open until user exports
+        }
+    }
+
+    fun dismissPlayerAiReportsDialog() {
+        _uiState.value = _uiState.value.copy(
+            showPlayerAiReportsDialog = false,
+            playerAiReportsResults = emptyMap(),
+            playerAiReportsProgress = 0,
+            playerAiReportsTotal = 0,
+            playerAiReportsSelectedServices = emptySet(),
+            playerAiReportsPlayerName = "",
+            playerAiReportsServer = null,
+            playerAiReportsPlayerInfo = null
+        )
+    }
+
     // ===== AI MODEL FETCHING =====
     fun fetchChatGptModels(apiKey: String) {
         if (apiKey.isBlank()) return

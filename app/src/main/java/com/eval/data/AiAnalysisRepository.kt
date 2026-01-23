@@ -45,6 +45,94 @@ class AiAnalysisRepository {
     }
 
     /**
+     * Builds the player analysis prompt by replacing @PLAYER@ and @SERVER@ placeholders.
+     */
+    private fun buildPlayerPrompt(promptTemplate: String, playerName: String, server: String?): String {
+        var result = promptTemplate.replace("@PLAYER@", playerName)
+        if (server != null) {
+            result = result.replace("@SERVER@", server)
+        }
+        return result
+    }
+
+    /**
+     * Analyzes a chess player using the specified AI service.
+     *
+     * @param service The AI service to use
+     * @param playerName The name of the player to analyze
+     * @param server The chess server (e.g., "lichess.org", "chess.com") or null for other players
+     * @param apiKey The API key for the service
+     * @param prompt The custom prompt template (use @PLAYER@ and @SERVER@ as placeholders)
+     * @param chatGptModel The ChatGPT model to use
+     * @param claudeModel The Claude model to use
+     * @param geminiModel The Gemini model to use
+     * @param grokModel The Grok model to use
+     * @param deepSeekModel The DeepSeek model to use
+     * @param mistralModel The Mistral model to use
+     * @return AiAnalysisResponse containing either the analysis or an error
+     */
+    suspend fun analyzePlayer(
+        service: AiService,
+        playerName: String,
+        server: String?,
+        apiKey: String,
+        prompt: String,
+        chatGptModel: String = "gpt-4o-mini",
+        claudeModel: String = "claude-sonnet-4-20250514",
+        geminiModel: String = "gemini-2.0-flash",
+        grokModel: String = "grok-3-mini",
+        deepSeekModel: String = "deepseek-chat",
+        mistralModel: String = "mistral-small-latest"
+    ): AiAnalysisResponse = withContext(Dispatchers.IO) {
+        if (apiKey.isBlank()) {
+            return@withContext AiAnalysisResponse(
+                service = service,
+                analysis = null,
+                error = "API key not configured for ${service.displayName}"
+            )
+        }
+
+        val finalPrompt = buildPlayerPrompt(prompt, playerName, server)
+
+        suspend fun makeApiCall(): AiAnalysisResponse {
+            return when (service) {
+                AiService.CHATGPT -> analyzeWithChatGpt(apiKey, finalPrompt, chatGptModel)
+                AiService.CLAUDE -> analyzeWithClaude(apiKey, finalPrompt, claudeModel)
+                AiService.GEMINI -> analyzeWithGemini(apiKey, finalPrompt, geminiModel)
+                AiService.GROK -> analyzeWithGrok(apiKey, finalPrompt, grokModel)
+                AiService.DEEPSEEK -> analyzeWithDeepSeek(apiKey, finalPrompt, deepSeekModel)
+                AiService.MISTRAL -> analyzeWithMistral(apiKey, finalPrompt, mistralModel)
+                AiService.DUMMY -> analyzeWithDummy()
+            }
+        }
+
+        // First attempt
+        try {
+            val result = makeApiCall()
+            if (result.isSuccess) {
+                return@withContext result
+            }
+            // API returned an error response, retry after delay
+            android.util.Log.w("AiAnalysis", "${service.displayName} player analysis first attempt failed: ${result.error}, retrying...")
+            delay(500)
+            makeApiCall()
+        } catch (e: Exception) {
+            // Network/exception error, retry after delay
+            android.util.Log.w("AiAnalysis", "${service.displayName} player analysis first attempt exception: ${e.message}, retrying...")
+            try {
+                delay(500)
+                makeApiCall()
+            } catch (e2: Exception) {
+                AiAnalysisResponse(
+                    service = service,
+                    analysis = null,
+                    error = "Failed after retry: ${e2.message}"
+                )
+            }
+        }
+    }
+
+    /**
      * Analyzes a chess position using the specified AI service.
      *
      * @param service The AI service to use
