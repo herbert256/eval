@@ -1577,8 +1577,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
-            // Fetch first batch of games (25)
-            fetchPlayerGames(username, server, 25)
+            // Fetch first batch of games (10)
+            fetchPlayerGames(username, server, 10)
         }
     }
 

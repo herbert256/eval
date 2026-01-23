@@ -1291,8 +1291,8 @@ fun PlayerInfoScreen(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable { onGameSelected(game) }
-                                        .background(Color(0xFF1E1E3A))
-                                        .padding(horizontal = 8.dp, vertical = 10.dp),
+                                        .background(Color(0xFF2D2D4A))
+                                        .padding(horizontal = 8.dp, vertical = 5.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(

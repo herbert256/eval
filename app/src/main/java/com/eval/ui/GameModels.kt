@@ -307,6 +307,6 @@ data class GameUiState(
     val playerGames: List<LichessGame> = emptyList(),
     val playerGamesLoading: Boolean = false,
     val playerGamesPage: Int = 0,
-    val playerGamesPageSize: Int = 25,
+    val playerGamesPageSize: Int = 10,
     val playerGamesHasMore: Boolean = true,  // Whether there might be more games to fetch
 )
