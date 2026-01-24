@@ -92,7 +92,8 @@ fun EvalNavHost(
         composable(NavRoutes.RETRIEVE) {
             RetrieveScreenNav(
                 viewModel = viewModel,
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToGame = { navController.navigate(NavRoutes.GAME) }
             )
         }
 
@@ -184,13 +185,15 @@ fun SettingsScreenNav(
 @Composable
 fun RetrieveScreenNav(
     viewModel: GameViewModel,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onNavigateToGame: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
     RetrieveScreen(
         viewModel = viewModel,
         uiState = uiState,
-        onBack = onNavigateBack
+        onBack = onNavigateBack,
+        onNavigateToGame = onNavigateToGame
     )
 }

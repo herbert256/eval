@@ -647,44 +647,6 @@ fun GameScreenContent(
         return
     }
 
-    // Show analysed games selection screen
-    if (uiState.showAnalysedGamesSelection && uiState.analysedGamesList.isNotEmpty()) {
-        AnalysedGamesScreen(
-            games = uiState.analysedGamesList,
-            onSelectGame = { viewModel.selectAnalysedGame(it) },
-            onDismiss = { viewModel.dismissAnalysedGamesSelection() }
-        )
-        return
-    }
-
-    // Show previous game retrieves selection screen
-    if (uiState.showPreviousRetrievesSelection && uiState.previousRetrievesList.isNotEmpty()) {
-        PreviousRetrievesScreen(
-            retrieves = uiState.previousRetrievesList,
-            onSelectRetrieve = { viewModel.selectPreviousRetrieve(it) },
-            onDismiss = { viewModel.dismissPreviousRetrievesSelection() }
-        )
-        return
-    }
-
-    // Show games from selected retrieve
-    val selectedRetrieveEntry = uiState.selectedRetrieveEntry
-    if (uiState.showSelectedRetrieveGames && selectedRetrieveEntry != null) {
-        SelectedRetrieveGamesScreen(
-            entry = selectedRetrieveEntry,
-            games = uiState.selectedRetrieveGames,
-            currentPage = uiState.gameSelectionPage,
-            pageSize = uiState.gameSelectionPageSize,
-            isLoading = uiState.gameSelectionLoading,
-            hasMoreGames = uiState.gameSelectionHasMore,
-            onNextPage = { viewModel.nextGameSelectionPage() },
-            onPreviousPage = { viewModel.previousGameSelectionPage() },
-            onSelectGame = { viewModel.selectGameFromRetrieve(it) },
-            onDismiss = { viewModel.dismissSelectedRetrieveGames() }
-        )
-        return
-    }
-
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -781,7 +743,10 @@ fun GameScreenContent(
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.End,
-                    maxLines = 1
+                    maxLines = 1,
+                    modifier = Modifier.clickable {
+                        viewModel.clearGame()
+                    }
                 )
             }
         }
@@ -833,10 +798,21 @@ fun GameScreenContent(
             }
         }
 
-        // Main view when no game is loaded - show logo and conditional First card
+        // Main view when no game is loaded - show logo centered on screen
         if (uiState.game == null) {
-            // Logo
-            EvalLogo()
+            // Center the logo vertically, offset 10% up from center
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = androidx.compose.ui.Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier.offset(y = (-60).dp)
+                ) {
+                    EvalLogo()
+                }
+            }
 
             // Error message
             if (uiState.errorMessage != null) {
@@ -1017,52 +993,61 @@ fun StockfishNotInstalledScreen(
 
 /**
  * Eval logo displayed on the main screen when no game is loaded.
- * Features a stylized chess-themed design.
+ * Features a stylized chess-themed design with light green background.
  */
 @Composable
 fun EvalLogo() {
-    Column(
+    Card(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .padding(horizontal = 24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFF3A5A3A)  // Light green background
+        ),
+        shape = RoundedCornerShape(24.dp)
     ) {
-        // Chess pieces decoration
-        Text(
-            text = "\u265A \u265B \u265C",
-            fontSize = 36.sp,
-            color = Color(0xFF6B9BFF),
-            letterSpacing = 8.sp
-        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 48.dp, horizontal = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Top chess pieces - black pieces
+            Text(
+                text = "\u265A \u265B \u265C",
+                fontSize = 56.sp,
+                color = Color(0xFF1A1A1A),
+                letterSpacing = 12.sp
+            )
 
-        Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-        // Main title
-        Text(
-            text = "Eval",
-            fontSize = 64.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color.White,
-            letterSpacing = 4.sp
-        )
+            // Main title
+            Text(
+                text = "Eval",
+                fontSize = 96.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                letterSpacing = 6.sp
+            )
 
-        // Subtitle
-        Text(
-            text = "Chess Game Analyser",
-            fontSize = 16.sp,
-            color = Color(0xFF888888),
-            letterSpacing = 2.sp
-        )
+            // Subtitle
+            Text(
+                text = "Chess Game Analyser",
+                fontSize = 16.sp,
+                color = Color(0xFFCCCCCC),
+                letterSpacing = 2.sp
+            )
 
-        Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-        // More chess pieces
-        Text(
-            text = "\u265D \u265E \u265F",
-            fontSize = 36.sp,
-            color = Color(0xFF6B9BFF),
-            letterSpacing = 8.sp
-        )
+            // Bottom chess pieces - white pieces
+            Text(
+                text = "\u2657 \u2658 \u2659",
+                fontSize = 56.sp,
+                color = Color.White,
+                letterSpacing = 12.sp
+            )
+        }
     }
 }
 

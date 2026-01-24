@@ -54,7 +54,8 @@ private enum class RetrieveSubScreen {
 fun RetrieveScreen(
     viewModel: GameViewModel,
     uiState: GameUiState,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onNavigateToGame: () -> Unit = {}
 ) {
     var currentScreen by remember { mutableStateOf(RetrieveSubScreen.MAIN) }
     // Track which screen we came from when showing player info
@@ -67,32 +68,54 @@ fun RetrieveScreen(
         }
     }
 
-    // Navigate back to game screen when games are ready to be shown
-    LaunchedEffect(uiState.showSelectedRetrieveGames) {
-        if (uiState.showSelectedRetrieveGames) {
-            onBack()
+    // Track the game we've already navigated for to avoid re-triggering on back navigation
+    var navigatedGameId by remember { mutableStateOf<String?>(null) }
+
+    // Navigate to game screen when a NEW game is loaded (keeps RetrieveScreen in back stack)
+    LaunchedEffect(uiState.game?.id) {
+        val currentGameId = uiState.game?.id
+        if (currentGameId != null && currentGameId != navigatedGameId) {
+            navigatedGameId = currentGameId
+            onNavigateToGame()
         }
     }
 
-    // Navigate back to game screen when a single game is loaded
-    LaunchedEffect(uiState.game) {
-        if (uiState.game != null) {
-            onBack()
-        }
+    // Show selected retrieve games screen (games from a username fetch)
+    val selectedRetrieveEntry = uiState.selectedRetrieveEntry
+    if (uiState.showSelectedRetrieveGames && selectedRetrieveEntry != null) {
+        SelectedRetrieveGamesScreen(
+            entry = selectedRetrieveEntry,
+            games = uiState.selectedRetrieveGames,
+            currentPage = uiState.gameSelectionPage,
+            pageSize = uiState.gameSelectionPageSize,
+            isLoading = uiState.gameSelectionLoading,
+            hasMoreGames = uiState.gameSelectionHasMore,
+            onNextPage = { viewModel.nextGameSelectionPage() },
+            onPreviousPage = { viewModel.previousGameSelectionPage() },
+            onSelectGame = { viewModel.selectGameFromRetrieve(it) },
+            onDismiss = { viewModel.dismissSelectedRetrieveGames() }
+        )
+        return
     }
 
-    // Navigate back to game screen when analysed games selection is requested
-    LaunchedEffect(uiState.showAnalysedGamesSelection) {
-        if (uiState.showAnalysedGamesSelection) {
-            onBack()
-        }
+    // Show analysed games selection screen
+    if (uiState.showAnalysedGamesSelection && uiState.analysedGamesList.isNotEmpty()) {
+        AnalysedGamesScreen(
+            games = uiState.analysedGamesList,
+            onSelectGame = { viewModel.selectAnalysedGame(it) },
+            onDismiss = { viewModel.dismissAnalysedGamesSelection() }
+        )
+        return
     }
 
-    // Navigate back to game screen when previous retrieves selection is requested
-    LaunchedEffect(uiState.showPreviousRetrievesSelection) {
-        if (uiState.showPreviousRetrievesSelection) {
-            onBack()
-        }
+    // Show previous game retrieves selection screen
+    if (uiState.showPreviousRetrievesSelection && uiState.previousRetrievesList.isNotEmpty()) {
+        PreviousRetrievesScreen(
+            retrieves = uiState.previousRetrievesList,
+            onSelectRetrieve = { viewModel.selectPreviousRetrieve(it) },
+            onDismiss = { viewModel.dismissPreviousRetrievesSelection() }
+        )
+        return
     }
 
     // Show player info screen if requested (from top rankings)
