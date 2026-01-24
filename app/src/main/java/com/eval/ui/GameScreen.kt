@@ -334,17 +334,19 @@ fun GameScreen(
             text = {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    // Show all selected services with their status
-                    uiState.aiReportsSelectedServices.forEach { service ->
-                        val result = uiState.aiReportsResults[service]
+                    // Show all selected agents with their status
+                    uiState.aiReportsSelectedAgents.mapNotNull { agentId ->
+                        uiState.aiSettings.getAgentById(agentId)
+                    }.sortedBy { it.name.lowercase() }.forEach { agent ->
+                        val result = uiState.aiReportsAgentResults[agent.id]
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(service.displayName, fontWeight = FontWeight.Medium)
+                            Text(agent.name, fontWeight = FontWeight.Medium)
                             when {
                                 result == null -> {
                                     // Still pending - show small spinner
@@ -391,7 +393,6 @@ fun GameScreen(
                         Button(
                             onClick = {
                                 openAiReportsInChrome(context, uiState)
-                                viewModel.dismissAiReportsDialog()
                             },
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = Color(0xFF8B5CF6)
@@ -481,15 +482,17 @@ fun GameScreen(
                     }
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // Show all selected services with their status
-                    uiState.playerAiReportsSelectedServices.forEach { service ->
-                        val result = uiState.playerAiReportsResults[service]
+                    // Show all selected agents with their status
+                    uiState.playerAiReportsSelectedAgents.mapNotNull { agentId ->
+                        uiState.aiSettings.getAgentById(agentId)
+                    }.sortedBy { it.name.lowercase() }.forEach { agent ->
+                        val result = uiState.playerAiReportsAgentResults[agent.id]
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(service.displayName, fontWeight = FontWeight.Medium)
+                            Text(agent.name, fontWeight = FontWeight.Medium)
                             when {
                                 result == null -> {
                                     CircularProgressIndicator(
@@ -535,7 +538,6 @@ fun GameScreen(
                         Button(
                             onClick = {
                                 openPlayerAiReportsInChrome(context, uiState)
-                                viewModel.dismissPlayerAiReportsDialog()
                             },
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = Color(0xFF8B5CF6)
@@ -2344,31 +2346,33 @@ private fun convertPlayerAiReportsToHtml(uiState: GameUiState, appVersion: Strin
     // Build player info HTML section
     val playerInfoHtml = buildPlayerInfoHtml(playerInfo, server)
 
-    val results = uiState.playerAiReportsResults
-    val serviceNames = results.keys.sortedBy { it.ordinal }
+    // Get agents with results, sorted by name
+    val agentsWithResults = uiState.playerAiReportsSelectedAgents.mapNotNull { agentId ->
+        val agent = aiSettings.getAgentById(agentId)
+        val result = uiState.playerAiReportsAgentResults[agentId]
+        if (agent != null && result != null) agent to result else null
+    }.sortedBy { it.first.name.lowercase() }
 
-    // Generate tabs HTML (show only service name, not model)
-    val tabsHtml = serviceNames.mapIndexed { index, service ->
+    // Generate tabs HTML (show agent name)
+    val tabsHtml = agentsWithResults.mapIndexed { index, (agent, _) ->
         val isActive = if (index == 0) "active" else ""
-        """<button class="tab-btn $isActive" onclick="showTab('${service.name}')">${service.displayName}</button>"""
+        """<button class="tab-btn $isActive" onclick="showTab('${agent.id}')">${escapeHtml(agent.name)}</button>"""
     }.joinToString("\n")
 
-    // Generate content panels for each service (show model name in header)
-    val panelsHtml = serviceNames.mapIndexed { index, service ->
-        val result = results[service]!!
+    // Generate content panels for each agent
+    val panelsHtml = agentsWithResults.mapIndexed { index, (agent, result) ->
         val isActive = if (index == 0) "active" else ""
-        val model = aiSettings.getModel(service)
-        val nameWithModel = if (model.isNotBlank()) "${service.displayName} ($model)" else service.displayName
+        val providerWithModel = "${agent.provider.displayName} (${agent.model})"
         val content = if (result.isSuccess && result.analysis != null) {
             convertMarkdownContentToHtml(result.analysis)
         } else {
             """<pre class="error">${escapeHtml(result.error ?: "Unknown error")}</pre>"""
         }
-        // Get the prompt used for this service
+        // Get the prompt used for this agent
         val prompt = if (server != null) {
-            aiSettings.getServerPlayerPrompt(service)
+            aiSettings.getAgentServerPlayerPrompt(agent)
         } else {
-            aiSettings.getOtherPlayerPrompt(service)
+            aiSettings.getAgentOtherPlayerPrompt(agent)
         }
         val promptHtml = if (prompt.isNotBlank()) {
             """
@@ -2379,8 +2383,8 @@ private fun convertPlayerAiReportsToHtml(uiState: GameUiState, appVersion: Strin
             """
         } else ""
         """
-        <div id="panel-${service.name}" class="tab-panel $isActive">
-            <h2>${escapeHtml(nameWithModel)} Analysis</h2>
+        <div id="panel-${agent.id}" class="tab-panel $isActive">
+            <div class="panel-header">${escapeHtml(providerWithModel)}</div>
             $content
             $promptHtml
         </div>
@@ -2413,6 +2417,14 @@ private fun convertPlayerAiReportsToHtml(uiState: GameUiState, appVersion: Strin
         h1 { font-size: 1.8em; border-bottom: 2px solid #8B5CF6; padding-bottom: 8px; }
         h2 { font-size: 1.4em; color: #8B5CF6; margin-top: 1em; }
         h3 { font-size: 1.2em; color: #A78BFA; }
+        .panel-header {
+            font-size: 2em;
+            font-weight: bold;
+            color: #FF9800;
+            margin-bottom: 0.8em;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #FF9800;
+        }
         p { margin: 1em 0; }
         ul { padding-left: 20px; }
         li { margin: 0.5em 0; }
@@ -2846,29 +2858,32 @@ private fun convertAiReportsToHtml(uiState: GameUiState, appVersion: String): St
     // Build move list HTML with Stockfish scores
     val moveListHtml = buildAiReportsMoveListHtml(moveDetails, analyseScores, currentMoveIndex)
 
-    val results = uiState.aiReportsResults
-    val serviceNames = results.keys.sortedBy { it.ordinal }
     val aiSettings = uiState.aiSettings
 
-    // Generate tabs HTML (show only service name, not model)
-    val tabsHtml = serviceNames.mapIndexed { index, service ->
+    // Get agents with results, sorted by name
+    val agentsWithResults = uiState.aiReportsSelectedAgents.mapNotNull { agentId ->
+        val agent = aiSettings.getAgentById(agentId)
+        val result = uiState.aiReportsAgentResults[agentId]
+        if (agent != null && result != null) agent to result else null
+    }.sortedBy { it.first.name.lowercase() }
+
+    // Generate tabs HTML (show agent name)
+    val tabsHtml = agentsWithResults.mapIndexed { index, (agent, _) ->
         val isActive = if (index == 0) "active" else ""
-        """<button class="tab-btn $isActive" onclick="showTab('${service.name}')">${service.displayName}</button>"""
+        """<button class="tab-btn $isActive" onclick="showTab('${agent.id}')">${escapeHtml(agent.name)}</button>"""
     }.joinToString("\n")
 
-    // Generate content panels for each service (show model name in header)
-    val panelsHtml = serviceNames.mapIndexed { index, service ->
-        val result = results[service]!!
+    // Generate content panels for each agent
+    val panelsHtml = agentsWithResults.mapIndexed { index, (agent, result) ->
         val isActive = if (index == 0) "active" else ""
-        val model = aiSettings.getModel(service)
-        val nameWithModel = if (model.isNotBlank()) "${service.displayName} ($model)" else service.displayName
+        val providerWithModel = "${agent.provider.displayName} (${agent.model})"
         val content = if (result.isSuccess && result.analysis != null) {
             convertMarkdownContentToHtml(result.analysis)
         } else {
             """<pre class="error">${escapeHtml(result.error ?: "Unknown error")}</pre>"""
         }
-        // Get the prompt used for this service
-        val prompt = aiSettings.getPrompt(service)
+        // Get the prompt used for this agent
+        val prompt = aiSettings.getAgentGamePrompt(agent)
         val promptHtml = if (prompt.isNotBlank()) {
             """
             <div class="prompt-section">
@@ -2878,8 +2893,8 @@ private fun convertAiReportsToHtml(uiState: GameUiState, appVersion: String): St
             """
         } else ""
         """
-        <div id="panel-${service.name}" class="tab-panel $isActive">
-            <h2>${escapeHtml(nameWithModel)} Analysis</h2>
+        <div id="panel-${agent.id}" class="tab-panel $isActive">
+            <div class="panel-header">${escapeHtml(providerWithModel)}</div>
             $content
             $promptHtml
         </div>
@@ -2915,6 +2930,14 @@ private fun convertAiReportsToHtml(uiState: GameUiState, appVersion: String): St
         h1 { font-size: 1.8em; border-bottom: 2px solid #8B5CF6; padding-bottom: 8px; }
         h2 { font-size: 1.4em; color: #8B5CF6; margin-top: 1em; }
         h3 { font-size: 1.2em; color: #A78BFA; }
+        .panel-header {
+            font-size: 2em;
+            font-weight: bold;
+            color: #FF9800;
+            margin-bottom: 0.8em;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #FF9800;
+        }
         p { margin: 1em 0; }
         ul { padding-left: 20px; }
         li { margin: 0.5em 0; }
@@ -4237,7 +4260,7 @@ private fun AiAgentsReportsSelectionDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
                     text = "Choose AI agents for the report:",
@@ -4271,7 +4294,6 @@ private fun AiAgentsReportsSelectionDialog(
                 } else {
                     configuredAgents.sortedBy { it.name.lowercase() }.forEach { agent ->
                         val isSelected = selectedAgents.contains(agent.id)
-                        val providerColor = getAiServiceColor(agent.provider)
 
                         Row(
                             modifier = Modifier
@@ -4287,36 +4309,16 @@ private fun AiAgentsReportsSelectionDialog(
                                         selectedAgents + agent.id
                                     }
                                 }
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                .padding(horizontal = 12.dp, vertical = 4.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                // Provider color indicator
-                                Box(
-                                    modifier = Modifier
-                                        .size(20.dp)
-                                        .clip(CircleShape)
-                                        .background(providerColor)
-                                )
-
-                                Column {
-                                    Text(
-                                        text = agent.name,
-                                        color = Color.White,
-                                        fontWeight = FontWeight.Medium,
-                                        fontSize = 14.sp
-                                    )
-                                    Text(
-                                        text = "${agent.provider.displayName} / ${agent.model}",
-                                        color = Color(0xFF6B9BFF),
-                                        fontSize = 11.sp
-                                    )
-                                }
-                            }
+                            Text(
+                                text = agent.name,
+                                color = Color.White,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 14.sp
+                            )
 
                             Checkbox(
                                 checked = isSelected,

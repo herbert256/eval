@@ -2800,7 +2800,6 @@ fun AiAgentsScreen(
             aiSettings.agents.sortedBy { it.name.lowercase() }.forEach { agent ->
                 AgentListItem(
                     agent = agent,
-                    prompts = aiSettings.prompts,
                     onEdit = { editingAgent = agent },
                     onCopy = { copyingAgent = agent },
                     onDelete = { showDeleteConfirm = agent }
@@ -2899,13 +2898,10 @@ fun AiAgentsScreen(
 @Composable
 private fun AgentListItem(
     agent: AiAgent,
-    prompts: List<AiPrompt>,
     onEdit: () -> Unit,
     onCopy: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val isConfigured = agent.apiKey.isNotBlank()
-
     Card(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
@@ -2919,24 +2915,12 @@ private fun AgentListItem(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = agent.name,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.White
-                )
-                if (!isConfigured) {
-                    Text(
-                        text = "⚠",
-                        color = Color(0xFFFF9800),
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
+            Text(
+                text = agent.name,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White
+            )
             Row(
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
