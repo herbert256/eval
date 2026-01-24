@@ -21,7 +21,8 @@ import com.google.gson.JsonSyntaxException
  */
 data class ProviderConfigExport(
     val modelSource: String,  // "API" or "MANUAL"
-    val manualModels: List<String>
+    val manualModels: List<String>,
+    val apiKey: String = ""   // API key for the provider
 )
 
 /**
@@ -71,18 +72,18 @@ data class ApiKeyEntry(
  * Version 3: Exports providers (model config), prompts, and agents.
  */
 fun exportAiConfigToFile(context: Context, aiSettings: AiSettings) {
-    // Build providers map (model source and manual models per provider)
+    // Build providers map (model source, manual models, and API key per provider)
     val providers = mapOf(
-        "CHATGPT" to ProviderConfigExport(aiSettings.chatGptModelSource.name, aiSettings.chatGptManualModels),
-        "CLAUDE" to ProviderConfigExport(ModelSource.MANUAL.name, aiSettings.claudeManualModels),
-        "GEMINI" to ProviderConfigExport(aiSettings.geminiModelSource.name, aiSettings.geminiManualModels),
-        "GROK" to ProviderConfigExport(aiSettings.grokModelSource.name, aiSettings.grokManualModels),
-        "DEEPSEEK" to ProviderConfigExport(aiSettings.deepSeekModelSource.name, aiSettings.deepSeekManualModels),
-        "MISTRAL" to ProviderConfigExport(aiSettings.mistralModelSource.name, aiSettings.mistralManualModels),
-        "PERPLEXITY" to ProviderConfigExport(ModelSource.MANUAL.name, aiSettings.perplexityManualModels),
-        "TOGETHER" to ProviderConfigExport(aiSettings.togetherModelSource.name, aiSettings.togetherManualModels),
-        "OPENROUTER" to ProviderConfigExport(aiSettings.openRouterModelSource.name, aiSettings.openRouterManualModels),
-        "DUMMY" to ProviderConfigExport(ModelSource.MANUAL.name, aiSettings.dummyManualModels)
+        "CHATGPT" to ProviderConfigExport(aiSettings.chatGptModelSource.name, aiSettings.chatGptManualModels, aiSettings.chatGptApiKey),
+        "CLAUDE" to ProviderConfigExport(ModelSource.MANUAL.name, aiSettings.claudeManualModels, aiSettings.claudeApiKey),
+        "GEMINI" to ProviderConfigExport(aiSettings.geminiModelSource.name, aiSettings.geminiManualModels, aiSettings.geminiApiKey),
+        "GROK" to ProviderConfigExport(aiSettings.grokModelSource.name, aiSettings.grokManualModels, aiSettings.grokApiKey),
+        "DEEPSEEK" to ProviderConfigExport(aiSettings.deepSeekModelSource.name, aiSettings.deepSeekManualModels, aiSettings.deepSeekApiKey),
+        "MISTRAL" to ProviderConfigExport(aiSettings.mistralModelSource.name, aiSettings.mistralManualModels, aiSettings.mistralApiKey),
+        "PERPLEXITY" to ProviderConfigExport(ModelSource.MANUAL.name, aiSettings.perplexityManualModels, aiSettings.perplexityApiKey),
+        "TOGETHER" to ProviderConfigExport(aiSettings.togetherModelSource.name, aiSettings.togetherManualModels, aiSettings.togetherApiKey),
+        "OPENROUTER" to ProviderConfigExport(aiSettings.openRouterModelSource.name, aiSettings.openRouterManualModels, aiSettings.openRouterApiKey),
+        "DUMMY" to ProviderConfigExport(ModelSource.MANUAL.name, aiSettings.dummyManualModels, aiSettings.dummyApiKey)
     )
 
     // Convert prompts
@@ -250,60 +251,78 @@ fun importAiConfigFromClipboard(context: Context, currentSettings: AiSettings): 
             agents = agents
         )
 
-        // Update provider model sources and manual models
+        // Update provider model sources, manual models, and API keys
         export.providers["CHATGPT"]?.let { p ->
             settings = settings.copy(
                 chatGptModelSource = try { ModelSource.valueOf(p.modelSource) } catch (e: Exception) { ModelSource.API },
-                chatGptManualModels = p.manualModels
+                chatGptManualModels = p.manualModels,
+                chatGptApiKey = p.apiKey
             )
         }
         export.providers["CLAUDE"]?.let { p ->
-            settings = settings.copy(claudeManualModels = p.manualModels)
+            settings = settings.copy(
+                claudeManualModels = p.manualModels,
+                claudeApiKey = p.apiKey
+            )
         }
         export.providers["GEMINI"]?.let { p ->
             settings = settings.copy(
                 geminiModelSource = try { ModelSource.valueOf(p.modelSource) } catch (e: Exception) { ModelSource.API },
-                geminiManualModels = p.manualModels
+                geminiManualModels = p.manualModels,
+                geminiApiKey = p.apiKey
             )
         }
         export.providers["GROK"]?.let { p ->
             settings = settings.copy(
                 grokModelSource = try { ModelSource.valueOf(p.modelSource) } catch (e: Exception) { ModelSource.API },
-                grokManualModels = p.manualModels
+                grokManualModels = p.manualModels,
+                grokApiKey = p.apiKey
             )
         }
         export.providers["DEEPSEEK"]?.let { p ->
             settings = settings.copy(
                 deepSeekModelSource = try { ModelSource.valueOf(p.modelSource) } catch (e: Exception) { ModelSource.API },
-                deepSeekManualModels = p.manualModels
+                deepSeekManualModels = p.manualModels,
+                deepSeekApiKey = p.apiKey
             )
         }
         export.providers["MISTRAL"]?.let { p ->
             settings = settings.copy(
                 mistralModelSource = try { ModelSource.valueOf(p.modelSource) } catch (e: Exception) { ModelSource.API },
-                mistralManualModels = p.manualModels
+                mistralManualModels = p.manualModels,
+                mistralApiKey = p.apiKey
             )
         }
         export.providers["PERPLEXITY"]?.let { p ->
-            settings = settings.copy(perplexityManualModels = p.manualModels)
+            settings = settings.copy(
+                perplexityManualModels = p.manualModels,
+                perplexityApiKey = p.apiKey
+            )
         }
         export.providers["TOGETHER"]?.let { p ->
             settings = settings.copy(
                 togetherModelSource = try { ModelSource.valueOf(p.modelSource) } catch (e: Exception) { ModelSource.API },
-                togetherManualModels = p.manualModels
+                togetherManualModels = p.manualModels,
+                togetherApiKey = p.apiKey
             )
         }
         export.providers["OPENROUTER"]?.let { p ->
             settings = settings.copy(
                 openRouterModelSource = try { ModelSource.valueOf(p.modelSource) } catch (e: Exception) { ModelSource.API },
-                openRouterManualModels = p.manualModels
+                openRouterManualModels = p.manualModels,
+                openRouterApiKey = p.apiKey
             )
         }
         export.providers["DUMMY"]?.let { p ->
-            settings = settings.copy(dummyManualModels = p.manualModels)
+            settings = settings.copy(
+                dummyManualModels = p.manualModels,
+                dummyApiKey = p.apiKey
+            )
         }
 
-        Toast.makeText(context, "Imported ${prompts.size} prompts and ${agents.size} agents", Toast.LENGTH_SHORT).show()
+        // Count imported API keys
+        val importedApiKeys = export.providers.values.count { it.apiKey.isNotBlank() }
+        Toast.makeText(context, "Imported ${prompts.size} prompts, ${agents.size} agents, $importedApiKeys API keys", Toast.LENGTH_SHORT).show()
         settings
     } catch (e: JsonSyntaxException) {
         Toast.makeText(context, "Invalid AI configuration format", Toast.LENGTH_SHORT).show()
@@ -349,7 +368,7 @@ fun ImportAiConfigDialog(
                 )
 
                 Text(
-                    text = "Warning: This will replace your prompts, agents, and provider settings.",
+                    text = "Warning: This will replace your prompts, agents, API keys, and provider settings.",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFFFF9800)
                 )
