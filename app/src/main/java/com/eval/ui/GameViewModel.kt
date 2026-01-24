@@ -1551,6 +1551,111 @@ ${opening.moves} *
         )
     }
 
+    // ===== GENERIC AI PROMPT FEATURE =====
+
+    fun showGenericAiPromptScreen() {
+        _uiState.value = _uiState.value.copy(
+            showGenericAiPromptScreen = true,
+            genericAiPromptTitle = "",
+            genericAiPromptText = ""
+        )
+    }
+
+    fun hideGenericAiPromptScreen() {
+        _uiState.value = _uiState.value.copy(
+            showGenericAiPromptScreen = false
+        )
+    }
+
+    fun showGenericAiAgentSelection(title: String, prompt: String) {
+        _uiState.value = _uiState.value.copy(
+            showGenericAiPromptScreen = false,
+            showGenericAiAgentSelection = true,
+            genericAiPromptTitle = title,
+            genericAiPromptText = prompt
+        )
+    }
+
+    fun dismissGenericAiAgentSelection() {
+        _uiState.value = _uiState.value.copy(
+            showGenericAiAgentSelection = false
+        )
+    }
+
+    fun generateGenericAiReports(selectedAgentIds: Set<String>) {
+        val aiSettings = _uiState.value.aiSettings
+        val prompt = _uiState.value.genericAiPromptText
+
+        // Get agents with configured API keys
+        val agentsToCall = selectedAgentIds.mapNotNull { agentId ->
+            aiSettings.agents.find { it.id == agentId && it.apiKey.isNotBlank() }
+        }
+
+        if (agentsToCall.isEmpty()) {
+            _uiState.value = _uiState.value.copy(
+                errorMessage = "No configured agents selected. Please configure agents in Settings > AI Setup > AI Agents."
+            )
+            return
+        }
+
+        _uiState.value = _uiState.value.copy(
+            showGenericAiAgentSelection = false,
+            showGenericAiReportsDialog = true,
+            genericAiReportsProgress = 0,
+            genericAiReportsTotal = agentsToCall.size,
+            genericAiReportsAgentResults = emptyMap(),
+            genericAiReportsSelectedAgents = selectedAgentIds
+        )
+
+        viewModelScope.launch {
+            val results = mutableMapOf<String, AiAnalysisResponse>()
+            val mutex = Mutex()
+            var completedCount = 0
+
+            // Launch all API calls in parallel
+            val deferredResults = agentsToCall.map { agent ->
+                async {
+                    var result = aiAnalysisRepository.analyzePlayerWithAgent(
+                        agent = agent,
+                        prompt = prompt
+                    )
+
+                    // If failed, retry once after 1 second delay
+                    if (!result.isSuccess) {
+                        kotlinx.coroutines.delay(1000)
+                        result = aiAnalysisRepository.analyzePlayerWithAgent(
+                            agent = agent,
+                            prompt = prompt
+                        )
+                    }
+
+                    mutex.withLock {
+                        results[agent.id] = result
+                        completedCount++
+                        _uiState.value = _uiState.value.copy(
+                            genericAiReportsProgress = completedCount,
+                            genericAiReportsAgentResults = results.toMap()
+                        )
+                    }
+                }
+            }
+
+            deferredResults.awaitAll()
+        }
+    }
+
+    fun dismissGenericAiReportsDialog() {
+        _uiState.value = _uiState.value.copy(
+            showGenericAiReportsDialog = false,
+            genericAiReportsProgress = 0,
+            genericAiReportsTotal = 0,
+            genericAiReportsSelectedAgents = emptySet(),
+            genericAiReportsAgentResults = emptyMap(),
+            genericAiPromptTitle = "",
+            genericAiPromptText = ""
+        )
+    }
+
     // ===== AI MODEL FETCHING =====
     fun fetchChatGptModels(apiKey: String) {
         if (apiKey.isBlank()) return

@@ -556,6 +556,121 @@ fun GameScreen(
         )
     }
 
+    // Show Generic AI Prompt screen (full screen)
+    if (uiState.showGenericAiPromptScreen) {
+        GenericAiPromptScreen(
+            onSubmit = { title, prompt ->
+                viewModel.showGenericAiAgentSelection(title, prompt)
+            },
+            onDismiss = { viewModel.hideGenericAiPromptScreen() }
+        )
+        return
+    }
+
+    // Show Generic AI Agent selection dialog
+    if (uiState.showGenericAiAgentSelection) {
+        AiAgentsReportsSelectionDialog(
+            aiSettings = uiState.aiSettings,
+            savedAgentIds = viewModel.loadAiReportAgents(),
+            onGenerate = { selectedAgentIds ->
+                viewModel.saveAiReportAgents(selectedAgentIds)
+                viewModel.generateGenericAiReports(selectedAgentIds)
+            },
+            onDismiss = { viewModel.dismissGenericAiAgentSelection() },
+            title = "Select AI Agents"
+        )
+    }
+
+    // Show Generic AI Reports generation dialog
+    if (uiState.showGenericAiReportsDialog) {
+        val isComplete = uiState.genericAiReportsProgress >= uiState.genericAiReportsTotal && uiState.genericAiReportsTotal > 0
+        AlertDialog(
+            onDismissRequest = { if (isComplete) viewModel.dismissGenericAiReportsDialog() },
+            title = {
+                Text(
+                    text = if (isComplete) "AI Reports Ready" else "Generating AI Reports",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    // Show all selected agents with their status
+                    uiState.genericAiReportsSelectedAgents.mapNotNull { agentId ->
+                        uiState.aiSettings.getAgentById(agentId)
+                    }.sortedBy { it.name.lowercase() }.forEach { agent ->
+                        val result = uiState.genericAiReportsAgentResults[agent.id]
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(agent.name, fontWeight = FontWeight.Medium)
+                            when {
+                                result == null -> {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp,
+                                        color = Color.Gray
+                                    )
+                                }
+                                result.isSuccess -> {
+                                    Text(
+                                        text = "✓",
+                                        color = Color(0xFF4CAF50),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                else -> {
+                                    Text(
+                                        text = "✗",
+                                        color = Color(0xFFF44336),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                if (isComplete) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                shareGenericAiReports(context, uiState)
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF4CAF50)
+                            )
+                        ) {
+                            Text("Share")
+                        }
+                        Button(
+                            onClick = {
+                                openGenericAiReportsInChrome(context, uiState)
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF8B5CF6)
+                            )
+                        ) {
+                            Text("View in Chrome")
+                        }
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissGenericAiReportsDialog() }) {
+                    Text(if (isComplete) "Close" else "Cancel")
+                }
+            }
+        )
+    }
+
     // Show AI analysis screen (full screen)
     if (uiState.showAiAnalysisDialog) {
         AiAnalysisScreen(
@@ -716,6 +831,15 @@ fun GameScreen(
                         ) {
                             Text("\uD83D\uDC1E", fontSize = 24.sp, color = Color.White, modifier = Modifier.offset(y = (-3).dp))  // Lady beetle for debug
                         }
+                    }
+                    // AI prompt icon
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clickable { viewModel.showGenericAiPromptScreen() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("🤖", fontSize = 24.sp, color = Color.White, modifier = Modifier.offset(y = (-3).dp))
                     }
                     // Settings and help icons
                     Box(
@@ -2635,6 +2759,374 @@ private fun convertPlayerAiReportsToHtml(uiState: GameUiState, appVersion: Strin
     </div>
 
     $panelsHtml
+
+    <div class="generated-footer">
+        Generated by Eval $appVersion on $generatedDate
+    </div>
+
+    <script>
+    function showTab(serviceName) {
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('active'));
+        document.querySelector('.tab-btn[onclick*="' + serviceName + '"]').classList.add('active');
+        document.getElementById('panel-' + serviceName).classList.add('active');
+    }
+    </script>
+</body>
+</html>
+""".trimIndent()
+}
+
+// ============================================================================
+// GENERIC AI PROMPT FEATURE
+// ============================================================================
+
+/**
+ * Full-screen for entering a generic AI prompt.
+ */
+@Composable
+private fun GenericAiPromptScreen(
+    onSubmit: (String, String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var title by remember { mutableStateOf("") }
+    var prompt by remember { mutableStateOf("") }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(16.dp)
+    ) {
+        // Header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Enter AI Prompt",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = Color(0xFF6B9BFF))
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Title field
+        OutlinedTextField(
+            value = title,
+            onValueChange = { title = it },
+            label = { Text("Title") },
+            placeholder = { Text("Enter a title for the report") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Color(0xFF8B5CF6),
+                unfocusedBorderColor = Color(0xFF444444),
+                focusedLabelColor = Color(0xFF8B5CF6),
+                unfocusedLabelColor = Color.Gray,
+                cursorColor = Color.White
+            )
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Prompt field
+        OutlinedTextField(
+            value = prompt,
+            onValueChange = { prompt = it },
+            label = { Text("AI Prompt") },
+            placeholder = { Text("Enter your prompt for the AI...") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            minLines = 10,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Color(0xFF8B5CF6),
+                unfocusedBorderColor = Color(0xFF444444),
+                focusedLabelColor = Color(0xFF8B5CF6),
+                unfocusedLabelColor = Color.Gray,
+                cursorColor = Color.White
+            )
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Submit button
+        Button(
+            onClick = {
+                if (title.isNotBlank() && prompt.isNotBlank()) {
+                    onSubmit(title, prompt)
+                }
+            },
+            enabled = title.isNotBlank() && prompt.isNotBlank(),
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF8B5CF6)
+            )
+        ) {
+            Text("Submit", fontSize = 16.sp)
+        }
+    }
+}
+
+/**
+ * Opens generic AI reports in Chrome browser.
+ */
+private fun openGenericAiReportsInChrome(context: android.content.Context, uiState: GameUiState) {
+    try {
+        val appVersion = try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "unknown"
+        } catch (e: Exception) { "unknown" }
+        val html = convertGenericAiReportsToHtml(uiState, appVersion)
+
+        val cacheDir = java.io.File(context.cacheDir, "ai_analysis")
+        if (!cacheDir.exists()) {
+            cacheDir.mkdirs()
+        }
+
+        val htmlFile = java.io.File(cacheDir, "generic_ai_reports.html")
+        htmlFile.writeText(html)
+
+        val contentUri = androidx.core.content.FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            htmlFile
+        )
+
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(contentUri, "text/html")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        context.startActivity(intent)
+    } catch (e: Exception) {
+        android.widget.Toast.makeText(
+            context,
+            "Failed to open in Chrome: ${e.message}",
+            android.widget.Toast.LENGTH_SHORT
+        ).show()
+    }
+}
+
+/**
+ * Shares the generic AI reports HTML via Android share sheet.
+ */
+private fun shareGenericAiReports(context: android.content.Context, uiState: GameUiState) {
+    try {
+        val appVersion = try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "unknown"
+        } catch (e: Exception) { "unknown" }
+        val html = convertGenericAiReportsToHtml(uiState, appVersion)
+
+        val cacheDir = java.io.File(context.cacheDir, "ai_analysis")
+        if (!cacheDir.exists()) {
+            cacheDir.mkdirs()
+        }
+
+        val title = uiState.genericAiPromptTitle
+
+        val htmlFile = java.io.File(cacheDir, "generic_ai_reports.html")
+        htmlFile.writeText(html)
+
+        val contentUri = androidx.core.content.FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            htmlFile
+        )
+
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/html"
+            putExtra(Intent.EXTRA_SUBJECT, "AI Report - $title")
+            putExtra(Intent.EXTRA_TEXT, "AI analysis report: $title.\n\nOpen the attached HTML file in a browser to view the report.")
+            putExtra(Intent.EXTRA_STREAM, contentUri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        context.startActivity(Intent.createChooser(intent, "Share AI Report"))
+    } catch (e: Exception) {
+        android.widget.Toast.makeText(
+            context,
+            "Failed to share: ${e.message}",
+            android.widget.Toast.LENGTH_SHORT
+        ).show()
+    }
+}
+
+/**
+ * Converts generic AI analysis results to a tabbed HTML document.
+ */
+private fun convertGenericAiReportsToHtml(uiState: GameUiState, appVersion: String): String {
+    val generatedDate = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+        .format(java.util.Date())
+    val title = uiState.genericAiPromptTitle
+    val prompt = uiState.genericAiPromptText
+    val aiSettings = uiState.aiSettings
+
+    // Get agents with results, sorted by name
+    val agentsWithResults = uiState.genericAiReportsSelectedAgents.mapNotNull { agentId ->
+        val agent = aiSettings.getAgentById(agentId)
+        val result = uiState.genericAiReportsAgentResults[agentId]
+        if (agent != null && result != null) agent to result else null
+    }.sortedBy { it.first.name.lowercase() }
+
+    // Generate tabs HTML (show agent name)
+    val tabsHtml = agentsWithResults.mapIndexed { index, (agent, _) ->
+        val isActive = if (index == 0) "active" else ""
+        """<button class="tab-btn $isActive" onclick="showTab('${agent.id}')">${escapeHtml(agent.name)}</button>"""
+    }.joinToString("\n")
+
+    // Generate content panels for each agent (no prompt per panel)
+    val panelsHtml = agentsWithResults.mapIndexed { index, (agent, result) ->
+        val isActive = if (index == 0) "active" else ""
+        val providerWithModel = "${agent.provider.displayName} (${agent.model})"
+        val content = if (result.isSuccess && result.analysis != null) {
+            convertMarkdownContentToHtml(result.analysis)
+        } else {
+            """<pre class="error">${escapeHtml(result.error ?: "Unknown error")}</pre>"""
+        }
+        """
+        <div id="panel-${agent.id}" class="tab-panel $isActive">
+            <div class="panel-header">${escapeHtml(providerWithModel)}</div>
+            $content
+        </div>
+        """
+    }.joinToString("\n")
+
+    return """
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Report - $title</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            padding: 16px;
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+        }
+        h1, h2, h3 {
+            color: #ffffff;
+            margin-top: 1.5em;
+            margin-bottom: 0.5em;
+        }
+        h1 { font-size: 1.8em; border-bottom: 2px solid #8B5CF6; padding-bottom: 8px; }
+        h2 { font-size: 1.4em; color: #8B5CF6; margin-top: 1em; }
+        h3 { font-size: 1.2em; color: #A78BFA; }
+        .panel-header {
+            font-size: 2em;
+            font-weight: bold;
+            color: #FF9800;
+            margin-bottom: 0.8em;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #FF9800;
+        }
+        p { margin: 1em 0; }
+        ul { padding-left: 20px; }
+        li { margin: 0.5em 0; }
+        strong { color: #ffffff; }
+        em { color: #b0b0b0; }
+
+        /* Tabs */
+        .tabs-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        .tab-btn {
+            padding: 8px 16px;
+            background: #2d2d2d;
+            border: 1px solid #444;
+            border-radius: 6px;
+            color: #aaa;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        .tab-btn:hover { background: #3d3d3d; color: #fff; }
+        .tab-btn.active {
+            background: #8B5CF6;
+            border-color: #8B5CF6;
+            color: #fff;
+        }
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
+        /* Prompt section */
+        .prompt-section {
+            margin-top: 40px;
+            padding: 16px;
+            background: #252525;
+            border-radius: 8px;
+            border: 1px solid #333;
+        }
+        .prompt-section h3 {
+            margin-top: 0;
+            color: #8B5CF6;
+        }
+        .prompt-text {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 12px;
+            color: #b0b0b0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: monospace;
+            font-size: 13px;
+        }
+
+        /* Error styling */
+        .error {
+            background: #2d1f1f;
+            border: 1px solid #5c2626;
+            border-radius: 8px;
+            padding: 16px;
+            color: #ff6b6b;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: monospace;
+            font-size: 13px;
+        }
+
+        /* Footer */
+        .generated-footer {
+            margin-top: 40px;
+            padding-top: 16px;
+            border-top: 1px solid #444;
+            text-align: center;
+            color: #666;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>${escapeHtml(title)}</h1>
+
+    <!-- AI Analysis Tabs -->
+    <div class="tabs-container">
+        $tabsHtml
+    </div>
+
+    $panelsHtml
+
+    <!-- Prompt used (shown once at the bottom) -->
+    <div class="prompt-section">
+        <h3>Prompt Used</h3>
+        <pre class="prompt-text">${escapeHtml(prompt)}</pre>
+    </div>
 
     <div class="generated-footer">
         Generated by Eval $appVersion on $generatedDate
