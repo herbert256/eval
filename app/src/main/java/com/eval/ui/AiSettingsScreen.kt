@@ -147,6 +147,8 @@ data class AiSettings(
     val openRouterOtherPlayerPrompt: String = DEFAULT_OTHER_PLAYER_PROMPT,
     val openRouterModelSource: ModelSource = ModelSource.API,
     val openRouterManualModels: List<String> = emptyList(),
+    val dummyApiKey: String = "",
+    val dummyModel: String = "dummy-model",
     val dummyManualModels: List<String> = listOf("dummy-model"),
     // New three-tier architecture
     val prompts: List<AiPrompt> = emptyList(),
@@ -163,7 +165,7 @@ data class AiSettings(
             AiService.PERPLEXITY -> perplexityApiKey
             AiService.TOGETHER -> togetherApiKey
             AiService.OPENROUTER -> openRouterApiKey
-            AiService.DUMMY -> ""  // API key comes from agent
+            AiService.DUMMY -> dummyApiKey
         }
     }
 
@@ -178,7 +180,7 @@ data class AiSettings(
             AiService.PERPLEXITY -> perplexityModel
             AiService.TOGETHER -> togetherModel
             AiService.OPENROUTER -> openRouterModel
-            AiService.DUMMY -> "dummy-model"
+            AiService.DUMMY -> dummyModel
         }
     }
 
@@ -1397,6 +1399,7 @@ fun DummySettingsScreen(
     onBackToGame: () -> Unit,
     onSave: (AiSettings) -> Unit
 ) {
+    var apiKey by remember { mutableStateOf(aiSettings.dummyApiKey) }
     var manualModels by remember { mutableStateOf(aiSettings.dummyManualModels) }
 
     Column(
@@ -1424,7 +1427,7 @@ fun DummySettingsScreen(
                     .background(Color(0xFF888888), shape = MaterialTheme.shapes.small)
             )
             Text(
-                text = "For testing",
+                text = "For testing (stub provider)",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color(0xFFAAAAAA)
             )
@@ -1444,13 +1447,13 @@ fun DummySettingsScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "Test Provider",
+                    text = "Stub Provider",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White
                 )
                 Text(
-                    text = "Returns a test response without making API calls. Create an Agent using this provider to use it.",
+                    text = "Returns a fake response without making actual API calls. Useful for testing.",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFFAAAAAA)
                 )
@@ -1458,6 +1461,36 @@ fun DummySettingsScreen(
                     text = "Response: \"Hi, greetings from AI\"",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFF00E676)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // API Key section
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "API Key",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White
+                )
+
+                ApiKeyInputSection(
+                    apiKey = apiKey,
+                    onApiKeyChange = {
+                        apiKey = it
+                        onSave(aiSettings.copy(dummyApiKey = it))
+                    }
                 )
             }
         }
@@ -2982,15 +3015,22 @@ private fun AgentEditDialog(
     val isEditing = agent != null
     val coroutineScope = rememberCoroutineScope()
 
+    // Helper to find prompt ID by name, with fallback to first prompt
+    fun findPromptId(name: String): String {
+        return aiSettings.prompts.find { it.name == name }?.id
+            ?: aiSettings.prompts.firstOrNull()?.id
+            ?: ""
+    }
+
     // State
     var name by remember { mutableStateOf(agent?.name ?: "") }
     var selectedProvider by remember { mutableStateOf(agent?.provider ?: AiService.CHATGPT) }
     var model by remember { mutableStateOf(agent?.model ?: "gpt-4o-mini") }
-    var apiKey by remember { mutableStateOf(agent?.apiKey ?: "") }
+    var apiKey by remember { mutableStateOf(agent?.apiKey ?: aiSettings.getApiKey(agent?.provider ?: AiService.CHATGPT)) }
     var showKey by remember { mutableStateOf(false) }
-    var gamePromptId by remember { mutableStateOf(agent?.gamePromptId ?: aiSettings.prompts.firstOrNull()?.id ?: "") }
-    var serverPlayerPromptId by remember { mutableStateOf(agent?.serverPlayerPromptId ?: aiSettings.prompts.firstOrNull()?.id ?: "") }
-    var otherPlayerPromptId by remember { mutableStateOf(agent?.otherPlayerPromptId ?: aiSettings.prompts.firstOrNull()?.id ?: "") }
+    var gamePromptId by remember { mutableStateOf(agent?.gamePromptId ?: findPromptId(DEFAULT_GAME_PROMPT_NAME)) }
+    var serverPlayerPromptId by remember { mutableStateOf(agent?.serverPlayerPromptId ?: findPromptId(DEFAULT_SERVER_PLAYER_PROMPT_NAME)) }
+    var otherPlayerPromptId by remember { mutableStateOf(agent?.otherPlayerPromptId ?: findPromptId(DEFAULT_OTHER_PLAYER_PROMPT_NAME)) }
     var isTesting by remember { mutableStateOf(false) }
     var testError by remember { mutableStateOf<String?>(null) }
 
@@ -3036,10 +3076,14 @@ private fun AgentEditDialog(
         AiService.DUMMY -> aiSettings.dummyManualModels.ifEmpty { listOf("dummy-model") }
     }
 
-    // Update model when provider changes
+    // Update model and API key when provider changes
     LaunchedEffect(selectedProvider) {
         if (!isEditing || agent?.provider != selectedProvider) {
             model = modelsForProvider.firstOrNull() ?: getDefaultModelForProvider(selectedProvider)
+            // For new agents, also update API key from provider settings
+            if (!isEditing) {
+                apiKey = aiSettings.getApiKey(selectedProvider)
+            }
         }
     }
 

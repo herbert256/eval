@@ -370,6 +370,8 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             openRouterOtherPlayerPrompt = prefs.getString(KEY_AI_OPENROUTER_OTHER_PLAYER_PROMPT, DEFAULT_OTHER_PLAYER_PROMPT) ?: DEFAULT_OTHER_PLAYER_PROMPT,
             openRouterModelSource = loadModelSource(KEY_AI_OPENROUTER_MODEL_SOURCE, ModelSource.API),
             openRouterManualModels = loadManualModels(KEY_AI_OPENROUTER_MANUAL_MODELS),
+            dummyApiKey = prefs.getString(KEY_AI_DUMMY_API_KEY, "") ?: "",
+            dummyModel = prefs.getString(KEY_AI_DUMMY_MODEL, "dummy-model") ?: "dummy-model",
             dummyManualModels = loadManualModelsWithDefault(KEY_AI_DUMMY_MANUAL_MODELS, listOf("dummy-model"))
         )
     }
@@ -468,6 +470,8 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             .putString(KEY_AI_OPENROUTER_OTHER_PLAYER_PROMPT, settings.openRouterOtherPlayerPrompt)
             .putString(KEY_AI_OPENROUTER_MODEL_SOURCE, settings.openRouterModelSource.name)
             .putString(KEY_AI_OPENROUTER_MANUAL_MODELS, gson.toJson(settings.openRouterManualModels))
+            .putString(KEY_AI_DUMMY_API_KEY, settings.dummyApiKey)
+            .putString(KEY_AI_DUMMY_MODEL, settings.dummyModel)
             .putString(KEY_AI_DUMMY_MANUAL_MODELS, gson.toJson(settings.dummyManualModels))
             .apply()
 
@@ -873,6 +877,8 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         private const val KEY_AI_OPENROUTER_API_KEY = "ai_openrouter_api_key"
         private const val KEY_AI_OPENROUTER_MODEL = "ai_openrouter_model"
         private const val KEY_AI_OPENROUTER_PROMPT = "ai_openrouter_prompt"
+        private const val KEY_AI_DUMMY_API_KEY = "ai_dummy_api_key"
+        private const val KEY_AI_DUMMY_MODEL = "ai_dummy_model"
         private const val KEY_AI_DUMMY_MANUAL_MODELS = "ai_dummy_manual_models"
 
         // AI prompts - Server player prompts
