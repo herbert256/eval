@@ -82,12 +82,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val savedChessComUsername: String
         get() = settingsPrefs.savedChessComUsername
 
-    val savedActiveServer: ChessServer?
-        get() = settingsPrefs.savedActiveServer
-
-    val savedActivePlayer: String?
-        get() = settingsPrefs.savedActivePlayer
-
     private fun loadStockfishSettings(): StockfishSettings = settingsPrefs.loadStockfishSettings()
     private fun saveStockfishSettings(settings: StockfishSettings) = settingsPrefs.saveStockfishSettings(settings)
     private fun loadBoardLayoutSettings(): BoardLayoutSettings = settingsPrefs.loadBoardLayoutSettings()
@@ -215,7 +209,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val aiSettings = loadAiSettings()
             val lichessMaxGames = settingsPrefs.lichessMaxGames
             val chessComMaxGames = settingsPrefs.chessComMaxGames
-            val hasActive = savedActiveServer != null && savedActivePlayer != null
             val retrievesList = gameStorage.loadRetrievesList()
             val hasPreviousRetrieves = retrievesList.isNotEmpty()
             val hasAnalysedGames = gameStorage.hasAnalysedGames()
@@ -240,7 +233,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 aiSettings = aiSettings,
                 lichessMaxGames = lichessMaxGames,
                 chessComMaxGames = chessComMaxGames,
-                hasActive = hasActive,
                 hasPreviousRetrieves = hasPreviousRetrieves,
                 previousRetrievesList = retrievesList,
                 hasAnalysedGames = hasAnalysedGames,
@@ -318,7 +310,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val aiSettings = loadAiSettings()
         val lichessMaxGames = settingsPrefs.lichessMaxGames
         val chessComMaxGames = settingsPrefs.chessComMaxGames
-        val hasActive = savedActiveServer != null && savedActivePlayer != null
 
         // Load cached AI models
         val cachedChatGptModels = settingsPrefs.loadCachedChatGptModels()
@@ -340,7 +331,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             aiSettings = aiSettings,
             lichessMaxGames = lichessMaxGames,
             chessComMaxGames = chessComMaxGames,
-            hasActive = hasActive,
             playerGamesPageSize = generalSettings.paginationPageSize,
             gameSelectionPageSize = generalSettings.paginationPageSize,
             availableChatGptModels = cachedChatGptModels,
@@ -475,7 +465,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun dismissStreamers() = contentSourceManager.dismissStreamers()
 
-    fun showPlayerInfo(username: String) = contentSourceManager.showPlayerInfo(username, _uiState.value.activeServer)
+    fun showPlayerInfo(username: String) = contentSourceManager.showPlayerInfo(username, null)
     fun showPlayerInfo(username: String, server: ChessServer) = contentSourceManager.showPlayerInfoWithServer(username, server)
     fun clearGoogleSearch() = contentSourceManager.clearGoogleSearch()
     fun nextPlayerGamesPage() = contentSourceManager.nextPlayerGamesPage()
@@ -519,9 +509,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             moveDetails = _uiState.value.moveDetails,
             previewScores = _uiState.value.previewScores,
             analyseScores = _uiState.value.analyseScores,
-            openingName = _uiState.value.openingName,
-            activePlayer = _uiState.value.activePlayer,
-            activeServer = _uiState.value.activeServer
+            openingName = _uiState.value.openingName
         )
 
         _uiState.value = _uiState.value.copy(hasAnalysedGames = true)
@@ -969,7 +957,6 @@ ${opening.moves} *
         val isWhiteToMove = board.getTurn() == com.eval.chess.PieceColor.WHITE
 
         // Hide retrieve screen and go directly to Manual stage
-        // Clear activePlayer and activeServer for FEN positions
         _uiState.value = _uiState.value.copy(
             showRetrieveScreen = false,
             isLoading = false,
@@ -991,9 +978,7 @@ ${opening.moves} *
             exploringLineMoveIndex = -1,
             savedGameMoveIndex = -1,
             analysisResult = null,
-            analysisResultFen = null,
-            activePlayer = null,
-            activeServer = null
+            analysisResultFen = null
         )
 
         // Configure Stockfish for Manual stage and start analysis

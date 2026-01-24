@@ -136,9 +136,7 @@ class GameStorageManager(
         moveDetails: List<MoveDetails>,
         previewScores: Map<Int, MoveScore>,
         analyseScores: Map<Int, MoveScore>,
-        openingName: String?,
-        activePlayer: String?,
-        activeServer: ChessServer?
+        openingName: String?
     ) {
         // Load existing analysed games
         val analysedGames = loadAnalysedGames().toMutableList()
@@ -166,9 +164,7 @@ class GameStorageManager(
             previewScores = previewScores,
             analyseScores = analyseScores,
             openingName = openingName,
-            speed = game.speed,
-            activePlayer = activePlayer,
-            activeServer = activeServer
+            speed = game.speed
         )
 
         // Remove any duplicate (same white, black, and PGN)

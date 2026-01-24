@@ -31,19 +31,6 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
     val savedChessComUsername: String
         get() = prefs.getString(KEY_CHESSCOM_USERNAME, "magnuscarlsen") ?: "magnuscarlsen"
 
-    val savedActiveServer: ChessServer?
-        get() {
-            val serverName = prefs.getString(KEY_ACTIVE_SERVER, null) ?: return null
-            return try {
-                ChessServer.valueOf(serverName)
-            } catch (e: IllegalArgumentException) {
-                null
-            }
-        }
-
-    val savedActivePlayer: String?
-        get() = prefs.getString(KEY_ACTIVE_PLAYER, null)
-
     val lichessMaxGames: Int
         get() = prefs.getInt(KEY_LICHESS_MAX_GAMES, 10)
 
@@ -68,13 +55,6 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
 
     fun saveChessComMaxGames(max: Int) {
         prefs.edit().putInt(KEY_CHESSCOM_MAX_GAMES, max).apply()
-    }
-
-    fun saveActivePlayerAndServer(player: String, server: ChessServer) {
-        prefs.edit()
-            .putString(KEY_ACTIVE_SERVER, server.name)
-            .putString(KEY_ACTIVE_PLAYER, player)
-            .apply()
     }
 
     // ============================================================================
@@ -791,10 +771,6 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         // Chess.com settings
         private const val KEY_CHESSCOM_USERNAME = "chesscom_username"
         private const val KEY_CHESSCOM_MAX_GAMES = "chesscom_max_games"
-
-        // Active player/server for reload button
-        private const val KEY_ACTIVE_SERVER = "active_server"
-        private const val KEY_ACTIVE_PLAYER = "active_player"
 
         // Retrieved games storage - list of lists
         const val KEY_RETRIEVES_LIST = "retrieves_list"

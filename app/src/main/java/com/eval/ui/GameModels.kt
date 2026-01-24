@@ -246,9 +246,7 @@ data class AnalysedGame(
     val previewScores: Map<Int, MoveScore>,   // Preview stage scores (graph 1)
     val analyseScores: Map<Int, MoveScore>,   // Analyse stage scores (graph 2)
     val openingName: String? = null,          // Opening name if available
-    val speed: String? = null,                // Game speed (bullet, blitz, etc.)
-    val activePlayer: String? = null,         // Username who was viewing (for score perspective)
-    val activeServer: ChessServer? = null     // Chess server (Lichess/Chess.com) for the active player
+    val speed: String? = null                 // Game speed (bullet, blitz, etc.)
 )
 
 // Entry in the list of previous game retrieves
@@ -278,9 +276,6 @@ data class GameUiState(
     val stockfishReady: Boolean = false,
     val flippedBoard: Boolean = false,
     val userPlayedBlack: Boolean = false,  // True if active player played black (for score perspective)
-    val activePlayer: String? = null,      // Username of the active player (for score perspective)
-    val activeServer: ChessServer? = null, // Chess server (Lichess/Chess.com) for the active player
-    val activePlayerError: String? = null, // Error message if activePlayer validation fails
     val stockfishSettings: StockfishSettings = StockfishSettings(),
     val boardLayoutSettings: BoardLayoutSettings = BoardLayoutSettings(),
     val graphSettings: GraphSettings = GraphSettings(),
@@ -304,8 +299,6 @@ data class GameUiState(
     val lichessMaxGames: Int = 10,
     // Chess.com settings
     val chessComMaxGames: Int = 10,
-    // Active player/server for reload button
-    val hasActive: Boolean = false,
     // General settings (fullScreenMode is stored here, not persistent)
     val generalSettings: GeneralSettings = GeneralSettings(),
     // Game selection info for full screen display
@@ -422,7 +415,7 @@ data class GameUiState(
     val pgnGamesByEvent: Map<String, List<LichessGame>> = emptyMap(),
     val selectedPgnEvent: String? = null,
     val pgnGamesForSelectedEvent: List<LichessGame> = emptyList(),
-    // Google search for player (when activeServer is null)
+    // Google search for player (for PGN file games without server info)
     val googleSearchPlayerName: String? = null,
     // GIF export state
     val gifExportProgress: Float? = null,

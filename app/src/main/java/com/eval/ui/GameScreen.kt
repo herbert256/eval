@@ -146,7 +146,7 @@ fun GameScreenContent(
         }
     }
 
-    // Handle Google search for player when activeServer is null (PGN file games)
+    // Handle Google search for player (for PGN file games without server info)
     LaunchedEffect(uiState.googleSearchPlayerName) {
         uiState.googleSearchPlayerName?.let { playerName ->
             val searchQuery = "chess player $playerName"
@@ -680,8 +680,8 @@ fun GameScreenContent(
                         fontSize = 44,
                         offsetY = -12
                     )
-                    // Reload last game (only when game loaded and Active stored)
-                    if (uiState.game != null && uiState.hasActive) {
+                    // Reload last game (only when game is loaded)
+                    if (uiState.game != null) {
                         TitleBarIcon(
                             icon = "↻",
                             onClick = { viewModel.reloadLastGame() },
@@ -800,8 +800,8 @@ fun GameScreenContent(
                 }
             }
 
-            // First card - only shown when no Active is stored
-            if (!uiState.hasActive) {
+            // First card - only shown when no game is loaded
+            if (uiState.game == null) {
                 Card(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant

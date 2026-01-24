@@ -41,12 +41,6 @@ internal class GameLoader(
     val savedChessComUsername: String
         get() = settingsPrefs.savedChessComUsername
 
-    val savedActiveServer: ChessServer?
-        get() = settingsPrefs.savedActiveServer
-
-    val savedActivePlayer: String?
-        get() = settingsPrefs.savedActivePlayer
-
     /**
      * Automatically load a game and start analysis on app startup.
      */
@@ -58,28 +52,18 @@ internal class GameLoader(
             loadAnalysedGameDirectly(storedGame)
             return
         }
-
-        android.util.Log.d("GameLoader", "autoLoadLastGame: No stored game, checking server/player")
-        val server = savedActiveServer
-        val username = savedActivePlayer
-        if (server == null || username == null) {
-            android.util.Log.d("GameLoader", "autoLoadLastGame: No server ($server) or username ($username)")
-            return
-        }
-
-        android.util.Log.d("GameLoader", "autoLoadLastGame: Fetching from server $server for $username")
-        fetchLastGameFromServer(server, username)
+        android.util.Log.d("GameLoader", "autoLoadLastGame: No stored game found")
     }
 
     /**
-     * Reload the last game from the stored Active player/server.
+     * Reload the last stored analysed game.
      */
     fun reloadLastGame() {
-        val server = savedActiveServer ?: return
-        val player = savedActivePlayer ?: return
-
         viewModelScope.launch {
-            fetchLastGameFromServer(server, player)
+            val storedGame = gameStorage.loadCurrentAnalysedGame()
+            if (storedGame != null) {
+                loadAnalysedGameDirectly(storedGame)
+            }
         }
     }
 
@@ -282,10 +266,6 @@ internal class GameLoader(
             return
         }
 
-        if (server != null && username != null) {
-            storeActive(username, server)
-        }
-
         val pgnHeaders = PgnParser.parseHeaders(pgn)
         val openingName = pgnHeaders["Opening"] ?: pgnHeaders["ECO"]
 
@@ -346,16 +326,16 @@ internal class GameLoader(
             }
         }
 
-        val providedActivePlayer = username ?: savedLichessUsername
+        val providedUsername = username ?: savedLichessUsername
         val whitePlayerName = game.players.white.user?.name ?: "White"
         val blackPlayerName = game.players.black.user?.name?.lowercase() ?: ""
 
-        val activePlayerMatchesGame = providedActivePlayer.isNotEmpty() &&
-            (providedActivePlayer.lowercase() == whitePlayerName.lowercase() ||
-             providedActivePlayer.lowercase() == blackPlayerName)
+        val usernameMatchesGame = providedUsername.isNotEmpty() &&
+            (providedUsername.lowercase() == whitePlayerName.lowercase() ||
+             providedUsername.lowercase() == blackPlayerName)
 
-        val activePlayerName = if (activePlayerMatchesGame) providedActivePlayer else whitePlayerName
-        val userPlayedBlack = activePlayerName.lowercase() == blackPlayerName
+        val perspectivePlayer = if (usernameMatchesGame) providedUsername else whitePlayerName
+        val userPlayedBlack = perspectivePlayer.lowercase() == blackPlayerName
 
         updateUiState {
             copy(
@@ -368,8 +348,6 @@ internal class GameLoader(
                 currentMoveIndex = -1,
                 flippedBoard = userPlayedBlack,
                 userPlayedBlack = userPlayedBlack,
-                activePlayer = activePlayerName,
-                activeServer = server,
                 showRetrieveScreen = false,
                 isExploringLine = false,
                 exploringLineMoves = emptyList(),
@@ -454,15 +432,8 @@ internal class GameLoader(
             boardHistory.firstOrNull() ?: ChessBoard()
         }
 
-        val originalActivePlayer = analysedGame.activePlayer
-        val hasRealActivePlayer = !originalActivePlayer.isNullOrEmpty()
-        val activePlayerName = if (hasRealActivePlayer && originalActivePlayer != null) {
-            originalActivePlayer
-        } else {
-            analysedGame.whiteName
-        }
-        val activePlayerLower = activePlayerName.lowercase()
-        val userPlayedBlack = activePlayerLower == analysedGame.blackName.lowercase()
+        // Default to white player's perspective
+        val userPlayedBlack = false
 
         updateUiState {
             copy(
@@ -473,9 +444,6 @@ internal class GameLoader(
                 currentBoard = board.copy(),
                 flippedBoard = userPlayedBlack,
                 userPlayedBlack = userPlayedBlack,
-                activePlayer = activePlayerName,
-                activeServer = analysedGame.activeServer,
-                activePlayerError = null,
                 openingName = analysedGame.openingName,
                 previewScores = analysedGame.previewScores,
                 analyseScores = analysedGame.analyseScores,
@@ -486,11 +454,6 @@ internal class GameLoader(
                 exploringLineMoveIndex = -1,
                 savedGameMoveIndex = -1
             )
-        }
-
-        val activeServer = analysedGame.activeServer
-        if (hasRealActivePlayer && activeServer != null) {
-            storeActive(activePlayerName, activeServer)
         }
 
         gameStorage.saveCurrentAnalysedGame(analysedGame)
@@ -543,12 +506,6 @@ internal class GameLoader(
     fun selectAnalysedGame(game: AnalysedGame) {
         updateUiState { copy(showAnalysedGamesSelection = false, showRetrieveScreen = false) }
         loadAnalysedGameDirectly(game)
-    }
-
-    private fun storeActive(player: String, server: ChessServer) {
-        if (player.isBlank()) return
-        settingsPrefs.saveActivePlayerAndServer(player, server)
-        updateUiState { copy(hasActive = true) }
     }
 
     private fun storeRetrievedGames(games: List<LichessGame>, username: String, server: ChessServer) {

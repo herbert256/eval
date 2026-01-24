@@ -261,7 +261,7 @@ internal class ContentSourceManager(
     fun selectBroadcastGame(game: LichessGame) {
         dismissBroadcasts()
         val whiteName = game.players.white.user?.name ?: "White"
-        loadGame(game, null, whiteName)  // No activeServer for broadcasts
+        loadGame(game, null, whiteName)  // No server info for broadcasts
     }
 
     // ==================== LICHESS TV ====================
@@ -320,7 +320,7 @@ internal class ContentSourceManager(
                                 dismissLichessTv()
                                 val streamedGame = streamResult.data
                                 val whiteName = streamedGame.players.white.user?.name ?: "White"
-                                loadGame(streamedGame, null, whiteName)  // No activeServer for TV
+                                loadGame(streamedGame, null, whiteName)  // No server info for TV
                             }
                             is Result.Error -> {
                                 updateUiState {
@@ -335,7 +335,7 @@ internal class ContentSourceManager(
                     }
                     dismissLichessTv()
                     val whiteName = game.players.white.user?.name ?: "White"
-                    loadGame(game, null, whiteName)  // No activeServer for TV
+                    loadGame(game, null, whiteName)  // No server info for TV
                 }
                 is Result.Error -> {
                     updateUiState {

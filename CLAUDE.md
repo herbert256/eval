@@ -216,7 +216,7 @@ data class GeneralSettings(longTapFullscreen, paginationPageSize, moveSoundsEnab
 
 // Game storage
 data class AnalysedGame(timestamp, whiteName, blackName, result, pgn, moves, moveDetails,
-    previewScores, analyseScores, openingName, speed, activePlayer, activeServer)
+    previewScores, analyseScores, openingName, speed)
 
 // Move analysis
 data class MoveScore(score, isMate, mateIn, depth, nodes, nps)
@@ -502,7 +502,6 @@ All settings managed via `SettingsPreferences` class with SharedPreferences (`ev
 ```
 // Server configuration
 lichess_username, lichess_max_games, chesscom_username, chesscom_max_games
-active_server, active_player
 
 // Game storage
 current_game_json, retrieves_list, retrieved_games_{server}_{username}
