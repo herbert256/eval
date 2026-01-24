@@ -40,13 +40,20 @@ import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.delay
 
 /**
- * Main game screen composable that handles game selection and display.
+ * Main game screen content composable that handles game display.
+ * Uses navigation callbacks for full-screen destinations.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GameScreen(
+fun GameScreenContent(
     modifier: Modifier = Modifier,
-    viewModel: GameViewModel = viewModel()
+    viewModel: GameViewModel = viewModel(),
+    onNavigateToSettings: () -> Unit = {},
+    onNavigateToHelp: () -> Unit = {},
+    onNavigateToTrace: () -> Unit = {},
+    onNavigateToRetrieve: () -> Unit = {},
+    onNavigateToAi: () -> Unit = {},
+    onNavigateToPlayerInfo: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
@@ -151,88 +158,7 @@ fun GameScreen(
         }
     }
 
-    // Show settings screen or main game screen
-    if (uiState.showSettingsDialog) {
-        SettingsScreen(
-            stockfishSettings = uiState.stockfishSettings,
-            boardLayoutSettings = uiState.boardLayoutSettings,
-            graphSettings = uiState.graphSettings,
-            interfaceVisibility = uiState.interfaceVisibility,
-            generalSettings = uiState.generalSettings,
-            aiSettings = uiState.aiSettings,
-            availableChatGptModels = uiState.availableChatGptModels,
-            isLoadingChatGptModels = uiState.isLoadingChatGptModels,
-            availableGeminiModels = uiState.availableGeminiModels,
-            isLoadingGeminiModels = uiState.isLoadingGeminiModels,
-            availableGrokModels = uiState.availableGrokModels,
-            isLoadingGrokModels = uiState.isLoadingGrokModels,
-            availableDeepSeekModels = uiState.availableDeepSeekModels,
-            isLoadingDeepSeekModels = uiState.isLoadingDeepSeekModels,
-            availableMistralModels = uiState.availableMistralModels,
-            isLoadingMistralModels = uiState.isLoadingMistralModels,
-            availablePerplexityModels = uiState.availablePerplexityModels,
-            isLoadingPerplexityModels = uiState.isLoadingPerplexityModels,
-            availableTogetherModels = uiState.availableTogetherModels,
-            isLoadingTogetherModels = uiState.isLoadingTogetherModels,
-            availableOpenRouterModels = uiState.availableOpenRouterModels,
-            isLoadingOpenRouterModels = uiState.isLoadingOpenRouterModels,
-            onBack = { viewModel.hideSettingsDialog() },
-            onSaveStockfish = { viewModel.updateStockfishSettings(it) },
-            onSaveBoardLayout = { viewModel.updateBoardLayoutSettings(it) },
-            onSaveGraph = { viewModel.updateGraphSettings(it) },
-            onSaveInterfaceVisibility = { viewModel.updateInterfaceVisibilitySettings(it) },
-            onSaveGeneral = { viewModel.updateGeneralSettings(it) },
-            onTrackApiCallsChanged = { viewModel.updateTrackApiCalls(it) },
-            onSaveAi = { viewModel.updateAiSettings(it) },
-            onFetchChatGptModels = { viewModel.fetchChatGptModels(it) },
-            onFetchGeminiModels = { viewModel.fetchGeminiModels(it) },
-            onFetchGrokModels = { viewModel.fetchGrokModels(it) },
-            onFetchDeepSeekModels = { viewModel.fetchDeepSeekModels(it) },
-            onFetchMistralModels = { viewModel.fetchMistralModels(it) },
-            onFetchPerplexityModels = { viewModel.fetchPerplexityModels(it) },
-            onFetchTogetherModels = { viewModel.fetchTogetherModels(it) },
-            onFetchOpenRouterModels = { viewModel.fetchOpenRouterModels(it) }
-        )
-        return
-    }
-
-    // Show help screen
-    if (uiState.showHelpScreen) {
-        HelpScreen(
-            onBack = { viewModel.hideHelpScreen() }
-        )
-        return
-    }
-
-    // Show trace detail screen
-    val traceFilename = uiState.traceDetailFilename
-    if (uiState.showTraceDetailScreen && traceFilename != null) {
-        TraceDetailScreen(
-            filename = traceFilename,
-            onBack = { viewModel.hideTraceDetail() }
-        )
-        return
-    }
-
-    // Show trace list screen
-    if (uiState.showTraceScreen) {
-        TraceListScreen(
-            onBack = { viewModel.hideTraceScreen() },
-            onSelectTrace = { filename -> viewModel.showTraceDetail(filename) },
-            onClearTraces = { viewModel.clearTraces() }
-        )
-        return
-    }
-
-    // Show retrieve screen
-    if (uiState.showRetrieveScreen) {
-        RetrieveScreen(
-            viewModel = viewModel,
-            uiState = uiState,
-            onBack = { viewModel.hideRetrieveScreen() }
-        )
-        return
-    }
+    // Note: Full-screen destinations (Settings, Help, Trace, Retrieve) are now handled via navigation
 
     // Show share position dialog
     if (uiState.showSharePositionDialog) {
@@ -558,35 +484,7 @@ fun GameScreen(
         )
     }
 
-    // Show AI hub screen (full screen)
-    if (uiState.showAiScreen) {
-        AiScreen(
-            onNewReport = { viewModel.showNewAiReportScreen() },
-            onHistory = { viewModel.showAiHistoryScreen() },
-            onDismiss = { viewModel.hideAiScreen() }
-        )
-        return
-    }
-
-    // Show AI History screen (full screen)
-    if (uiState.showAiHistoryScreen) {
-        AiHistoryScreen(
-            context = context,
-            onDismiss = { viewModel.hideAiHistoryScreen() }
-        )
-        return
-    }
-
-    // Show New AI Report screen (full screen)
-    if (uiState.showNewAiReportScreen) {
-        NewAiReportScreen(
-            onSubmit = { title, prompt ->
-                viewModel.showGenericAiAgentSelection(title, prompt)
-            },
-            onDismiss = { viewModel.hideNewAiReportScreen() }
-        )
-        return
-    }
+    // Note: AI screens (AI hub, AI History, New AI Report) are now handled via navigation
 
     // Show Generic AI Agent selection dialog
     if (uiState.showGenericAiAgentSelection) {
@@ -704,7 +602,7 @@ fun GameScreen(
         return
     }
 
-    // Show player info screen (full screen)
+    // Show player info screen (triggered by clicking on player names)
     if (uiState.showPlayerInfoScreen) {
         PlayerInfoScreen(
             playerInfo = uiState.playerInfo,
@@ -720,8 +618,6 @@ fun GameScreen(
             onGameSelected = { game -> viewModel.selectGameFromPlayerInfo(game) },
             onAiReportsClick = {
                 uiState.playerInfo?.let { info ->
-                    // If there's a profile error (e.g., "Profile not found"), use null for server
-                    // to trigger the "Other Player Prompt" instead of "Server Player Prompt"
                     val serverName = if (uiState.playerInfoError != null) {
                         null
                     } else {
@@ -824,7 +720,7 @@ fun GameScreen(
                                 if (uiState.game != null) {
                                     viewModel.clearGame()
                                 } else {
-                                    viewModel.showRetrieveScreen()
+                                    onNavigateToRetrieve()
                                 }
                             },
                         contentAlignment = Alignment.Center
@@ -847,7 +743,7 @@ fun GameScreen(
                         Box(
                             modifier = Modifier
                                 .size(44.dp)
-                                .clickable { viewModel.showTraceScreen() },
+                                .clickable { onNavigateToTrace() },
                             contentAlignment = Alignment.Center
                         ) {
                             Text("\uD83D\uDC1E", fontSize = 24.sp, color = Color.White, modifier = Modifier.offset(y = (-3).dp))  // Lady beetle for debug
@@ -857,7 +753,7 @@ fun GameScreen(
                     Box(
                         modifier = Modifier
                             .size(44.dp)
-                            .clickable { viewModel.showAiScreen() },
+                            .clickable { onNavigateToAi() },
                         contentAlignment = Alignment.Center
                     ) {
                         Text("🤖", fontSize = 24.sp, color = Color.White, modifier = Modifier.offset(y = (-3).dp))
@@ -866,7 +762,7 @@ fun GameScreen(
                     Box(
                         modifier = Modifier
                             .size(44.dp)
-                            .clickable { viewModel.showSettingsDialog() },
+                            .clickable { onNavigateToSettings() },
                         contentAlignment = Alignment.Center
                     ) {
                         Text("⚙", fontSize = 30.sp, color = Color.White, modifier = Modifier.offset(y = (-3).dp))
@@ -874,7 +770,7 @@ fun GameScreen(
                     Box(
                         modifier = Modifier
                             .size(44.dp)
-                            .clickable { viewModel.showHelpScreen() },
+                            .clickable { onNavigateToHelp() },
                         contentAlignment = Alignment.Center
                     ) {
                         Text("?", fontSize = 30.sp, color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.offset(y = (-3).dp))
@@ -3345,7 +3241,7 @@ private fun shareGenericAiReports(context: android.content.Context, uiState: Gam
 /**
  * Converts generic AI analysis results to a tabbed HTML document.
  */
-private fun convertGenericAiReportsToHtml(uiState: GameUiState, appVersion: String): String {
+internal fun convertGenericAiReportsToHtml(uiState: GameUiState, appVersion: String): String {
     val generatedDate = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
         .format(java.util.Date())
     val title = uiState.genericAiPromptTitle
@@ -5106,7 +5002,7 @@ private fun AiReportsSelectionDialog(
  * Dialog for selecting AI Agents to include in the report (new three-tier architecture).
  */
 @Composable
-private fun AiAgentsReportsSelectionDialog(
+fun AiAgentsReportsSelectionDialog(
     aiSettings: AiSettings,
     savedAgentIds: Set<String>,
     onGenerate: (Set<String>) -> Unit,  // Set of agent IDs

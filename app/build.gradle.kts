@@ -104,5 +104,8 @@ dependencies {
     // Markdown rendering
     implementation(libs.compose.markdown)
 
+    // Navigation
+    implementation(libs.navigation.compose)
+
     debugImplementation(libs.androidx.ui.tooling)
 }

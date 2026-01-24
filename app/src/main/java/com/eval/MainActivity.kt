@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.Scaffold
 import androidx.compose.ui.Modifier
-import com.eval.ui.GameScreen
+import com.eval.ui.EvalNavHost
 import com.eval.ui.theme.EvalTheme
 
 class MainActivity : ComponentActivity() {
@@ -23,7 +23,7 @@ class MainActivity : ComponentActivity() {
                         .fillMaxSize()
                         .systemBarsPadding()
                 ) { innerPadding ->
-                    GameScreen(
+                    EvalNavHost(
                         modifier = Modifier.padding(innerPadding)
                     )
                 }
