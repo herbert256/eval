@@ -372,7 +372,29 @@ class AiAnalysisRepository {
         }
     }
 
+    /**
+     * Check if a model requires the Responses API (GPT-5.x and newer).
+     * Chat Completions API is used for older models (gpt-4o, gpt-4, gpt-3.5, etc.)
+     */
+    private fun usesResponsesApi(model: String): Boolean {
+        val lowerModel = model.lowercase()
+        return lowerModel.startsWith("gpt-5") ||
+               lowerModel.startsWith("o3") ||
+               lowerModel.startsWith("o4")
+    }
+
     private suspend fun analyzeWithChatGpt(apiKey: String, prompt: String, model: String): AiAnalysisResponse {
+        return if (usesResponsesApi(model)) {
+            analyzeWithChatGptResponsesApi(apiKey, prompt, model)
+        } else {
+            analyzeWithChatGptChatCompletions(apiKey, prompt, model)
+        }
+    }
+
+    /**
+     * Use the Chat Completions API for older models (gpt-4o, gpt-4, gpt-3.5, etc.)
+     */
+    private suspend fun analyzeWithChatGptChatCompletions(apiKey: String, prompt: String, model: String): AiAnalysisResponse {
         val request = OpenAiRequest(
             model = model,
             messages = listOf(OpenAiMessage(role = "user", content = prompt))
@@ -393,6 +415,35 @@ class AiAnalysisRepository {
             }
             if (content != null) {
                 AiAnalysisResponse(AiService.CHATGPT, content, null, usage)
+            } else {
+                val errorMsg = body?.error?.message ?: "No response content"
+                AiAnalysisResponse(AiService.CHATGPT, null, errorMsg)
+            }
+        } else {
+            AiAnalysisResponse(AiService.CHATGPT, null, "API error: ${response.code()} ${response.message()}")
+        }
+    }
+
+    /**
+     * Use the Responses API for newer models (gpt-5.x, o3, o4, etc.)
+     */
+    private suspend fun analyzeWithChatGptResponsesApi(apiKey: String, prompt: String, model: String): AiAnalysisResponse {
+        val request = OpenAiResponsesRequest(
+            model = model,
+            input = prompt
+        )
+        val response = openAiApi.createResponse(
+            authorization = "Bearer $apiKey",
+            request = request
+        )
+
+        return if (response.isSuccessful) {
+            val body = response.body()
+            // Extract text from output[0].content where type is "output_text"
+            val content = body?.output?.firstOrNull()?.content
+                ?.firstOrNull { it.type == "output_text" }?.text
+            if (content != null) {
+                AiAnalysisResponse(AiService.CHATGPT, content, null, null)
             } else {
                 val errorMsg = body?.error?.message ?: "No response content"
                 AiAnalysisResponse(AiService.CHATGPT, null, errorMsg)
@@ -652,6 +703,45 @@ class AiAnalysisRepository {
     }
 
     /**
+     * Test if a model is accessible with the given API key.
+     * Makes a minimal API call to verify the configuration works.
+     * @return null if successful, error message if failed
+     */
+    suspend fun testModel(
+        service: AiService,
+        apiKey: String,
+        model: String
+    ): String? = withContext(Dispatchers.IO) {
+        if (service == AiService.DUMMY) {
+            return@withContext null // Dummy always succeeds
+        }
+
+        try {
+            val testPrompt = "Reply with exactly: OK"
+            val response = when (service) {
+                AiService.CHATGPT -> analyzeWithChatGpt(apiKey, testPrompt, model)
+                AiService.CLAUDE -> analyzeWithClaude(apiKey, testPrompt, model)
+                AiService.GEMINI -> analyzeWithGemini(apiKey, testPrompt, model)
+                AiService.GROK -> analyzeWithGrok(apiKey, testPrompt, model)
+                AiService.DEEPSEEK -> analyzeWithDeepSeek(apiKey, testPrompt, model)
+                AiService.MISTRAL -> analyzeWithMistral(apiKey, testPrompt, model)
+                AiService.PERPLEXITY -> analyzeWithPerplexity(apiKey, testPrompt, model)
+                AiService.TOGETHER -> analyzeWithTogether(apiKey, testPrompt, model)
+                AiService.OPENROUTER -> analyzeWithOpenRouter(apiKey, testPrompt, model)
+                AiService.DUMMY -> analyzeWithDummy()
+            }
+
+            if (response.isSuccess) {
+                null // Success
+            } else {
+                response.error ?: "Unknown error"
+            }
+        } catch (e: Exception) {
+            e.message ?: "Connection error"
+        }
+    }
+
+    /**
      * Fetch available Gemini models that support generateContent.
      */
     suspend fun fetchGeminiModels(apiKey: String): List<String> = withContext(Dispatchers.IO) {
@@ -790,12 +880,13 @@ class AiAnalysisRepository {
 
     /**
      * Fetch available Together AI models.
+     * Note: Together API returns a raw array, not {"data": [...]}
      */
     suspend fun fetchTogetherModels(apiKey: String): List<String> = withContext(Dispatchers.IO) {
         try {
             val response = togetherApi.listModels("Bearer $apiKey")
             if (response.isSuccessful) {
-                val models = response.body()?.data ?: emptyList()
+                val models = response.body() ?: emptyList()
                 models
                     .mapNotNull { it.id }
                     .filter { it.contains("chat") || it.contains("instruct", ignoreCase = true) || it.contains("llama", ignoreCase = true) }

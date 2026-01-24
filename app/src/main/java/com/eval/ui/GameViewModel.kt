@@ -1807,6 +1807,14 @@ ${opening.moves} *
         }
     }
 
+    /**
+     * Test if a model is accessible with the given API key.
+     * @return null if successful, error message if failed
+     */
+    suspend fun testAiModel(service: AiService, apiKey: String, model: String): String? {
+        return aiAnalysisRepository.testModel(service, apiKey, model)
+    }
+
     // ===== MISC =====
     fun cycleArrowMode() {
         val currentSettings = _uiState.value.stockfishSettings

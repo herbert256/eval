@@ -21,6 +21,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.eval.data.AiService
 import com.google.gson.Gson
+import kotlinx.coroutines.launch
 import androidx.compose.material3.Divider
 import androidx.compose.material3.HorizontalDivider
 import com.google.gson.JsonSyntaxException
@@ -146,11 +147,6 @@ data class AiSettings(
     val openRouterOtherPlayerPrompt: String = DEFAULT_OTHER_PLAYER_PROMPT,
     val openRouterModelSource: ModelSource = ModelSource.API,
     val openRouterManualModels: List<String> = emptyList(),
-    val dummyEnabled: Boolean = false,
-    val dummyPrompt: String = DEFAULT_GAME_PROMPT,
-    val dummyServerPlayerPrompt: String = DEFAULT_SERVER_PLAYER_PROMPT,
-    val dummyOtherPlayerPrompt: String = DEFAULT_OTHER_PLAYER_PROMPT,
-    val dummyModelSource: ModelSource = ModelSource.MANUAL,
     val dummyManualModels: List<String> = listOf("dummy-model"),
     // New three-tier architecture
     val prompts: List<AiPrompt> = emptyList(),
@@ -167,7 +163,7 @@ data class AiSettings(
             AiService.PERPLEXITY -> perplexityApiKey
             AiService.TOGETHER -> togetherApiKey
             AiService.OPENROUTER -> openRouterApiKey
-            AiService.DUMMY -> if (dummyEnabled) "enabled" else ""
+            AiService.DUMMY -> ""  // API key comes from agent
         }
     }
 
@@ -182,7 +178,7 @@ data class AiSettings(
             AiService.PERPLEXITY -> perplexityModel
             AiService.TOGETHER -> togetherModel
             AiService.OPENROUTER -> openRouterModel
-            AiService.DUMMY -> ""
+            AiService.DUMMY -> "dummy-model"
         }
     }
 
@@ -199,7 +195,7 @@ data class AiSettings(
             AiService.PERPLEXITY -> perplexityPrompt
             AiService.TOGETHER -> togetherPrompt
             AiService.OPENROUTER -> openRouterPrompt
-            AiService.DUMMY -> dummyPrompt
+            AiService.DUMMY -> DEFAULT_GAME_PROMPT
         }
     }
 
@@ -214,7 +210,7 @@ data class AiSettings(
             AiService.PERPLEXITY -> perplexityServerPlayerPrompt
             AiService.TOGETHER -> togetherServerPlayerPrompt
             AiService.OPENROUTER -> openRouterServerPlayerPrompt
-            AiService.DUMMY -> dummyServerPlayerPrompt
+            AiService.DUMMY -> DEFAULT_SERVER_PLAYER_PROMPT
         }
     }
 
@@ -229,7 +225,7 @@ data class AiSettings(
             AiService.PERPLEXITY -> perplexityOtherPlayerPrompt
             AiService.TOGETHER -> togetherOtherPlayerPrompt
             AiService.OPENROUTER -> openRouterOtherPlayerPrompt
-            AiService.DUMMY -> dummyOtherPlayerPrompt
+            AiService.DUMMY -> DEFAULT_OTHER_PLAYER_PROMPT
         }
     }
 
@@ -287,8 +283,7 @@ data class AiSettings(
                 mistralApiKey.isNotBlank() ||
                 perplexityApiKey.isNotBlank() ||
                 togetherApiKey.isNotBlank() ||
-                openRouterApiKey.isNotBlank() ||
-                dummyEnabled
+                openRouterApiKey.isNotBlank()
     }
 
     fun getConfiguredServices(): List<AiService> {
@@ -465,7 +460,7 @@ fun AiSettingsScreen(
         if (aiSettings.hasAnyApiKey()) {
             Button(
                 onClick = {
-                    exportAiConfigToClipboard(context, aiSettings)
+                    exportAiConfigToFile(context, aiSettings)
                 },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
@@ -509,10 +504,10 @@ fun AiSettingsScreen(
     // Import AI configuration dialog
     if (showImportDialog) {
         ImportAiConfigDialog(
+            currentSettings = aiSettings,
             onImport = { importedSettings ->
                 onSave(importedSettings)
                 showImportDialog = false
-                Toast.makeText(context, "AI configuration imported successfully", Toast.LENGTH_SHORT).show()
             },
             onDismiss = { showImportDialog = false }
         )
@@ -520,156 +515,121 @@ fun AiSettingsScreen(
 }
 
 /**
- * Data class for AI service configuration in JSON export/import.
- * Version 2 adds serverPlayerPrompt and otherPlayerPrompt.
+ * Data class for provider settings in JSON export/import.
  */
-private data class AiServiceConfig(
+private data class ProviderConfigExport(
+    val modelSource: String,  // "API" or "MANUAL"
+    val manualModels: List<String>
+)
+
+/**
+ * Data class for prompt in JSON export/import.
+ */
+private data class PromptExport(
+    val id: String,
     val name: String,
-    val apiKey: String,
+    val text: String
+)
+
+/**
+ * Data class for agent in JSON export/import.
+ */
+private data class AgentExport(
+    val id: String,
+    val name: String,
+    val provider: String,  // Provider enum name (CHATGPT, CLAUDE, etc.)
     val model: String,
-    val prompt: String,  // Game prompt (kept for backwards compatibility)
-    val gamePrompt: String? = null,  // Same as prompt, explicit name for v2
-    val serverPlayerPrompt: String? = null,
-    val otherPlayerPrompt: String? = null
+    val apiKey: String,
+    val gamePromptId: String,
+    val serverPlayerPromptId: String,
+    val otherPlayerPromptId: String
 )
 
 /**
  * Data class for the complete AI configuration export.
- * Version 2 includes all 3 prompt types per service.
+ * Version 3: Three-tier architecture with providers, prompts, and agents.
  */
-private data class AiConfigExport(
-    val version: Int = 2,
-    val services: List<AiServiceConfig>,
-    val dummyEnabled: Boolean
+private data class AiConfigExportV3(
+    val version: Int = 3,
+    val providers: Map<String, ProviderConfigExport>,
+    val prompts: List<PromptExport>,
+    val agents: List<AgentExport>
 )
 
 /**
- * Export AI configuration to clipboard as JSON.
+ * Export AI configuration to a file and share via Android share sheet.
+ * Version 3: Exports providers (model config), prompts, and agents.
  */
-private fun exportAiConfigToClipboard(context: Context, aiSettings: AiSettings) {
-    val services = mutableListOf<AiServiceConfig>()
-
-    if (aiSettings.chatGptApiKey.isNotBlank()) {
-        services.add(AiServiceConfig(
-            name = "ChatGPT",
-            apiKey = aiSettings.chatGptApiKey,
-            model = aiSettings.chatGptModel,
-            prompt = aiSettings.chatGptPrompt,
-            gamePrompt = aiSettings.chatGptPrompt,
-            serverPlayerPrompt = aiSettings.chatGptServerPlayerPrompt,
-            otherPlayerPrompt = aiSettings.chatGptOtherPlayerPrompt
-        ))
-    }
-
-    if (aiSettings.claudeApiKey.isNotBlank()) {
-        services.add(AiServiceConfig(
-            name = "Claude",
-            apiKey = aiSettings.claudeApiKey,
-            model = aiSettings.claudeModel,
-            prompt = aiSettings.claudePrompt,
-            gamePrompt = aiSettings.claudePrompt,
-            serverPlayerPrompt = aiSettings.claudeServerPlayerPrompt,
-            otherPlayerPrompt = aiSettings.claudeOtherPlayerPrompt
-        ))
-    }
-
-    if (aiSettings.geminiApiKey.isNotBlank()) {
-        services.add(AiServiceConfig(
-            name = "Gemini",
-            apiKey = aiSettings.geminiApiKey,
-            model = aiSettings.geminiModel,
-            prompt = aiSettings.geminiPrompt,
-            gamePrompt = aiSettings.geminiPrompt,
-            serverPlayerPrompt = aiSettings.geminiServerPlayerPrompt,
-            otherPlayerPrompt = aiSettings.geminiOtherPlayerPrompt
-        ))
-    }
-
-    if (aiSettings.grokApiKey.isNotBlank()) {
-        services.add(AiServiceConfig(
-            name = "Grok",
-            apiKey = aiSettings.grokApiKey,
-            model = aiSettings.grokModel,
-            prompt = aiSettings.grokPrompt,
-            gamePrompt = aiSettings.grokPrompt,
-            serverPlayerPrompt = aiSettings.grokServerPlayerPrompt,
-            otherPlayerPrompt = aiSettings.grokOtherPlayerPrompt
-        ))
-    }
-
-    if (aiSettings.deepSeekApiKey.isNotBlank()) {
-        services.add(AiServiceConfig(
-            name = "DeepSeek",
-            apiKey = aiSettings.deepSeekApiKey,
-            model = aiSettings.deepSeekModel,
-            prompt = aiSettings.deepSeekPrompt,
-            gamePrompt = aiSettings.deepSeekPrompt,
-            serverPlayerPrompt = aiSettings.deepSeekServerPlayerPrompt,
-            otherPlayerPrompt = aiSettings.deepSeekOtherPlayerPrompt
-        ))
-    }
-
-    if (aiSettings.mistralApiKey.isNotBlank()) {
-        services.add(AiServiceConfig(
-            name = "Mistral",
-            apiKey = aiSettings.mistralApiKey,
-            model = aiSettings.mistralModel,
-            prompt = aiSettings.mistralPrompt,
-            gamePrompt = aiSettings.mistralPrompt,
-            serverPlayerPrompt = aiSettings.mistralServerPlayerPrompt,
-            otherPlayerPrompt = aiSettings.mistralOtherPlayerPrompt
-        ))
-    }
-
-    if (aiSettings.perplexityApiKey.isNotBlank()) {
-        services.add(AiServiceConfig(
-            name = "Perplexity",
-            apiKey = aiSettings.perplexityApiKey,
-            model = aiSettings.perplexityModel,
-            prompt = aiSettings.perplexityPrompt,
-            gamePrompt = aiSettings.perplexityPrompt,
-            serverPlayerPrompt = aiSettings.perplexityServerPlayerPrompt,
-            otherPlayerPrompt = aiSettings.perplexityOtherPlayerPrompt
-        ))
-    }
-
-    if (aiSettings.togetherApiKey.isNotBlank()) {
-        services.add(AiServiceConfig(
-            name = "Together",
-            apiKey = aiSettings.togetherApiKey,
-            model = aiSettings.togetherModel,
-            prompt = aiSettings.togetherPrompt,
-            gamePrompt = aiSettings.togetherPrompt,
-            serverPlayerPrompt = aiSettings.togetherServerPlayerPrompt,
-            otherPlayerPrompt = aiSettings.togetherOtherPlayerPrompt
-        ))
-    }
-
-    if (aiSettings.openRouterApiKey.isNotBlank()) {
-        services.add(AiServiceConfig(
-            name = "OpenRouter",
-            apiKey = aiSettings.openRouterApiKey,
-            model = aiSettings.openRouterModel,
-            prompt = aiSettings.openRouterPrompt,
-            gamePrompt = aiSettings.openRouterPrompt,
-            serverPlayerPrompt = aiSettings.openRouterServerPlayerPrompt,
-            otherPlayerPrompt = aiSettings.openRouterOtherPlayerPrompt
-        ))
-    }
-
-    val export = AiConfigExport(
-        services = services,
-        dummyEnabled = aiSettings.dummyEnabled
+private fun exportAiConfigToFile(context: Context, aiSettings: AiSettings) {
+    // Build providers map (model source and manual models per provider)
+    val providers = mapOf(
+        "CHATGPT" to ProviderConfigExport(aiSettings.chatGptModelSource.name, aiSettings.chatGptManualModels),
+        "CLAUDE" to ProviderConfigExport(ModelSource.MANUAL.name, aiSettings.claudeManualModels),
+        "GEMINI" to ProviderConfigExport(aiSettings.geminiModelSource.name, aiSettings.geminiManualModels),
+        "GROK" to ProviderConfigExport(aiSettings.grokModelSource.name, aiSettings.grokManualModels),
+        "DEEPSEEK" to ProviderConfigExport(aiSettings.deepSeekModelSource.name, aiSettings.deepSeekManualModels),
+        "MISTRAL" to ProviderConfigExport(aiSettings.mistralModelSource.name, aiSettings.mistralManualModels),
+        "PERPLEXITY" to ProviderConfigExport(ModelSource.MANUAL.name, aiSettings.perplexityManualModels),
+        "TOGETHER" to ProviderConfigExport(aiSettings.togetherModelSource.name, aiSettings.togetherManualModels),
+        "OPENROUTER" to ProviderConfigExport(aiSettings.openRouterModelSource.name, aiSettings.openRouterManualModels),
+        "DUMMY" to ProviderConfigExport(ModelSource.MANUAL.name, aiSettings.dummyManualModels)
     )
 
-    val gson = Gson()
+    // Convert prompts
+    val prompts = aiSettings.prompts.map { prompt ->
+        PromptExport(id = prompt.id, name = prompt.name, text = prompt.text)
+    }
+
+    // Convert agents
+    val agents = aiSettings.agents.map { agent ->
+        AgentExport(
+            id = agent.id,
+            name = agent.name,
+            provider = agent.provider.name,
+            model = agent.model,
+            apiKey = agent.apiKey,
+            gamePromptId = agent.gamePromptId,
+            serverPlayerPromptId = agent.serverPlayerPromptId,
+            otherPlayerPromptId = agent.otherPlayerPromptId
+        )
+    }
+
+    val export = AiConfigExportV3(
+        providers = providers,
+        prompts = prompts,
+        agents = agents
+    )
+
+    val gson = com.google.gson.GsonBuilder().setPrettyPrinting().create()
     val json = gson.toJson(export)
 
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    val clip = ClipData.newPlainText("AI Configuration", json)
-    clipboard.setPrimaryClip(clip)
+    try {
+        // Create file in cache/ai_analysis directory (must match FileProvider paths)
+        val timestamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
+        val fileName = "eval_ai_config_$timestamp.json"
+        val cacheDir = java.io.File(context.cacheDir, "ai_analysis")
+        if (!cacheDir.exists()) cacheDir.mkdirs()
+        val file = java.io.File(cacheDir, fileName)
+        file.writeText(json)
 
-    Toast.makeText(context, "AI configuration copied to clipboard", Toast.LENGTH_SHORT).show()
+        // Get URI via FileProvider
+        val uri = androidx.core.content.FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            file
+        )
+
+        // Create share intent
+        val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+            type = "application/json"
+            putExtra(android.content.Intent.EXTRA_STREAM, uri)
+            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        context.startActivity(android.content.Intent.createChooser(shareIntent, "Export AI Configuration"))
+    } catch (e: Exception) {
+        Toast.makeText(context, "Error exporting: ${e.message}", Toast.LENGTH_SHORT).show()
+    }
 }
 
 /**
@@ -726,8 +686,9 @@ private fun exportApiKeysToClipboard(context: Context, aiSettings: AiSettings) {
 
 /**
  * Import AI configuration from clipboard JSON.
+ * Supports version 3 format (providers, prompts, agents).
  */
-private fun importAiConfigFromClipboard(context: Context): AiSettings? {
+private fun importAiConfigFromClipboard(context: Context, currentSettings: AiSettings): AiSettings? {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     val clipData = clipboard.primaryClip
 
@@ -744,86 +705,104 @@ private fun importAiConfigFromClipboard(context: Context): AiSettings? {
 
     return try {
         val gson = Gson()
-        val export = gson.fromJson(json, AiConfigExport::class.java)
+        val export = gson.fromJson(json, AiConfigExportV3::class.java)
 
-        var settings = AiSettings()
+        if (export.version != 3) {
+            Toast.makeText(context, "Unsupported configuration version: ${export.version}. Expected version 3.", Toast.LENGTH_LONG).show()
+            return null
+        }
 
-        export.services.forEach { service ->
-            // Use gamePrompt if available (v2), otherwise fall back to prompt (v1)
-            val gamePrompt = service.gamePrompt ?: service.prompt
-            // For v1 imports, use defaults for new prompt types
-            val serverPlayerPrompt = service.serverPlayerPrompt ?: DEFAULT_SERVER_PLAYER_PROMPT
-            val otherPlayerPrompt = service.otherPlayerPrompt ?: DEFAULT_OTHER_PLAYER_PROMPT
+        // Import prompts
+        val prompts = export.prompts.map { promptExport ->
+            AiPrompt(
+                id = promptExport.id,
+                name = promptExport.name,
+                text = promptExport.text
+            )
+        }
 
-            settings = when (service.name) {
-                "ChatGPT" -> settings.copy(
-                    chatGptApiKey = service.apiKey,
-                    chatGptModel = service.model,
-                    chatGptPrompt = gamePrompt,
-                    chatGptServerPlayerPrompt = serverPlayerPrompt,
-                    chatGptOtherPlayerPrompt = otherPlayerPrompt
+        // Import agents
+        val agents = export.agents.mapNotNull { agentExport ->
+            val provider = try {
+                AiService.valueOf(agentExport.provider)
+            } catch (e: IllegalArgumentException) {
+                null  // Skip agents with unknown providers
+            }
+            provider?.let {
+                AiAgent(
+                    id = agentExport.id,
+                    name = agentExport.name,
+                    provider = it,
+                    model = agentExport.model,
+                    apiKey = agentExport.apiKey,
+                    gamePromptId = agentExport.gamePromptId,
+                    serverPlayerPromptId = agentExport.serverPlayerPromptId,
+                    otherPlayerPromptId = agentExport.otherPlayerPromptId
                 )
-                "Claude" -> settings.copy(
-                    claudeApiKey = service.apiKey,
-                    claudeModel = service.model,
-                    claudePrompt = gamePrompt,
-                    claudeServerPlayerPrompt = serverPlayerPrompt,
-                    claudeOtherPlayerPrompt = otherPlayerPrompt
-                )
-                "Gemini" -> settings.copy(
-                    geminiApiKey = service.apiKey,
-                    geminiModel = service.model,
-                    geminiPrompt = gamePrompt,
-                    geminiServerPlayerPrompt = serverPlayerPrompt,
-                    geminiOtherPlayerPrompt = otherPlayerPrompt
-                )
-                "Grok" -> settings.copy(
-                    grokApiKey = service.apiKey,
-                    grokModel = service.model,
-                    grokPrompt = gamePrompt,
-                    grokServerPlayerPrompt = serverPlayerPrompt,
-                    grokOtherPlayerPrompt = otherPlayerPrompt
-                )
-                "DeepSeek" -> settings.copy(
-                    deepSeekApiKey = service.apiKey,
-                    deepSeekModel = service.model,
-                    deepSeekPrompt = gamePrompt,
-                    deepSeekServerPlayerPrompt = serverPlayerPrompt,
-                    deepSeekOtherPlayerPrompt = otherPlayerPrompt
-                )
-                "Mistral" -> settings.copy(
-                    mistralApiKey = service.apiKey,
-                    mistralModel = service.model,
-                    mistralPrompt = gamePrompt,
-                    mistralServerPlayerPrompt = serverPlayerPrompt,
-                    mistralOtherPlayerPrompt = otherPlayerPrompt
-                )
-                "Perplexity" -> settings.copy(
-                    perplexityApiKey = service.apiKey,
-                    perplexityModel = service.model,
-                    perplexityPrompt = gamePrompt,
-                    perplexityServerPlayerPrompt = serverPlayerPrompt,
-                    perplexityOtherPlayerPrompt = otherPlayerPrompt
-                )
-                "Together" -> settings.copy(
-                    togetherApiKey = service.apiKey,
-                    togetherModel = service.model,
-                    togetherPrompt = gamePrompt,
-                    togetherServerPlayerPrompt = serverPlayerPrompt,
-                    togetherOtherPlayerPrompt = otherPlayerPrompt
-                )
-                "OpenRouter" -> settings.copy(
-                    openRouterApiKey = service.apiKey,
-                    openRouterModel = service.model,
-                    openRouterPrompt = gamePrompt,
-                    openRouterServerPlayerPrompt = serverPlayerPrompt,
-                    openRouterOtherPlayerPrompt = otherPlayerPrompt
-                )
-                else -> settings
             }
         }
 
-        settings.copy(dummyEnabled = export.dummyEnabled)
+        // Import provider settings
+        var settings = currentSettings.copy(
+            prompts = prompts,
+            agents = agents
+        )
+
+        // Update provider model sources and manual models
+        export.providers["CHATGPT"]?.let { p ->
+            settings = settings.copy(
+                chatGptModelSource = try { ModelSource.valueOf(p.modelSource) } catch (e: Exception) { ModelSource.API },
+                chatGptManualModels = p.manualModels
+            )
+        }
+        export.providers["CLAUDE"]?.let { p ->
+            settings = settings.copy(claudeManualModels = p.manualModels)
+        }
+        export.providers["GEMINI"]?.let { p ->
+            settings = settings.copy(
+                geminiModelSource = try { ModelSource.valueOf(p.modelSource) } catch (e: Exception) { ModelSource.API },
+                geminiManualModels = p.manualModels
+            )
+        }
+        export.providers["GROK"]?.let { p ->
+            settings = settings.copy(
+                grokModelSource = try { ModelSource.valueOf(p.modelSource) } catch (e: Exception) { ModelSource.API },
+                grokManualModels = p.manualModels
+            )
+        }
+        export.providers["DEEPSEEK"]?.let { p ->
+            settings = settings.copy(
+                deepSeekModelSource = try { ModelSource.valueOf(p.modelSource) } catch (e: Exception) { ModelSource.API },
+                deepSeekManualModels = p.manualModels
+            )
+        }
+        export.providers["MISTRAL"]?.let { p ->
+            settings = settings.copy(
+                mistralModelSource = try { ModelSource.valueOf(p.modelSource) } catch (e: Exception) { ModelSource.API },
+                mistralManualModels = p.manualModels
+            )
+        }
+        export.providers["PERPLEXITY"]?.let { p ->
+            settings = settings.copy(perplexityManualModels = p.manualModels)
+        }
+        export.providers["TOGETHER"]?.let { p ->
+            settings = settings.copy(
+                togetherModelSource = try { ModelSource.valueOf(p.modelSource) } catch (e: Exception) { ModelSource.API },
+                togetherManualModels = p.manualModels
+            )
+        }
+        export.providers["OPENROUTER"]?.let { p ->
+            settings = settings.copy(
+                openRouterModelSource = try { ModelSource.valueOf(p.modelSource) } catch (e: Exception) { ModelSource.API },
+                openRouterManualModels = p.manualModels
+            )
+        }
+        export.providers["DUMMY"]?.let { p ->
+            settings = settings.copy(dummyManualModels = p.manualModels)
+        }
+
+        Toast.makeText(context, "Imported ${prompts.size} prompts and ${agents.size} agents", Toast.LENGTH_SHORT).show()
+        settings
     } catch (e: JsonSyntaxException) {
         Toast.makeText(context, "Invalid AI configuration format", Toast.LENGTH_SHORT).show()
         null
@@ -838,6 +817,7 @@ private fun importAiConfigFromClipboard(context: Context): AiSettings? {
  */
 @Composable
 private fun ImportAiConfigDialog(
+    currentSettings: AiSettings,
     onImport: (AiSettings) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -861,13 +841,13 @@ private fun ImportAiConfigDialog(
                 )
 
                 Text(
-                    text = "The clipboard should contain a JSON configuration exported from this app.",
+                    text = "The clipboard should contain a JSON configuration (version 3) exported from this app.",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.Gray
                 )
 
                 Text(
-                    text = "Warning: This will replace your current AI settings.",
+                    text = "Warning: This will replace your prompts, agents, and provider settings.",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFFFF9800)
                 )
@@ -876,7 +856,7 @@ private fun ImportAiConfigDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val imported = importAiConfigFromClipboard(context)
+                    val imported = importAiConfigFromClipboard(context, currentSettings)
                     if (imported != null) {
                         onImport(imported)
                     }
@@ -1417,8 +1397,6 @@ fun DummySettingsScreen(
     onBackToGame: () -> Unit,
     onSave: (AiSettings) -> Unit
 ) {
-    var enabled by remember { mutableStateOf(aiSettings.dummyEnabled) }
-    var modelSource by remember { mutableStateOf(aiSettings.dummyModelSource) }
     var manualModels by remember { mutableStateOf(aiSettings.dummyManualModels) }
 
     Column(
@@ -1454,7 +1432,7 @@ fun DummySettingsScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Enable/disable card
+        // Info card
         Card(
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant
@@ -1463,44 +1441,24 @@ fun DummySettingsScreen(
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "Test Mode",
+                    text = "Test Provider",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White
                 )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Enable Dummy AI", color = Color.White)
-                        Text(
-                            text = "Returns a test response without making API calls",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFFAAAAAA)
-                        )
-                    }
-                    Switch(
-                        checked = enabled,
-                        onCheckedChange = {
-                            enabled = it
-                            onSave(aiSettings.copy(dummyEnabled = it))
-                        }
-                    )
-                }
-
-                if (enabled) {
-                    Text(
-                        text = "Response: \"Hi, greetings from AI\"",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF00E676)
-                    )
-                }
+                Text(
+                    text = "Returns a test response without making API calls. Create an Agent using this provider to use it.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFFAAAAAA)
+                )
+                Text(
+                    text = "Response: \"Hi, greetings from AI\"",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF00E676)
+                )
             }
         }
 
@@ -1525,14 +1483,11 @@ fun DummySettingsScreen(
                 )
 
                 UnifiedModelSelectionSection(
-                    modelSource = modelSource,
+                    modelSource = ModelSource.MANUAL,
                     manualModels = manualModels,
                     availableApiModels = emptyList(),
                     isLoadingModels = false,
-                    onModelSourceChange = {
-                        modelSource = it
-                        onSave(aiSettings.copy(dummyModelSource = it))
-                    },
+                    onModelSourceChange = { /* Dummy only supports manual models */ },
                     onManualModelsChange = {
                         manualModels = it
                         onSave(aiSettings.copy(dummyManualModels = it))
@@ -2253,7 +2208,7 @@ fun AiSetupScreen(
             title = "AI Providers",
             description = "Configure model sources for each AI service",
             icon = "⚙",
-            count = "${AiService.entries.size - 1} providers",  // Exclude DUMMY
+            count = "${AiService.entries.size} providers",
             onClick = { onNavigate(SettingsSubScreen.AI_PROVIDERS) }
         )
 
@@ -2360,7 +2315,7 @@ fun AiProvidersScreen(
     onSave: (AiSettings) -> Unit
 ) {
     val context = LocalContext.current
-    val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    var showImportDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -2375,232 +2330,6 @@ fun AiProvidersScreen(
             onBackClick = onBackToAiSetup,
             onEvalClick = onBackToGame
         )
-
-        // Import API keys button
-        Button(
-            onClick = {
-                try {
-                    val clipData = clipboardManager.primaryClip
-                    val jsonText = clipData?.getItemAt(0)?.text?.toString() ?: ""
-                    if (jsonText.isBlank()) {
-                        Toast.makeText(context, "Clipboard is empty", Toast.LENGTH_SHORT).show()
-                        return@Button
-                    }
-
-                    val gson = Gson()
-                    val apiKeys = gson.fromJson(jsonText, Array<ProviderApiKey>::class.java)
-
-                    var updatedSettings = aiSettings
-                    var importedCount = 0
-
-                    apiKeys.forEach { providerKey ->
-                        val serviceName = providerKey.service.lowercase()
-                        when {
-                            serviceName.contains("chatgpt") || serviceName.contains("openai") -> {
-                                updatedSettings = updatedSettings.copy(chatGptApiKey = providerKey.apiKey)
-                                importedCount++
-                            }
-                            serviceName.contains("claude") || serviceName.contains("anthropic") -> {
-                                updatedSettings = updatedSettings.copy(claudeApiKey = providerKey.apiKey)
-                                importedCount++
-                            }
-                            serviceName.contains("gemini") || serviceName.contains("google") -> {
-                                updatedSettings = updatedSettings.copy(geminiApiKey = providerKey.apiKey)
-                                importedCount++
-                            }
-                            serviceName.contains("grok") || serviceName.contains("xai") -> {
-                                updatedSettings = updatedSettings.copy(grokApiKey = providerKey.apiKey)
-                                importedCount++
-                            }
-                            serviceName.contains("deepseek") -> {
-                                updatedSettings = updatedSettings.copy(deepSeekApiKey = providerKey.apiKey)
-                                importedCount++
-                            }
-                            serviceName.contains("mistral") -> {
-                                updatedSettings = updatedSettings.copy(mistralApiKey = providerKey.apiKey)
-                                importedCount++
-                            }
-                            serviceName.contains("perplexity") -> {
-                                updatedSettings = updatedSettings.copy(perplexityApiKey = providerKey.apiKey)
-                                importedCount++
-                            }
-                            serviceName.contains("together") -> {
-                                updatedSettings = updatedSettings.copy(togetherApiKey = providerKey.apiKey)
-                                importedCount++
-                            }
-                            serviceName.contains("openrouter") -> {
-                                updatedSettings = updatedSettings.copy(openRouterApiKey = providerKey.apiKey)
-                                importedCount++
-                            }
-                        }
-                    }
-
-                    if (importedCount > 0) {
-                        onSave(updatedSettings)
-                        Toast.makeText(context, "Imported $importedCount API keys", Toast.LENGTH_SHORT).show()
-                    } else {
-                        Toast.makeText(context, "No matching providers found", Toast.LENGTH_SHORT).show()
-                    }
-                } catch (e: JsonSyntaxException) {
-                    Toast.makeText(context, "Invalid JSON format", Toast.LENGTH_SHORT).show()
-                } catch (e: Exception) {
-                    Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
-        ) {
-            Text("Get API keys from clipboard")
-        }
-
-        // Generate AI agents button
-        Button(
-            onClick = {
-                val newAgents = mutableListOf<AiAgent>()
-
-                // Helper to get first model from provider's manual models list
-                fun getFirstModel(manualModels: List<String>, defaultModel: String): String {
-                    return manualModels.firstOrNull() ?: defaultModel
-                }
-
-                // Helper to get prompt ID by name, or empty string if not found
-                fun getPromptId(name: String): String {
-                    return aiSettings.prompts.find { it.name == name }?.id ?: ""
-                }
-
-                // Get prompt IDs for default prompts
-                val gamePromptId = getPromptId(DEFAULT_GAME_PROMPT_NAME)
-                val serverPlayerPromptId = getPromptId(DEFAULT_SERVER_PLAYER_PROMPT_NAME)
-                val otherPlayerPromptId = getPromptId(DEFAULT_OTHER_PLAYER_PROMPT_NAME)
-
-                // Generate agent for each provider with a configured API key
-                if (aiSettings.chatGptApiKey.isNotBlank()) {
-                    newAgents.add(AiAgent(
-                        id = java.util.UUID.randomUUID().toString(),
-                        name = "ChatGPT",
-                        provider = AiService.CHATGPT,
-                        model = getFirstModel(aiSettings.chatGptManualModels, "gpt-4o-mini"),
-                        apiKey = aiSettings.chatGptApiKey,
-                        gamePromptId = gamePromptId,
-                        serverPlayerPromptId = serverPlayerPromptId,
-                        otherPlayerPromptId = otherPlayerPromptId
-                    ))
-                }
-                if (aiSettings.claudeApiKey.isNotBlank()) {
-                    newAgents.add(AiAgent(
-                        id = java.util.UUID.randomUUID().toString(),
-                        name = "Claude",
-                        provider = AiService.CLAUDE,
-                        model = getFirstModel(aiSettings.claudeManualModels, "claude-sonnet-4-20250514"),
-                        apiKey = aiSettings.claudeApiKey,
-                        gamePromptId = gamePromptId,
-                        serverPlayerPromptId = serverPlayerPromptId,
-                        otherPlayerPromptId = otherPlayerPromptId
-                    ))
-                }
-                if (aiSettings.geminiApiKey.isNotBlank()) {
-                    newAgents.add(AiAgent(
-                        id = java.util.UUID.randomUUID().toString(),
-                        name = "Gemini",
-                        provider = AiService.GEMINI,
-                        model = getFirstModel(aiSettings.geminiManualModels, "gemini-2.0-flash"),
-                        apiKey = aiSettings.geminiApiKey,
-                        gamePromptId = gamePromptId,
-                        serverPlayerPromptId = serverPlayerPromptId,
-                        otherPlayerPromptId = otherPlayerPromptId
-                    ))
-                }
-                if (aiSettings.grokApiKey.isNotBlank()) {
-                    newAgents.add(AiAgent(
-                        id = java.util.UUID.randomUUID().toString(),
-                        name = "Grok",
-                        provider = AiService.GROK,
-                        model = getFirstModel(aiSettings.grokManualModels, "grok-3-mini"),
-                        apiKey = aiSettings.grokApiKey,
-                        gamePromptId = gamePromptId,
-                        serverPlayerPromptId = serverPlayerPromptId,
-                        otherPlayerPromptId = otherPlayerPromptId
-                    ))
-                }
-                if (aiSettings.deepSeekApiKey.isNotBlank()) {
-                    newAgents.add(AiAgent(
-                        id = java.util.UUID.randomUUID().toString(),
-                        name = "DeepSeek",
-                        provider = AiService.DEEPSEEK,
-                        model = getFirstModel(aiSettings.deepSeekManualModels, "deepseek-chat"),
-                        apiKey = aiSettings.deepSeekApiKey,
-                        gamePromptId = gamePromptId,
-                        serverPlayerPromptId = serverPlayerPromptId,
-                        otherPlayerPromptId = otherPlayerPromptId
-                    ))
-                }
-                if (aiSettings.mistralApiKey.isNotBlank()) {
-                    newAgents.add(AiAgent(
-                        id = java.util.UUID.randomUUID().toString(),
-                        name = "Mistral",
-                        provider = AiService.MISTRAL,
-                        model = getFirstModel(aiSettings.mistralManualModels, "mistral-small-latest"),
-                        apiKey = aiSettings.mistralApiKey,
-                        gamePromptId = gamePromptId,
-                        serverPlayerPromptId = serverPlayerPromptId,
-                        otherPlayerPromptId = otherPlayerPromptId
-                    ))
-                }
-                if (aiSettings.perplexityApiKey.isNotBlank()) {
-                    newAgents.add(AiAgent(
-                        id = java.util.UUID.randomUUID().toString(),
-                        name = "Perplexity",
-                        provider = AiService.PERPLEXITY,
-                        model = getFirstModel(aiSettings.perplexityManualModels, "sonar"),
-                        apiKey = aiSettings.perplexityApiKey,
-                        gamePromptId = gamePromptId,
-                        serverPlayerPromptId = serverPlayerPromptId,
-                        otherPlayerPromptId = otherPlayerPromptId
-                    ))
-                }
-                if (aiSettings.togetherApiKey.isNotBlank()) {
-                    newAgents.add(AiAgent(
-                        id = java.util.UUID.randomUUID().toString(),
-                        name = "Together",
-                        provider = AiService.TOGETHER,
-                        model = getFirstModel(aiSettings.togetherManualModels, "meta-llama/Llama-3-70b-chat-hf"),
-                        apiKey = aiSettings.togetherApiKey,
-                        gamePromptId = gamePromptId,
-                        serverPlayerPromptId = serverPlayerPromptId,
-                        otherPlayerPromptId = otherPlayerPromptId
-                    ))
-                }
-                if (aiSettings.openRouterApiKey.isNotBlank()) {
-                    newAgents.add(AiAgent(
-                        id = java.util.UUID.randomUUID().toString(),
-                        name = "OpenRouter",
-                        provider = AiService.OPENROUTER,
-                        model = getFirstModel(aiSettings.openRouterManualModels, "openai/gpt-4o-mini"),
-                        apiKey = aiSettings.openRouterApiKey,
-                        gamePromptId = gamePromptId,
-                        serverPlayerPromptId = serverPlayerPromptId,
-                        otherPlayerPromptId = otherPlayerPromptId
-                    ))
-                }
-
-                if (newAgents.isNotEmpty()) {
-                    // Merge with existing agents (replace agents with same name)
-                    val existingNames = newAgents.map { it.name }.toSet()
-                    val filteredExisting = aiSettings.agents.filter { it.name !in existingNames }
-                    val updatedAgents = filteredExisting + newAgents
-                    onSave(aiSettings.copy(agents = updatedAgents))
-                    Toast.makeText(context, "Generated ${newAgents.size} AI agents", Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(context, "No providers with API keys found", Toast.LENGTH_SHORT).show()
-                }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2196F3))
-        ) {
-            Text("Generate AI agents")
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
 
         // Provider cards - navigate to individual provider screens for model config
         AiServiceNavigationCard(
@@ -2664,6 +2393,39 @@ fun AiProvidersScreen(
             onClick = { onNavigate(SettingsSubScreen.AI_DUMMY) }
         )
 
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Export AI configuration button
+        Button(
+            onClick = {
+                exportAiConfigToFile(context, aiSettings)
+            },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+        ) {
+            Text("Export AI configuration")
+        }
+
+        // Import AI configuration button
+        Button(
+            onClick = { showImportDialog = true },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2196F3))
+        ) {
+            Text("Import AI configuration")
+        }
+    }
+
+    // Import AI configuration dialog
+    if (showImportDialog) {
+        ImportAiConfigDialog(
+            currentSettings = aiSettings,
+            onImport = { importedSettings ->
+                onSave(importedSettings)
+                showImportDialog = false
+            },
+            onDismiss = { showImportDialog = false }
+        )
     }
 }
 
@@ -2982,7 +2744,8 @@ fun AiAgentsScreen(
     availableOpenRouterModels: List<String>,
     onBackToAiSetup: () -> Unit,
     onBackToGame: () -> Unit,
-    onSave: (AiSettings) -> Unit
+    onSave: (AiSettings) -> Unit,
+    onTestAiModel: suspend (AiService, String, String) -> String? = { _, _, _ -> null }
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
     var editingAgent by remember { mutableStateOf<AiAgent?>(null) }
@@ -3085,6 +2848,7 @@ fun AiAgentsScreen(
             availableTogetherModels = availableTogetherModels,
             availableOpenRouterModels = availableOpenRouterModels,
             existingNames = aiSettings.agents.map { it.name }.toSet(),
+            onTestAiModel = onTestAiModel,
             onSave = { newAgent ->
                 val newAgents = if (isEditMode) {
                     aiSettings.agents.map { if (it.id == editingAgent!!.id) newAgent else it }
@@ -3150,16 +2914,25 @@ private fun AgentListItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .padding(horizontal = 12.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = agent.name,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = Color.White
-            )
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = agent.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White
+                )
+                Text(
+                    text = agent.model,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF888888)
+                )
+            }
             Row(
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
@@ -3202,10 +2975,12 @@ private fun AgentEditDialog(
     availableTogetherModels: List<String>,
     availableOpenRouterModels: List<String>,
     existingNames: Set<String>,
+    onTestAiModel: suspend (AiService, String, String) -> String?,
     onSave: (AiAgent) -> Unit,
     onDismiss: () -> Unit
 ) {
     val isEditing = agent != null
+    val coroutineScope = rememberCoroutineScope()
 
     // State
     var name by remember { mutableStateOf(agent?.name ?: "") }
@@ -3216,6 +2991,8 @@ private fun AgentEditDialog(
     var gamePromptId by remember { mutableStateOf(agent?.gamePromptId ?: aiSettings.prompts.firstOrNull()?.id ?: "") }
     var serverPlayerPromptId by remember { mutableStateOf(agent?.serverPlayerPromptId ?: aiSettings.prompts.firstOrNull()?.id ?: "") }
     var otherPlayerPromptId by remember { mutableStateOf(agent?.otherPlayerPromptId ?: aiSettings.prompts.firstOrNull()?.id ?: "") }
+    var isTesting by remember { mutableStateOf(false) }
+    var testError by remember { mutableStateOf<String?>(null) }
 
     // Get models for selected provider
     val modelsForProvider = when (selectedProvider) {
@@ -3424,26 +3201,64 @@ private fun AgentEditDialog(
                         color = Color(0xFFFF9800)
                     )
                 }
+
+                // Test error message
+                if (testError != null) {
+                    HorizontalDivider(color = Color(0xFF444444))
+                    Text(
+                        text = "API Test Failed: $testError",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFF44336)
+                    )
+                }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    val newAgent = AiAgent(
-                        id = agent?.id ?: java.util.UUID.randomUUID().toString(),
-                        name = name.trim(),
-                        provider = selectedProvider,
-                        model = model,
-                        apiKey = apiKey.trim(),
-                        gamePromptId = gamePromptId,
-                        serverPlayerPromptId = serverPlayerPromptId,
-                        otherPlayerPromptId = otherPlayerPromptId
-                    )
-                    onSave(newAgent)
+                    testError = null
+                    isTesting = true
+                    coroutineScope.launch {
+                        // Skip test for empty API key, test all providers including DUMMY
+                        val error = if (apiKey.isBlank()) {
+                            null
+                        } else {
+                            onTestAiModel(selectedProvider, apiKey.trim(), model)
+                        }
+                        isTesting = false
+                        if (error != null) {
+                            testError = error
+                        } else {
+                            val newAgent = AiAgent(
+                                id = agent?.id ?: java.util.UUID.randomUUID().toString(),
+                                name = name.trim(),
+                                provider = selectedProvider,
+                                model = model,
+                                apiKey = apiKey.trim(),
+                                gamePromptId = gamePromptId,
+                                serverPlayerPromptId = serverPlayerPromptId,
+                                otherPlayerPromptId = otherPlayerPromptId
+                            )
+                            onSave(newAgent)
+                        }
+                    }
                 },
-                enabled = nameError == null && (aiSettings.prompts.isNotEmpty() || apiKey.isBlank())
+                enabled = !isTesting && nameError == null && (aiSettings.prompts.isNotEmpty() || apiKey.isBlank())
             ) {
-                Text(if (isEditing) "Save" else "Add")
+                if (isTesting) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Text("Testing...")
+                    }
+                } else {
+                    Text(if (isEditing) "Save" else "Add")
+                }
             }
         },
         dismissButton = {

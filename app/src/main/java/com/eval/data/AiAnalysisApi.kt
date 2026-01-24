@@ -65,6 +65,40 @@ data class OpenAiError(
     val type: String?
 )
 
+// OpenAI Responses API models (for GPT-5.x and newer models)
+data class OpenAiResponsesRequest(
+    val model: String,
+    val input: String,
+    val instructions: String? = null
+)
+
+data class OpenAiResponsesOutputContent(
+    val type: String?,
+    val text: String?,
+    val annotations: List<Any>? = null
+)
+
+data class OpenAiResponsesOutputMessage(
+    val type: String?,
+    val id: String?,
+    val status: String?,
+    val role: String?,
+    val content: List<OpenAiResponsesOutputContent>?
+)
+
+data class OpenAiResponsesApiResponse(
+    val id: String?,
+    val status: String?,
+    val error: OpenAiResponsesError?,
+    val output: List<OpenAiResponsesOutputMessage>?
+)
+
+data class OpenAiResponsesError(
+    val message: String?,
+    val type: String?,
+    val code: String?
+)
+
 // Anthropic / Claude models
 data class ClaudeMessage(
     val role: String,
@@ -178,6 +212,8 @@ data class OpenRouterRequest(
 
 /**
  * Retrofit interface for OpenAI / ChatGPT API.
+ * Uses Chat Completions API for older models (gpt-4o, etc.)
+ * and Responses API for newer models (gpt-5.x, etc.)
  */
 interface OpenAiApi {
     @POST("v1/chat/completions")
@@ -185,6 +221,12 @@ interface OpenAiApi {
         @Header("Authorization") authorization: String,
         @Body request: OpenAiRequest
     ): Response<OpenAiResponse>
+
+    @POST("v1/responses")
+    suspend fun createResponse(
+        @Header("Authorization") authorization: String,
+        @Body request: OpenAiResponsesRequest
+    ): Response<OpenAiResponsesApiResponse>
 
     @retrofit2.http.GET("v1/models")
     suspend fun listModels(
@@ -308,6 +350,7 @@ interface PerplexityApi {
 
 /**
  * Retrofit interface for Together AI API (OpenAI-compatible).
+ * Note: Together's /v1/models endpoint returns a raw array, not {"data": [...]}
  */
 interface TogetherApi {
     @POST("v1/chat/completions")
@@ -319,7 +362,7 @@ interface TogetherApi {
     @retrofit2.http.GET("v1/models")
     suspend fun listModels(
         @Header("Authorization") authorization: String
-    ): Response<OpenAiModelsResponse>
+    ): Response<List<OpenAiModel>>
 }
 
 /**

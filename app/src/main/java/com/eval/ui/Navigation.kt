@@ -175,7 +175,8 @@ fun SettingsScreenNav(
         onFetchMistralModels = { viewModel.fetchMistralModels(it) },
         onFetchPerplexityModels = { viewModel.fetchPerplexityModels(it) },
         onFetchTogetherModels = { viewModel.fetchTogetherModels(it) },
-        onFetchOpenRouterModels = { viewModel.fetchOpenRouterModels(it) }
+        onFetchOpenRouterModels = { viewModel.fetchOpenRouterModels(it) },
+        onTestAiModel = { service, apiKey, model -> viewModel.testAiModel(service, apiKey, model) }
     )
 }
 

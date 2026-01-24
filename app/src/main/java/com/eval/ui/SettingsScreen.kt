@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.eval.data.AiService
 
 /**
  * Settings sub-screen navigation enum.
@@ -87,7 +88,8 @@ fun SettingsScreen(
     onFetchMistralModels: (String) -> Unit,
     onFetchPerplexityModels: (String) -> Unit,
     onFetchTogetherModels: (String) -> Unit,
-    onFetchOpenRouterModels: (String) -> Unit
+    onFetchOpenRouterModels: (String) -> Unit,
+    onTestAiModel: suspend (AiService, String, String) -> String? = { _, _, _ -> null }
 ) {
     var currentSubScreen by remember { mutableStateOf(SettingsSubScreen.MAIN) }
 
@@ -278,7 +280,8 @@ fun SettingsScreen(
             availableOpenRouterModels = availableOpenRouterModels,
             onBackToAiSetup = { currentSubScreen = SettingsSubScreen.AI_SETUP },
             onBackToGame = onBack,
-            onSave = onSaveAi
+            onSave = onSaveAi,
+            onTestAiModel = onTestAiModel
         )
     }
 }
