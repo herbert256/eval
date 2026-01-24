@@ -373,7 +373,9 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             dummyEnabled = prefs.getBoolean(KEY_AI_DUMMY_ENABLED, false),
             dummyPrompt = prefs.getString(KEY_AI_DUMMY_PROMPT, DEFAULT_GAME_PROMPT) ?: DEFAULT_GAME_PROMPT,
             dummyServerPlayerPrompt = prefs.getString(KEY_AI_DUMMY_SERVER_PLAYER_PROMPT, DEFAULT_SERVER_PLAYER_PROMPT) ?: DEFAULT_SERVER_PLAYER_PROMPT,
-            dummyOtherPlayerPrompt = prefs.getString(KEY_AI_DUMMY_OTHER_PLAYER_PROMPT, DEFAULT_OTHER_PLAYER_PROMPT) ?: DEFAULT_OTHER_PLAYER_PROMPT
+            dummyOtherPlayerPrompt = prefs.getString(KEY_AI_DUMMY_OTHER_PLAYER_PROMPT, DEFAULT_OTHER_PLAYER_PROMPT) ?: DEFAULT_OTHER_PLAYER_PROMPT,
+            dummyModelSource = loadModelSource(KEY_AI_DUMMY_MODEL_SOURCE, ModelSource.MANUAL),
+            dummyManualModels = loadManualModelsWithDefault(KEY_AI_DUMMY_MANUAL_MODELS, listOf("dummy-model"))
         )
     }
 
@@ -475,6 +477,8 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             .putString(KEY_AI_DUMMY_PROMPT, settings.dummyPrompt)
             .putString(KEY_AI_DUMMY_SERVER_PLAYER_PROMPT, settings.dummyServerPlayerPrompt)
             .putString(KEY_AI_DUMMY_OTHER_PLAYER_PROMPT, settings.dummyOtherPlayerPrompt)
+            .putString(KEY_AI_DUMMY_MODEL_SOURCE, settings.dummyModelSource.name)
+            .putString(KEY_AI_DUMMY_MANUAL_MODELS, gson.toJson(settings.dummyManualModels))
             .apply()
 
         // Also save prompts and agents if they exist
@@ -883,6 +887,8 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         private const val KEY_AI_DUMMY_PROMPT = "ai_dummy_prompt"
         private const val KEY_AI_DUMMY_SERVER_PLAYER_PROMPT = "ai_dummy_server_player_prompt"
         private const val KEY_AI_DUMMY_OTHER_PLAYER_PROMPT = "ai_dummy_other_player_prompt"
+        private const val KEY_AI_DUMMY_MODEL_SOURCE = "ai_dummy_model_source"
+        private const val KEY_AI_DUMMY_MANUAL_MODELS = "ai_dummy_manual_models"
 
         // AI prompts - Server player prompts
         private const val KEY_AI_CHATGPT_SERVER_PLAYER_PROMPT = "ai_chatgpt_server_player_prompt"

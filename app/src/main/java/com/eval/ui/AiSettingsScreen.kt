@@ -150,6 +150,8 @@ data class AiSettings(
     val dummyPrompt: String = DEFAULT_GAME_PROMPT,
     val dummyServerPlayerPrompt: String = DEFAULT_SERVER_PLAYER_PROMPT,
     val dummyOtherPlayerPrompt: String = DEFAULT_OTHER_PLAYER_PROMPT,
+    val dummyModelSource: ModelSource = ModelSource.MANUAL,
+    val dummyManualModels: List<String> = listOf("dummy-model"),
     // New three-tier architecture
     val prompts: List<AiPrompt> = emptyList(),
     val agents: List<AiAgent> = emptyList()
@@ -1350,6 +1352,8 @@ fun DummySettingsScreen(
     onSave: (AiSettings) -> Unit
 ) {
     var enabled by remember { mutableStateOf(aiSettings.dummyEnabled) }
+    var modelSource by remember { mutableStateOf(aiSettings.dummyModelSource) }
+    var manualModels by remember { mutableStateOf(aiSettings.dummyManualModels) }
 
     Column(
         modifier = Modifier
@@ -1445,6 +1449,44 @@ fun DummySettingsScreen(
                         color = Color(0xFF00E676)
                     )
                 }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Model selection section
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Models",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White
+                )
+
+                UnifiedModelSelectionSection(
+                    modelSource = modelSource,
+                    manualModels = manualModels,
+                    availableApiModels = emptyList(),
+                    isLoadingModels = false,
+                    onModelSourceChange = {
+                        modelSource = it
+                        onSave(aiSettings.copy(dummyModelSource = it))
+                    },
+                    onManualModelsChange = {
+                        manualModels = it
+                        onSave(aiSettings.copy(dummyManualModels = it))
+                    },
+                    onFetchModels = { /* No API fetch for Dummy */ }
+                )
             }
         }
 
@@ -2719,16 +2761,6 @@ fun AiAgentsScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
-
-        Text(
-            text = "Agents combine a provider, model, API key, and prompts.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color(0xFFAAAAAA)
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
         // Add button
         Button(
             onClick = { showAddDialog = true },
@@ -2739,8 +2771,6 @@ fun AiAgentsScreen(
         ) {
             Text("+ Add Agent")
         }
-
-        Spacer(modifier = Modifier.height(8.dp))
 
         // Agent list
         if (aiSettings.agents.isEmpty()) {
@@ -2767,7 +2797,7 @@ fun AiAgentsScreen(
                 }
             }
         } else {
-            aiSettings.agents.forEach { agent ->
+            aiSettings.agents.sortedBy { it.name.lowercase() }.forEach { agent ->
                 AgentListItem(
                     agent = agent,
                     prompts = aiSettings.prompts,
@@ -2882,67 +2912,52 @@ private fun AgentListItem(
         ),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Text(
+                    text = agent.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White
+                )
+                if (!isConfigured) {
                     Text(
-                        text = agent.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White
+                        text = "⚠",
+                        color = Color(0xFFFF9800),
+                        style = MaterialTheme.typography.bodySmall
                     )
-                    if (isConfigured) {
-                        Text(
-                            text = "●",
-                            color = Color(0xFF00E676),
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                }
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    TextButton(
-                        onClick = onEdit,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                    ) {
-                        Text("Edit", color = Color(0xFF6B9BFF))
-                    }
-                    TextButton(
-                        onClick = onCopy,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                    ) {
-                        Text("Copy", color = Color(0xFF9C27B0))
-                    }
-                    TextButton(
-                        onClick = onDelete,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                    ) {
-                        Text("Delete", color = Color(0xFFF44336))
-                    }
                 }
             }
-            Text(
-                text = "${agent.provider.displayName} / ${agent.model}",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFF6B9BFF)
-            )
-            if (!isConfigured) {
-                Text(
-                    text = "⚠ No API key configured",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFFFF9800)
-                )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                TextButton(
+                    onClick = onEdit,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                ) {
+                    Text("Edit", color = Color(0xFF6B9BFF))
+                }
+                TextButton(
+                    onClick = onCopy,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                ) {
+                    Text("Copy", color = Color(0xFF9C27B0))
+                }
+                TextButton(
+                    onClick = onDelete,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                ) {
+                    Text("Delete", color = Color(0xFFF44336))
+                }
             }
         }
     }
@@ -3018,7 +3033,7 @@ private fun AgentEditDialog(
             val manualModels = if (aiSettings.openRouterModelSource == ModelSource.MANUAL) aiSettings.openRouterManualModels else emptyList()
             (apiModels + manualModels).ifEmpty { listOf(model) }
         }
-        AiService.DUMMY -> listOf("dummy")
+        AiService.DUMMY -> aiSettings.dummyManualModels.ifEmpty { listOf("dummy-model") }
     }
 
     // Update model when provider changes
@@ -3082,7 +3097,7 @@ private fun AgentEditDialog(
                         expanded = providerExpanded,
                         onDismissRequest = { providerExpanded = false }
                     ) {
-                        AiService.entries.filter { it != AiService.DUMMY }.forEach { provider ->
+                        AiService.entries.forEach { provider ->
                             DropdownMenuItem(
                                 text = { Text(provider.displayName) },
                                 onClick = {

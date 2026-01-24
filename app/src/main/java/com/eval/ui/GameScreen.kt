@@ -4269,7 +4269,7 @@ private fun AiAgentsReportsSelectionDialog(
                         }
                     }
                 } else {
-                    configuredAgents.forEach { agent ->
+                    configuredAgents.sortedBy { it.name.lowercase() }.forEach { agent ->
                         val isSelected = selectedAgents.contains(agent.id)
                         val providerColor = getAiServiceColor(agent.provider)
 
