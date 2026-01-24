@@ -36,7 +36,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             val serverName = prefs.getString(KEY_ACTIVE_SERVER, null) ?: return null
             return try {
                 ChessServer.valueOf(serverName)
-            } catch (e: Exception) {
+            } catch (e: IllegalArgumentException) {
                 null
             }
         }
@@ -101,7 +101,11 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
                 hashMb = prefs.getInt(KEY_MANUAL_HASH, 64),
                 multiPv = prefs.getInt(KEY_MANUAL_MULTIPV, 3),
                 useNnue = prefs.getBoolean(KEY_MANUAL_NNUE, true),
-                arrowMode = ArrowMode.valueOf(prefs.getString(KEY_MANUAL_ARROW_MODE, ArrowMode.MAIN_LINE.name) ?: ArrowMode.MAIN_LINE.name),
+                arrowMode = try {
+                    ArrowMode.valueOf(prefs.getString(KEY_MANUAL_ARROW_MODE, ArrowMode.MAIN_LINE.name) ?: ArrowMode.MAIN_LINE.name)
+                } catch (e: IllegalArgumentException) {
+                    ArrowMode.MAIN_LINE
+                },
                 numArrows = prefs.getInt(KEY_MANUAL_NUMARROWS, 4),
                 showArrowNumbers = prefs.getBoolean(KEY_MANUAL_SHOWNUMBERS, true),
                 whiteArrowColor = prefs.getLong(KEY_MANUAL_WHITE_ARROW_COLOR, DEFAULT_WHITE_ARROW_COLOR),
@@ -395,7 +399,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         val sourceName = prefs.getString(key, null) ?: return default
         return try {
             ModelSource.valueOf(sourceName)
-        } catch (e: Exception) {
+        } catch (e: IllegalArgumentException) {
             default
         }
     }

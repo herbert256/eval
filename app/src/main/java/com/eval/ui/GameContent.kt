@@ -1071,148 +1071,97 @@ fun GameContent(
     // Raw Stockfish Scores - Preview stage
     if (uiState.currentStage == AnalysisStage.MANUAL && showRawStockfishScore && developerMode && uiState.previewScores.isNotEmpty()) {
         Spacer(modifier = Modifier.height(12.dp))
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = Color(0xFF2D2D3D)
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier.padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = "Raw Stockfish Scores - Preview stage",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF90CAF9),  // Light blue for Preview
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-
-                // Display all moves with their preview scores
-                val moves = uiState.moves
-                val currentMoveIndex = uiState.currentMoveIndex
-
-                moves.forEachIndexed { index, move ->
-                    val previewScore = uiState.previewScores[index]
-                    val isWhiteMove = index % 2 == 0
-                    val moveNumber = (index / 2) + 1
-                    val moveNotation = if (isWhiteMove) {
-                        "$moveNumber. $move"
-                    } else {
-                        "$moveNumber... $move"
-                    }
-
-                    val scoreText = previewScore?.let { score ->
-                        if (score.isMate) {
-                            if (score.mateIn > 0) "M${score.mateIn}" else "-M${kotlin.math.abs(score.mateIn)}"
-                        } else {
-                            if (score.score >= 0) "+%.2f".format(score.score) else "%.2f".format(score.score)
-                        }
-                    } ?: "—"
-
-                    val isCurrentMove = index == currentMoveIndex
-                    val backgroundColor = if (isCurrentMove) Color(0xFF4A4A5A) else Color.Transparent
-                    val textColor = if (isCurrentMove) Color.White else Color(0xFFBBBBBB)
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(backgroundColor, RoundedCornerShape(4.dp))
-                            .padding(horizontal = 8.dp, vertical = 2.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = moveNotation,
-                            fontSize = 12.sp,
-                            color = textColor,
-                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
-                        )
-                        Text(
-                            text = scoreText,
-                            fontSize = 12.sp,
-                            color = if (previewScore != null) Color(0xFF90CAF9) else Color(0xFF666666),
-                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-            }
-        }
+        RawStockfishScoresCard(
+            title = "Raw Stockfish Scores - Preview stage",
+            titleColor = Color(0xFF90CAF9),
+            scores = uiState.previewScores,
+            moves = uiState.moves,
+            currentMoveIndex = uiState.currentMoveIndex
+        )
     }
 
     // Raw Stockfish Scores - Analyse stage
     if (uiState.currentStage == AnalysisStage.MANUAL && showRawStockfishScore && developerMode && uiState.analyseScores.isNotEmpty()) {
         Spacer(modifier = Modifier.height(12.dp))
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = Color(0xFF2D2D3D)
-            ),
-            modifier = Modifier.fillMaxWidth()
+        RawStockfishScoresCard(
+            title = "Raw Stockfish Scores - Analyse stage",
+            titleColor = Color(0xFFFFD700),
+            scores = uiState.analyseScores,
+            moves = uiState.moves,
+            currentMoveIndex = uiState.currentMoveIndex
+        )
+    }
+}
+
+/**
+ * Reusable card for displaying raw Stockfish scores.
+ */
+@Composable
+private fun RawStockfishScoresCard(
+    title: String,
+    titleColor: Color,
+    scores: Map<Int, MoveScore?>,
+    moves: List<String>,
+    currentMoveIndex: Int
+) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFF2D2D3D)
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = "Raw Stockfish Scores - Analyse stage",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFFFFD700),
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = title,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = titleColor,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(4.dp))
 
-                // Display all moves with their analyse scores
-                val moves = uiState.moves
-                val currentMoveIndex = uiState.currentMoveIndex
+            moves.forEachIndexed { index, move ->
+                val score = scores[index]
+                val isWhiteMove = index % 2 == 0
+                val moveNumber = (index / 2) + 1
+                val moveNotation = if (isWhiteMove) "$moveNumber. $move" else "$moveNumber... $move"
 
-                moves.forEachIndexed { index, move ->
-                    val analyseScore = uiState.analyseScores[index]
-                    val isWhiteMove = index % 2 == 0
-                    val moveNumber = (index / 2) + 1
-                    val moveNotation = if (isWhiteMove) {
-                        "$moveNumber. $move"
+                val scoreText = score?.let { s ->
+                    if (s.isMate) {
+                        if (s.mateIn > 0) "M${s.mateIn}" else "-M${kotlin.math.abs(s.mateIn)}"
                     } else {
-                        "$moveNumber... $move"
+                        if (s.score >= 0) "+%.2f".format(s.score) else "%.2f".format(s.score)
                     }
+                } ?: "—"
 
-                    val scoreText = analyseScore?.let { score ->
-                        if (score.isMate) {
-                            if (score.mateIn > 0) "M${score.mateIn}" else "-M${kotlin.math.abs(score.mateIn)}"
-                        } else {
-                            if (score.score >= 0) "+%.2f".format(score.score) else "%.2f".format(score.score)
-                        }
-                    } ?: "—"
+                val isCurrentMove = index == currentMoveIndex
+                val backgroundColor = if (isCurrentMove) Color(0xFF4A4A5A) else Color.Transparent
+                val textColor = if (isCurrentMove) Color.White else Color(0xFFBBBBBB)
 
-                    val isCurrentMove = index == currentMoveIndex
-                    val backgroundColor = if (isCurrentMove) Color(0xFF4A4A5A) else Color.Transparent
-                    val textColor = if (isCurrentMove) Color.White else Color(0xFFBBBBBB)
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(backgroundColor, RoundedCornerShape(4.dp))
-                            .padding(horizontal = 8.dp, vertical = 2.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = moveNotation,
-                            fontSize = 12.sp,
-                            color = textColor,
-                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
-                        )
-                        Text(
-                            text = scoreText,
-                            fontSize = 12.sp,
-                            color = if (analyseScore != null) Color(0xFFFFD700) else Color(0xFF666666),
-                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(backgroundColor, RoundedCornerShape(4.dp))
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = moveNotation,
+                        fontSize = 12.sp,
+                        color = textColor,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                    )
+                    Text(
+                        text = scoreText,
+                        fontSize = 12.sp,
+                        color = if (score != null) titleColor else Color(0xFF666666),
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                        fontWeight = FontWeight.Medium
+                    )
                 }
             }
         }

@@ -625,7 +625,11 @@ private fun AgentEditDialog(
             val manualModels = if (aiSettings.mistralModelSource == ModelSource.MANUAL) aiSettings.mistralManualModels else emptyList()
             (apiModels + manualModels).ifEmpty { listOf(model) }
         }
-        AiService.PERPLEXITY -> aiSettings.perplexityManualModels.ifEmpty { PERPLEXITY_MODELS }
+        AiService.PERPLEXITY -> {
+            val apiModels = if (aiSettings.perplexityModelSource == ModelSource.API) availablePerplexityModels else emptyList()
+            val manualModels = if (aiSettings.perplexityModelSource == ModelSource.MANUAL) aiSettings.perplexityManualModels else emptyList()
+            (apiModels + manualModels).ifEmpty { listOf(model) }
+        }
         AiService.TOGETHER -> {
             val apiModels = if (aiSettings.togetherModelSource == ModelSource.API) availableTogetherModels else emptyList()
             val manualModels = if (aiSettings.togetherModelSource == ModelSource.MANUAL) aiSettings.togetherManualModels else emptyList()
