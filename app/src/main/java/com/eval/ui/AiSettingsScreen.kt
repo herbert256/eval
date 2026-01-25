@@ -349,7 +349,7 @@ private fun AiSetupNavigationCard(
  */
 @Composable
 fun AiProvidersScreen(
-    aiSettings: AiSettings,
+    @Suppress("UNUSED_PARAMETER") aiSettings: AiSettings,
     onBackToAiSetup: () -> Unit,
     onBackToGame: () -> Unit,
     onNavigate: (SettingsSubScreen) -> Unit

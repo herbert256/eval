@@ -166,7 +166,6 @@ private fun OpeningMoveRow(
     onClick: () -> Unit
 ) {
     val total = move.white + move.draws + move.black
-    val winRate = if (total > 0) (move.white * 100 / total) else 0
 
     Row(
         modifier = Modifier

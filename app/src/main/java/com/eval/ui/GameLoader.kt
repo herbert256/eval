@@ -238,7 +238,7 @@ internal class GameLoader(
         }
     }
 
-    fun loadGame(game: LichessGame, server: ChessServer?, username: String?) {
+    fun loadGame(game: LichessGame, @Suppress("UNUSED_PARAMETER") server: ChessServer?, username: String?) {
         analysisOrchestrator.autoAnalysisJob?.cancel()
         analysisOrchestrator.manualAnalysisJob?.cancel()
         analysisOrchestrator.stop()

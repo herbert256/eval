@@ -161,7 +161,7 @@ class ChessRepository(
     /**
      * Get player info from the appropriate server
      */
-    suspend fun getPlayerInfo(username: String, server: ChessServer): Result<PlayerInfo> {
+    suspend fun getPlayerInfo(username: String, @Suppress("UNUSED_PARAMETER") server: ChessServer): Result<PlayerInfo> {
         return getLichessPlayerInfo(username)
     }
 
@@ -404,8 +404,8 @@ class ChessRepository(
                         val tour = broadcast.tour ?: return@mapNotNull null
 
                         // Convert all rounds to BroadcastRoundInfo
-                        val rounds = broadcast.rounds?.mapNotNull { round ->
-                            val roundId = round.id ?: return@mapNotNull null
+                        val rounds = broadcast.rounds?.mapNotNull roundLoop@{ round ->
+                            val roundId = round.id ?: return@roundLoop null
                             BroadcastRoundInfo(
                                 id = roundId,
                                 name = round.name ?: "Round",

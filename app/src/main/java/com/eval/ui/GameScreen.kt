@@ -51,7 +51,7 @@ fun GameScreenContent(
     onNavigateToSettings: () -> Unit = {},
     onNavigateToHelp: () -> Unit = {},
     onNavigateToRetrieve: () -> Unit = {},
-    onNavigateToPlayerInfo: () -> Unit = {},
+    @Suppress("UNUSED_PARAMETER") onNavigateToPlayerInfo: () -> Unit = {},
     onNavigateToAiReports: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()

@@ -44,9 +44,10 @@ object AiHistoryManager {
      * Must be called before using any other methods.
      */
     fun init(context: Context) {
-        historyDir = File(context.filesDir, HISTORY_DIR)
-        if (!historyDir!!.exists()) {
-            historyDir!!.mkdirs()
+        historyDir = File(context.filesDir, HISTORY_DIR).also { dir ->
+            if (!dir.exists()) {
+                dir.mkdirs()
+            }
         }
     }
 

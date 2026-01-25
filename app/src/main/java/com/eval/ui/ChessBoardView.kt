@@ -391,10 +391,6 @@ fun ChessBoardView(
                     strokeWidth = squareSize * 0.03f
                 }
 
-                // Colors for score text in multi-lines mode
-                val greenColor = android.graphics.Color.rgb(0x00, 0xE6, 0x76)  // Bright green
-                val redColor = android.graphics.Color.rgb(0xFF, 0x52, 0x52)    // Bright red
-
                 // Count arrows per target square (for multi-lines mode positioning)
                 val targetSquareCounts = moveArrows
                     .filter { it.scoreText != null }

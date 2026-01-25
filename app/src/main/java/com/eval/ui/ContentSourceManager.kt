@@ -506,7 +506,7 @@ internal class ContentSourceManager(
         }
     }
 
-    private suspend fun fetchPlayerGames(username: String, server: ChessServer, count: Int) {
+    private suspend fun fetchPlayerGames(username: String, @Suppress("UNUSED_PARAMETER") server: ChessServer, count: Int) {
         val gamesResult = repository.getLichessGames(username, count)
         when (gamesResult) {
             is Result.Success -> {

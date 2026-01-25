@@ -386,7 +386,7 @@ private fun RetrieveMainScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = uiState.errorMessage ?: "",
+                        text = uiState.errorMessage.orEmpty(),
                         color = Color.White,
                         modifier = Modifier.padding(12.dp),
                         textAlign = TextAlign.Center
@@ -628,7 +628,7 @@ private fun LichessRetrieveScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = uiState.errorMessage ?: "",
+                        text = uiState.errorMessage.orEmpty(),
                         color = Color.White,
                         modifier = Modifier.padding(12.dp),
                         textAlign = TextAlign.Center
@@ -775,7 +775,7 @@ private fun LichessRetrieveScreen(
  */
 @Composable
 private fun TopRankingsScreen(
-    viewModel: GameViewModel,
+    @Suppress("UNUSED_PARAMETER") viewModel: GameViewModel,
     uiState: GameUiState,
     onBack: () -> Unit,
     onPlayerClick: (LeaderboardPlayer) -> Unit
@@ -833,7 +833,7 @@ private fun TopRankingsScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = uiState.topRankingsError ?: "",
+                        text = uiState.topRankingsError.orEmpty(),
                         color = Color.White,
                         modifier = Modifier.padding(12.dp),
                         textAlign = TextAlign.Center
@@ -1612,7 +1612,7 @@ private fun PgnGameRow(
 ) {
     val whiteName = game.players.white.user?.name ?: "White"
     val blackName = game.players.black.user?.name ?: "Black"
-    val result = game.status ?: "?"
+    val result = game.status
 
     Row(
         modifier = Modifier
@@ -1857,7 +1857,7 @@ private fun StreamersScreen(
 @Composable
 private fun StreamerRow(
     streamer: com.eval.data.StreamerInfo,
-    serverColor: Color,
+    @Suppress("UNUSED_PARAMETER") serverColor: Color,
     onClick: () -> Unit
 ) {
     Card(

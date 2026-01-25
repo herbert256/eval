@@ -152,7 +152,7 @@ private fun GameListItem(
                 .padding(horizontal = 8.dp, vertical = 10.dp)
         ) {
             Text(
-                text = game.speed ?: "",
+                text = game.speed,
                 fontSize = 14.sp,
                 color = rowTextColor,
                 maxLines = 1
