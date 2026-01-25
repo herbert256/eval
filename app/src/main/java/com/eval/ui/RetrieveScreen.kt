@@ -54,6 +54,7 @@ fun RetrieveScreen(
     onBack: () -> Unit,
     onNavigateToGame: () -> Unit = {}
 ) {
+    val context = LocalContext.current
     var currentScreen by remember { mutableStateOf(RetrieveSubScreen.MAIN) }
     // Track which screen we came from when showing player info
     var previousScreen by remember { mutableStateOf(RetrieveSubScreen.MAIN) }
@@ -138,10 +139,14 @@ fun RetrieveScreen(
                     } else {
                         "lichess.org"
                     }
-                    viewModel.showPlayerAiReportsSelectionDialog(info.username, serverName, info)
+                    if (serverName != null) {
+                        viewModel.launchServerPlayerAnalysis(context, info.username, serverName)
+                    } else {
+                        viewModel.launchOtherPlayerAnalysis(context, info.username)
+                    }
                 }
             },
-            hasAiApiKeys = uiState.aiSettings.hasAnyApiKey(),
+            hasAiApiKeys = viewModel.isAiAppInstalled(context),
             onDismiss = {
                 viewModel.dismissPlayerInfo()
                 // Go back to the top rankings screen we came from

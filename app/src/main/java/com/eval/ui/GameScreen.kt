@@ -27,9 +27,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
-import com.eval.data.AiAnalysisResponse
-import com.eval.data.AiHistoryManager
-import com.eval.data.AiReportType
 import com.eval.data.ChessServer
 import com.eval.data.PlayerInfo
 import dev.jeziellago.compose.markdowntext.MarkdownText
@@ -68,6 +65,22 @@ fun GameScreenContent(
             },
             onInstalled = {
                 viewModel.initializeStockfish()
+            }
+        )
+        return
+    }
+
+    // Show warning screen if AI app is not installed (can be dismissed)
+    if (!uiState.aiAppInstalled && !uiState.aiAppWarningDismissed) {
+        AiAppNotInstalledScreen(
+            onContinue = {
+                viewModel.dismissAiAppWarning()
+            },
+            onCheckInstalled = {
+                viewModel.checkAiAppInstalled()
+            },
+            onInstalled = {
+                // AI app installed, warning will auto-dismiss because aiAppInstalled becomes true
             }
         )
         return
@@ -156,17 +169,9 @@ fun GameScreenContent(
             onExportPgn = { viewModel.exportAnnotatedPgn(context) },
             onCopyPgn = { viewModel.copyPgnToClipboard(context) },
             onExportGif = { viewModel.exportAsGif(context) },
-            onGenerateAiReports = { viewModel.showAiReportsSelectionDialog() },
+            onGenerateAiReports = { viewModel.launchGameAnalysis(context) },
             onDismiss = { viewModel.hideSharePositionDialog() }
         )
-    }
-
-    // Navigate to AI Reports screen when selection dialog is triggered
-    LaunchedEffect(uiState.showAiReportsSelectionDialog) {
-        if (uiState.showAiReportsSelectionDialog) {
-            viewModel.dismissAiReportsSelectionDialog()
-            onNavigateToAiReports()
-        }
     }
 
     // Show GIF export progress dialog
@@ -205,26 +210,16 @@ fun GameScreenContent(
         )
     }
 
-    // Navigate to AI Reports screen when player AI reports selection is triggered
-    LaunchedEffect(uiState.showPlayerAiReportsSelectionDialog) {
-        if (uiState.showPlayerAiReportsSelectionDialog) {
-            viewModel.dismissPlayerAiReportsSelectionDialog()
-            onNavigateToAiReports()
-        }
-    }
-
-    // Note: AI screens (AI hub, AI History, New AI Report, AI Reports) are now handled via navigation
-
-    // Show AI analysis screen (full screen)
-    if (uiState.showAiAnalysisDialog) {
-        AiAnalysisScreen(
-            serviceName = uiState.aiAnalysisServiceName,
-            result = uiState.aiAnalysisResult,
-            isLoading = uiState.aiAnalysisLoading,
-            uiState = uiState,
-            onDismiss = { viewModel.dismissAiAnalysisDialog() }
+    // Show AI app not installed dialog
+    if (uiState.showAiAppNotInstalledDialog) {
+        AiAppNotInstalledDialog(
+            onDismiss = { viewModel.hideAiAppNotInstalledDialog() },
+            onInstallClick = {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=com.ai"))
+                context.startActivity(intent)
+            },
+            onDontAskAgain = { viewModel.setAiAppDontAskAgain() }
         )
-        return
     }
 
     // Show player info screen (triggered by clicking on player names)
@@ -248,10 +243,14 @@ fun GameScreenContent(
                     } else {
                         "lichess.org"
                     }
-                    viewModel.showPlayerAiReportsSelectionDialog(info.username, serverName, info)
+                    if (serverName != null) {
+                        viewModel.launchServerPlayerAnalysis(context, info.username, serverName)
+                    } else {
+                        viewModel.launchOtherPlayerAnalysis(context, info.username)
+                    }
                 }
             },
-            hasAiApiKeys = uiState.aiSettings.hasAnyApiKey(),
+            hasAiApiKeys = viewModel.isAiAppInstalled(context),
             onDismiss = { viewModel.dismissPlayerInfo() }
         )
         return
@@ -526,6 +525,174 @@ fun StockfishNotInstalledScreen(
 }
 
 /**
+ * Dialog shown when user tries to use AI features without the AI app installed.
+ */
+@Composable
+fun AiAppNotInstalledDialog(
+    onDismiss: () -> Unit,
+    onInstallClick: () -> Unit,
+    onDontAskAgain: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "AI App Not Installed",
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "The AI app is required to generate AI reports.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    text = "Install the AI app from the Google Play Store to enable AI-powered game and player analysis.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                onInstallClick()
+                onDismiss()
+            }) {
+                Text("Install")
+            }
+        },
+        dismissButton = {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TextButton(onClick = {
+                    onDontAskAgain()
+                    onDismiss()
+                }) {
+                    Text("Don't ask again")
+                }
+                TextButton(onClick = onDismiss) {
+                    Text("Cancel")
+                }
+            }
+        }
+    )
+}
+
+/**
+ * Warning screen shown when AI app is not installed.
+ * User can continue without AI features or install the AI app.
+ * Automatically checks every 2 seconds if AI app has been installed.
+ */
+@Composable
+fun AiAppNotInstalledScreen(
+    onContinue: () -> Unit,
+    onCheckInstalled: () -> Boolean,
+    onInstalled: () -> Unit
+) {
+    val context = LocalContext.current
+    val playStoreUrl = "https://play.google.com/store/apps/details?id=com.ai"
+
+    // Check every 2 seconds if AI app has been installed
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(2000)
+            if (onCheckInstalled()) {
+                onInstalled()
+                break
+            }
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF2A2A2A)),
+        contentAlignment = Alignment.Center
+    ) {
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            ),
+            modifier = Modifier
+                .padding(24.dp)
+                .fillMaxWidth(0.9f)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = "AI App Not Installed",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+
+                Text(
+                    text = "The AI app enables AI-powered game and player analysis features.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+
+                // Clickable link to Play Store
+                val annotatedText = buildAnnotatedString {
+                    append("Install ")
+                    pushStringAnnotation(tag = "URL", annotation = playStoreUrl)
+                    withStyle(style = SpanStyle(
+                        color = Color(0xFF6B9BFF),
+                        textDecoration = TextDecoration.Underline
+                    )) {
+                        append("AI App")
+                    }
+                    pop()
+                    append(" from the Google Play Store for full features.")
+                }
+
+                ClickableText(
+                    text = annotatedText,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    ),
+                    onClick = { offset ->
+                        annotatedText.getStringAnnotations(tag = "URL", start = offset, end = offset)
+                            .firstOrNull()?.let {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(it.item))
+                                context.startActivity(intent)
+                            }
+                    }
+                )
+
+                Text(
+                    text = "The screen will update automatically once the AI app is installed.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Button(
+                    onClick = onContinue,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Text("Continue Without AI")
+                }
+            }
+        }
+    }
+}
+
+/**
  * Eval logo displayed on the main screen when no game is loaded.
  * Features a stylized chess-themed design with light green background.
  */
@@ -584,533 +751,6 @@ fun EvalLogo() {
         }
     }
 }
-
-/**
- * Opens AI reports from multiple services in Chrome with tabbed interface.
- */
-internal fun openAiReportsInChrome(context: android.content.Context, uiState: GameUiState) {
-    try {
-        val appVersion = try {
-            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "unknown"
-        } catch (e: Exception) { "unknown" }
-        val html = convertAiReportsToHtml(uiState, appVersion)
-
-        // Save to AI history
-        AiHistoryManager.saveReport(html, AiReportType.GAME_ANALYSIS)
-
-        val cacheDir = java.io.File(context.cacheDir, "ai_analysis")
-        if (!cacheDir.exists()) {
-            cacheDir.mkdirs()
-        }
-
-        val htmlFile = java.io.File(cacheDir, "ai_reports.html")
-        htmlFile.writeText(html)
-
-        val contentUri = androidx.core.content.FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.fileprovider",
-            htmlFile
-        )
-
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(contentUri, "text/html")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            setPackage("com.android.chrome")
-        }
-
-        try {
-            context.startActivity(intent)
-        } catch (e: android.content.ActivityNotFoundException) {
-            intent.setPackage(null)
-            context.startActivity(intent)
-        }
-    } catch (e: Exception) {
-        android.widget.Toast.makeText(
-            context,
-            "Failed to open in browser: ${e.message}",
-            android.widget.Toast.LENGTH_SHORT
-        ).show()
-    }
-}
-
-/**
- * Shares the AI Reports HTML file using Android share sheet.
- */
-internal fun shareAiReports(context: android.content.Context, uiState: GameUiState) {
-    try {
-        val appVersion = try {
-            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "unknown"
-        } catch (e: Exception) { "unknown" }
-        val html = convertAiReportsToHtml(uiState, appVersion)
-
-        // Save to AI history
-        AiHistoryManager.saveReport(html, AiReportType.GAME_ANALYSIS)
-
-        val cacheDir = java.io.File(context.cacheDir, "ai_analysis")
-        if (!cacheDir.exists()) {
-            cacheDir.mkdirs()
-        }
-
-        val game = uiState.game
-        val whiteName = game?.players?.white?.user?.name ?: "White"
-        val blackName = game?.players?.black?.user?.name ?: "Black"
-
-        val htmlFile = java.io.File(cacheDir, "ai_reports.html")
-        htmlFile.writeText(html)
-
-        val contentUri = androidx.core.content.FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.fileprovider",
-            htmlFile
-        )
-
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/html"
-            putExtra(Intent.EXTRA_SUBJECT, "AI Analysis Report - $whiteName vs $blackName")
-            putExtra(Intent.EXTRA_TEXT, "Chess game AI analysis report for $whiteName vs $blackName.\n\nOpen the attached HTML file in a browser to view the interactive report.")
-            putExtra(Intent.EXTRA_STREAM, contentUri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-
-        context.startActivity(Intent.createChooser(intent, "Share AI Report"))
-    } catch (e: Exception) {
-        android.widget.Toast.makeText(
-            context,
-            "Failed to share: ${e.message}",
-            android.widget.Toast.LENGTH_SHORT
-        ).show()
-    }
-}
-
-/**
- * Opens the player AI reports HTML in Chrome browser.
- */
-internal fun openPlayerAiReportsInChrome(context: android.content.Context, uiState: GameUiState) {
-    try {
-        val appVersion = try {
-            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "unknown"
-        } catch (e: Exception) { "unknown" }
-        val html = convertPlayerAiReportsToHtml(uiState, appVersion)
-
-        // Save to AI history - server_player if server is set, otherwise other_player
-        val reportType = if (uiState.playerAiReportsServer != null) {
-            AiReportType.SERVER_PLAYER
-        } else {
-            AiReportType.OTHER_PLAYER
-        }
-        AiHistoryManager.saveReport(html, reportType)
-
-        val cacheDir = java.io.File(context.cacheDir, "ai_analysis")
-        if (!cacheDir.exists()) {
-            cacheDir.mkdirs()
-        }
-
-        val htmlFile = java.io.File(cacheDir, "player_ai_reports.html")
-        htmlFile.writeText(html)
-
-        val contentUri = androidx.core.content.FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.fileprovider",
-            htmlFile
-        )
-
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(contentUri, "text/html")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            setPackage("com.android.chrome")
-        }
-
-        try {
-            context.startActivity(intent)
-        } catch (e: android.content.ActivityNotFoundException) {
-            intent.setPackage(null)
-            context.startActivity(intent)
-        }
-    } catch (e: Exception) {
-        android.widget.Toast.makeText(
-            context,
-            "Failed to open in Chrome: ${e.message}",
-            android.widget.Toast.LENGTH_SHORT
-        ).show()
-    }
-}
-
-/**
- * Shares the player AI reports HTML via Android share sheet.
- */
-internal fun sharePlayerAiReports(context: android.content.Context, uiState: GameUiState) {
-    try {
-        val appVersion = try {
-            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "unknown"
-        } catch (e: Exception) { "unknown" }
-        val html = convertPlayerAiReportsToHtml(uiState, appVersion)
-
-        // Save to AI history - server_player if server is set, otherwise other_player
-        val reportType = if (uiState.playerAiReportsServer != null) {
-            AiReportType.SERVER_PLAYER
-        } else {
-            AiReportType.OTHER_PLAYER
-        }
-        AiHistoryManager.saveReport(html, reportType)
-
-        val cacheDir = java.io.File(context.cacheDir, "ai_analysis")
-        if (!cacheDir.exists()) {
-            cacheDir.mkdirs()
-        }
-
-        val playerName = uiState.playerAiReportsPlayerName
-
-        val htmlFile = java.io.File(cacheDir, "player_ai_reports.html")
-        htmlFile.writeText(html)
-
-        val contentUri = androidx.core.content.FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.fileprovider",
-            htmlFile
-        )
-
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/html"
-            putExtra(Intent.EXTRA_SUBJECT, "AI Report - Player: $playerName")
-            putExtra(Intent.EXTRA_TEXT, "AI analysis report for chess player: $playerName.\n\nOpen the attached HTML file in a browser to view the report.")
-            putExtra(Intent.EXTRA_STREAM, contentUri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-
-        context.startActivity(Intent.createChooser(intent, "Share Player AI Report"))
-    } catch (e: Exception) {
-        android.widget.Toast.makeText(
-            context,
-            "Failed to share: ${e.message}",
-            android.widget.Toast.LENGTH_SHORT
-        ).show()
-    }
-}
-
-/**
- * Converts player AI analysis results from multiple services to a tabbed HTML document.
- */
-private fun convertPlayerAiReportsToHtml(uiState: GameUiState, appVersion: String): String {
-    val generatedDate = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
-        .format(java.util.Date())
-    val playerName = uiState.playerAiReportsPlayerName
-    val server = uiState.playerAiReportsServer
-    val playerInfo = uiState.playerAiReportsPlayerInfo
-    val aiSettings = uiState.aiSettings
-
-    // Build player info HTML section
-    val playerInfoHtml = buildPlayerInfoHtml(playerInfo, server)
-
-    // Get agents with results, sorted by name
-    val agentsWithResults = uiState.playerAiReportsSelectedAgents.mapNotNull { agentId ->
-        val agent = aiSettings.getAgentById(agentId)
-        val result = uiState.playerAiReportsAgentResults[agentId]
-        if (agent != null && result != null) agent to result else null
-    }.sortedBy { it.first.name.lowercase() }
-
-    // Generate tabs HTML (show agent name)
-    val tabsHtml = agentsWithResults.mapIndexed { index, (agent, _) ->
-        val isActive = if (index == 0) "active" else ""
-        """<button class="tab-btn $isActive" onclick="showTab('${agent.id}')">${escapeHtml(agent.name)}</button>"""
-    }.joinToString("\n")
-
-    // Generate content panels for each agent
-    val panelsHtml = agentsWithResults.mapIndexed { index, (agent, result) ->
-        val isActive = if (index == 0) "active" else ""
-        val providerWithModel = "${agent.provider.displayName} (${agent.model})"
-        val content = if (result.isSuccess && result.analysis != null) {
-            convertMarkdownContentToHtml(result.analysis)
-        } else {
-            """<pre class="error">${escapeHtml(result.error ?: "Unknown error")}</pre>"""
-        }
-        // Get the actual prompt used (with placeholders replaced)
-        val promptUsed = result.promptUsed ?: ""
-        val promptHtml = if (promptUsed.isNotBlank()) {
-            """
-            <div class="prompt-section">
-                <h3>Prompt Used</h3>
-                <pre class="prompt-text">${escapeHtml(promptUsed)}</pre>
-            </div>
-            """
-        } else ""
-        """
-        <div id="panel-${agent.id}" class="tab-panel $isActive">
-            <div class="panel-header">${escapeHtml(providerWithModel)}</div>
-            $content
-            $promptHtml
-        </div>
-        """
-    }.joinToString("\n")
-
-    return """
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Report - $playerName</title>
-    <style>
-        * { box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            line-height: 1.6;
-            padding: 16px;
-            max-width: 900px;
-            margin: 0 auto;
-            background-color: #1a1a1a;
-            color: #e0e0e0;
-        }
-        h1, h2, h3 {
-            color: #ffffff;
-            margin-top: 1.5em;
-            margin-bottom: 0.5em;
-        }
-        h1 { font-size: 1.8em; border-bottom: 2px solid #8B5CF6; padding-bottom: 8px; }
-        h2 { font-size: 1.4em; color: #8B5CF6; margin-top: 1em; }
-        h3 { font-size: 1.2em; color: #A78BFA; }
-        .panel-header {
-            font-size: 2em;
-            font-weight: bold;
-            color: #FF9800;
-            margin-bottom: 0.8em;
-            padding-bottom: 8px;
-            border-bottom: 2px solid #FF9800;
-        }
-        p { margin: 1em 0; }
-        ul { padding-left: 20px; }
-        li { margin: 0.5em 0; }
-        strong { color: #ffffff; }
-        em { color: #b0b0b0; }
-
-        /* Player info section */
-        .player-section {
-            background: #242424;
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 24px;
-        }
-        .player-header {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            margin-bottom: 16px;
-        }
-        .player-name {
-            font-size: 1.8em;
-            font-weight: bold;
-            color: #fff;
-        }
-        .player-title {
-            background: #FFD700;
-            color: #000;
-            padding: 4px 12px;
-            border-radius: 4px;
-            font-weight: bold;
-            font-size: 1.1em;
-        }
-        .server-badge {
-            display: inline-block;
-            padding: 6px 14px;
-            border-radius: 6px;
-            color: #fff;
-            font-weight: 500;
-            margin-bottom: 12px;
-        }
-        .server-lichess { background: #629924; }
-        .server-chesscom { background: #769656; }
-        .info-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 12px;
-            margin-top: 16px;
-        }
-        .info-item {
-            background: #2d2d2d;
-            padding: 12px;
-            border-radius: 8px;
-        }
-        .info-label {
-            font-size: 12px;
-            color: #888;
-            margin-bottom: 4px;
-        }
-        .info-value {
-            font-size: 16px;
-            color: #fff;
-            font-weight: 500;
-        }
-        .ratings-section {
-            margin-top: 16px;
-        }
-        .ratings-grid {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-top: 8px;
-        }
-        .rating-badge {
-            background: #3d3d3d;
-            padding: 8px 16px;
-            border-radius: 8px;
-            text-align: center;
-        }
-        .rating-type {
-            font-size: 11px;
-            color: #888;
-        }
-        .rating-value {
-            font-size: 18px;
-            font-weight: bold;
-            color: #64B5F6;
-        }
-        .stats-section {
-            margin-top: 16px;
-        }
-        .stats-grid {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-top: 8px;
-        }
-        .stat-badge {
-            padding: 8px 16px;
-            border-radius: 8px;
-            text-align: center;
-        }
-        .stat-badge.wins { background: rgba(0, 230, 118, 0.2); }
-        .stat-badge.losses { background: rgba(244, 67, 54, 0.2); }
-        .stat-badge.draws { background: rgba(144, 164, 174, 0.2); }
-        .stat-badge.total { background: rgba(100, 181, 246, 0.2); }
-        .stat-label { font-size: 11px; color: #888; }
-        .stat-value { font-size: 18px; font-weight: bold; }
-        .stat-value.wins { color: #00E676; }
-        .stat-value.losses { color: #FF5252; }
-        .stat-value.draws { color: #90A4AE; }
-        .stat-value.total { color: #64B5F6; }
-
-        /* Prompt section */
-        .prompt-section {
-            margin-top: 24px;
-            padding-top: 16px;
-            border-top: 1px solid #444;
-        }
-        .prompt-section h3 {
-            color: #888;
-            font-size: 1em;
-            margin-bottom: 8px;
-        }
-        .prompt-text {
-            background: #1a1a1a;
-            border: 1px solid #333;
-            border-radius: 6px;
-            padding: 12px;
-            font-family: monospace;
-            font-size: 11px;
-            color: #aaa;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            line-height: 1.5;
-        }
-
-        /* Tabs */
-        .tabs-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin: 24px 0 16px 0;
-            border-bottom: 2px solid #333;
-            padding-bottom: 8px;
-        }
-        .tab-btn {
-            padding: 10px 20px;
-            background: #2d2d2d;
-            border: none;
-            border-radius: 8px 8px 0 0;
-            color: #888;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            transition: all 0.2s;
-        }
-        .tab-btn:hover {
-            background: #3d3d3d;
-            color: #ccc;
-        }
-        .tab-btn.active {
-            background: #8B5CF6;
-            color: #fff;
-        }
-
-        /* Tab panels */
-        .tab-panel {
-            display: none;
-            padding: 16px 0;
-        }
-        .tab-panel.active {
-            display: block;
-        }
-
-        /* Error styling */
-        pre.error {
-            background: #2d1f1f;
-            border: 1px solid #5c2020;
-            border-radius: 8px;
-            padding: 16px;
-            color: #ff6b6b;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            font-family: monospace;
-            font-size: 13px;
-        }
-
-        /* Footer */
-        .generated-footer {
-            margin-top: 40px;
-            padding-top: 16px;
-            border-top: 1px solid #444;
-            text-align: center;
-            color: #666;
-            font-size: 12px;
-        }
-    </style>
-</head>
-<body>
-    <h1>AI Report: $playerName</h1>
-
-    <!-- Player Info Section -->
-    $playerInfoHtml
-
-    <!-- AI Analysis Tabs -->
-    <div class="tabs-container">
-        $tabsHtml
-    </div>
-
-    $panelsHtml
-
-    <div class="generated-footer">
-        Generated by Eval $appVersion on $generatedDate
-    </div>
-
-    <script>
-    function showTab(serviceName) {
-        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-        document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('active'));
-        document.querySelector('.tab-btn[onclick*="' + serviceName + '"]').classList.add('active');
-        document.getElementById('panel-' + serviceName).classList.add('active');
-    }
-    </script>
-</body>
-</html>
-""".trimIndent()
-}
-
-// ============================================================================
-// HTML CONVERSION FUNCTIONS
-// ============================================================================
-
-// Note: AI screen dialogs (AiScreen, AiHistoryScreen, AiHistoryRow, NewAiReportScreen, etc.)
-// have been removed as they are now handled via Navigation.kt routes to AiScreens.kt components.
-// The AiAnalysisScreen component has been moved to AiAnalysisScreen.kt.
 
 /**
  * Builds the player info HTML section from PlayerInfo data.
@@ -1273,498 +913,6 @@ private fun buildPlayerInfoHtml(playerInfo: com.eval.data.PlayerInfo?, server: S
         $bioHtml
     </div>
     """
-}
-
-/**
- * Converts AI analysis results from multiple services to a tabbed HTML document.
- */
-private fun convertAiReportsToHtml(uiState: GameUiState, appVersion: String): String {
-    val generatedDate = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
-        .format(java.util.Date())
-    val game = uiState.game
-    val whiteName = game?.players?.white?.user?.name
-        ?: game?.players?.white?.aiLevel?.let { "Stockfish $it" }
-        ?: "White"
-    val blackName = game?.players?.black?.user?.name
-        ?: game?.players?.black?.aiLevel?.let { "Stockfish $it" }
-        ?: "Black"
-    val whiteRating = game?.players?.white?.rating?.toString() ?: ""
-    val blackRating = game?.players?.black?.rating?.toString() ?: ""
-    val fen = uiState.currentBoard.getFen()
-    val flippedBoard = uiState.flippedBoard
-    val isWhiteToMove = uiState.currentBoard.getTurn() == com.eval.chess.PieceColor.WHITE
-    val currentMoveIndex = uiState.currentMoveIndex
-    val moveDetails = uiState.moveDetails
-    val analyseScores = uiState.analyseScores
-
-    // Build position info text: "Position after move X .... move / Color to move next" or "Position after move X move / Color to move next"
-    val positionInfoText = if (currentMoveIndex >= 0 && currentMoveIndex < moveDetails.size) {
-        val lastMove = moveDetails[currentMoveIndex]
-        val moveNumber = (currentMoveIndex / 2) + 1
-        val wasWhiteMove = currentMoveIndex % 2 == 0  // Index 0 = white's 1st move, index 1 = black's 1st move, etc.
-        val moveNotation = if (wasWhiteMove) {
-            "$moveNumber. ${lastMove.san}"
-        } else {
-            "$moveNumber. .... ${lastMove.san}"
-        }
-        val nextToMove = if (isWhiteToMove) "White to move next" else "Black to move next"
-        "Position after move $moveNotation &nbsp;&nbsp;/&nbsp;&nbsp; $nextToMove"
-    } else {
-        val nextToMove = if (isWhiteToMove) "White to move" else "Black to move"
-        "Starting position &nbsp;&nbsp;/&nbsp;&nbsp; $nextToMove"
-    }
-
-    // Build move list HTML with Stockfish scores
-    val moveListHtml = buildAiReportsMoveListHtml(moveDetails, analyseScores, currentMoveIndex)
-
-    val aiSettings = uiState.aiSettings
-
-    // Get agents with results, sorted by name
-    val agentsWithResults = uiState.aiReportsSelectedAgents.mapNotNull { agentId ->
-        val agent = aiSettings.getAgentById(agentId)
-        val result = uiState.aiReportsAgentResults[agentId]
-        if (agent != null && result != null) agent to result else null
-    }.sortedBy { it.first.name.lowercase() }
-
-    // Generate tabs HTML (show agent name)
-    val tabsHtml = agentsWithResults.mapIndexed { index, (agent, _) ->
-        val isActive = if (index == 0) "active" else ""
-        """<button class="tab-btn $isActive" onclick="showTab('${agent.id}')">${escapeHtml(agent.name)}</button>"""
-    }.joinToString("\n")
-
-    // Generate content panels for each agent
-    val panelsHtml = agentsWithResults.mapIndexed { index, (agent, result) ->
-        val isActive = if (index == 0) "active" else ""
-        val providerWithModel = "${agent.provider.displayName} (${agent.model})"
-        val content = if (result.isSuccess && result.analysis != null) {
-            convertMarkdownContentToHtml(result.analysis)
-        } else {
-            """<pre class="error">${escapeHtml(result.error ?: "Unknown error")}</pre>"""
-        }
-        // Build citations HTML if available
-        val citationsHtml = if (!result.citations.isNullOrEmpty()) {
-            val citationsList = result.citations.map { url ->
-                """<li><a href="${escapeHtml(url)}" target="_blank">${escapeHtml(url)}</a></li>"""
-            }.joinToString("\n")
-            """
-            <div class="citations-section">
-                <h3>Sources</h3>
-                <ol class="citations-list">
-                    $citationsList
-                </ol>
-            </div>
-            """
-        } else ""
-        // Build search results HTML if available
-        val searchResultsHtml = if (!result.searchResults.isNullOrEmpty()) {
-            val searchResultsList = result.searchResults.mapNotNull { sr ->
-                val url = sr.url ?: return@mapNotNull null
-                val resultTitle = sr.name ?: url
-                val snippet = sr.snippet?.let { "<p class=\"search-snippet\">${escapeHtml(it)}</p>" } ?: ""
-                """<li><a href="${escapeHtml(url)}" target="_blank">${escapeHtml(resultTitle)}</a>$snippet</li>"""
-            }.joinToString("\n")
-            if (searchResultsList.isNotEmpty()) {
-                """
-                <div class="search-results-section">
-                    <h3>Search Results</h3>
-                    <ol class="search-results-list">
-                        $searchResultsList
-                    </ol>
-                </div>
-                """
-            } else ""
-        } else ""
-        // Get the actual prompt used (with @FEN@ replaced)
-        val promptUsed = result.promptUsed ?: ""
-        val promptHtml = if (promptUsed.isNotBlank()) {
-            """
-            <div class="prompt-section">
-                <h3>Prompt Used</h3>
-                <pre class="prompt-text">${escapeHtml(promptUsed)}</pre>
-            </div>
-            """
-        } else ""
-        """
-        <div id="panel-${agent.id}" class="tab-panel $isActive">
-            <div class="panel-header">${escapeHtml(providerWithModel)}</div>
-            $content
-            $citationsHtml
-            $searchResultsHtml
-            $promptHtml
-        </div>
-        """
-    }.joinToString("\n")
-
-    return """
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Analysis Reports</title>
-    <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-    <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
-    <style>
-        * { box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            line-height: 1.6;
-            padding: 16px;
-            max-width: 900px;
-            margin: 0 auto;
-            background-color: #1a1a1a;
-            color: #e0e0e0;
-        }
-        h1, h2, h3 {
-            color: #ffffff;
-            margin-top: 1.5em;
-            margin-bottom: 0.5em;
-        }
-        h1 { font-size: 1.8em; border-bottom: 2px solid #8B5CF6; padding-bottom: 8px; }
-        h2 { font-size: 1.4em; color: #8B5CF6; margin-top: 1em; }
-        h3 { font-size: 1.2em; color: #A78BFA; }
-        .panel-header {
-            font-size: 2em;
-            font-weight: bold;
-            color: #FF9800;
-            margin-bottom: 0.8em;
-            padding-bottom: 8px;
-            border-bottom: 2px solid #FF9800;
-        }
-        p { margin: 1em 0; }
-        ul { padding-left: 20px; }
-        li { margin: 0.5em 0; }
-        strong { color: #ffffff; }
-        em { color: #b0b0b0; }
-
-        /* Board container */
-        .board-section { margin-bottom: 24px; }
-        .board-container {
-            display: flex;
-            gap: 12px;
-            justify-content: center;
-            align-items: flex-start;
-        }
-        .board-wrapper { width: 320px; }
-
-        /* Player bars */
-        .player-bar {
-            display: flex;
-            align-items: center;
-            padding: 8px 12px;
-            background: #2d2d2d;
-            border-radius: 4px;
-            margin-bottom: 4px;
-            width: 320px;
-            box-sizing: border-box;
-        }
-        .player-bar.bottom { margin-top: 4px; margin-bottom: 0; }
-        .player-name { font-weight: bold; color: #fff; }
-        .player-rating { color: #888; margin-left: 8px; font-size: 0.9em; }
-        .player-indicator {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            margin-right: 8px;
-        }
-        .player-indicator.white { background: #fff; border: 1px solid #666; }
-        .player-indicator.black { background: #000; border: 1px solid #666; }
-        .to-move { box-shadow: 0 0 0 2px #ff4444; }
-
-        /* Move list box next to board */
-        .moves-box {
-            width: 220px;
-            height: 388px; /* Same height as board + player bars */
-            background: #242424;
-            border-radius: 8px;
-            overflow-y: auto;
-            padding: 8px;
-        }
-        .moves-box-title {
-            font-size: 12px;
-            color: #888;
-            margin-bottom: 8px;
-            text-align: center;
-            border-bottom: 1px solid #444;
-            padding-bottom: 4px;
-        }
-        .moves-grid {
-            display: grid;
-            grid-template-columns: 28px 1fr 1fr;
-            gap: 2px 4px;
-            font-family: monospace;
-            font-size: 12px;
-        }
-        .move-number { color: #666; text-align: right; padding-right: 4px; }
-        .move-cell {
-            padding: 2px 4px;
-            border-radius: 3px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .move-cell.current { background: #4a4a00; }
-        .move-san { color: #fff; }
-        .move-score { color: #888; font-size: 10px; margin-left: 4px; }
-        .move-score.positive { color: #4CAF50; }
-        .move-score.negative { color: #f44336; }
-
-        /* Position info text */
-        .position-info {
-            text-align: center;
-            font-size: 1.2em;
-            font-weight: bold;
-            color: #4CAF50;
-            margin-top: 16px;
-            padding: 12px;
-            background: #242424;
-            border-radius: 8px;
-        }
-
-        /* Prompt section */
-        .prompt-section {
-            margin-top: 24px;
-            padding-top: 16px;
-            border-top: 1px solid #444;
-        }
-        .prompt-section h3 {
-            color: #888;
-            font-size: 1em;
-            margin-bottom: 8px;
-        }
-        .prompt-text {
-            background: #1a1a1a;
-            border: 1px solid #333;
-            border-radius: 6px;
-            padding: 12px;
-            font-family: monospace;
-            font-size: 11px;
-            color: #aaa;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            line-height: 1.5;
-        }
-
-        /* Tabs */
-        .tabs-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin: 24px 0 16px 0;
-            border-bottom: 2px solid #333;
-            padding-bottom: 8px;
-        }
-        .tab-btn {
-            padding: 10px 20px;
-            background: #2d2d2d;
-            border: none;
-            border-radius: 8px 8px 0 0;
-            color: #888;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            transition: all 0.2s;
-        }
-        .tab-btn:hover {
-            background: #3d3d3d;
-            color: #ccc;
-        }
-        .tab-btn.active {
-            background: #8B5CF6;
-            color: #fff;
-        }
-
-        /* Tab panels */
-        .tab-panel {
-            display: none;
-            padding: 16px 0;
-        }
-        .tab-panel.active {
-            display: block;
-        }
-
-        /* Error styling */
-        pre.error {
-            background: #2d1f1f;
-            border: 1px solid #5c2020;
-            border-radius: 8px;
-            padding: 16px;
-            color: #ff6b6b;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            font-family: monospace;
-            font-size: 13px;
-        }
-
-        /* Citations section */
-        .citations-section {
-            margin-top: 24px;
-            padding: 16px;
-            background: #252525;
-            border-radius: 8px;
-            border: 1px solid #333;
-        }
-        .citations-section h3 {
-            margin-top: 0;
-            margin-bottom: 12px;
-            color: #8B5CF6;
-        }
-        .citations-list {
-            margin: 0;
-            padding-left: 24px;
-        }
-        .citations-list li {
-            margin: 6px 0;
-        }
-        .citations-list a {
-            color: #64B5F6;
-            text-decoration: none;
-            word-break: break-all;
-        }
-        .citations-list a:hover {
-            text-decoration: underline;
-        }
-
-        /* Search results section */
-        .search-results-section {
-            margin-top: 24px;
-            padding: 16px;
-            background: #252525;
-            border-radius: 8px;
-            border: 1px solid #333;
-        }
-        .search-results-section h3 {
-            margin-top: 0;
-            margin-bottom: 12px;
-            color: #FF9800;
-        }
-        .search-results-list {
-            margin: 0;
-            padding-left: 24px;
-        }
-        .search-results-list li {
-            margin: 12px 0;
-        }
-        .search-results-list a {
-            color: #64B5F6;
-            text-decoration: none;
-            font-weight: bold;
-        }
-        .search-results-list a:hover {
-            text-decoration: underline;
-        }
-        .search-snippet {
-            margin: 4px 0 0 0;
-            color: #999;
-            font-size: 0.9em;
-        }
-
-        /* Developer mode sections */
-        .developer-section {
-            margin-top: 24px;
-            padding: 16px;
-            background: #1a2a1a;
-            border-radius: 8px;
-            border: 1px solid #2a4a2a;
-        }
-        .developer-section h3 {
-            margin-top: 0;
-            margin-bottom: 12px;
-            color: #4CAF50;
-        }
-        .developer-pre {
-            background: #0d1a0d;
-            border: 1px solid #2a4a2a;
-            border-radius: 4px;
-            padding: 12px;
-            color: #81C784;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            font-family: monospace;
-            font-size: 12px;
-            margin: 0;
-            overflow-x: auto;
-        }
-
-        /* Footer */
-        .generated-footer {
-            margin-top: 40px;
-            padding-top: 16px;
-            border-top: 1px solid #444;
-            text-align: center;
-            color: #666;
-            font-size: 12px;
-        }
-    </style>
-</head>
-<body>
-    <h1>AI Analysis Reports</h1>
-
-    <!-- Chess Board Section -->
-    <div class="board-section">
-        <div class="board-container">
-            <!-- Board with player bars -->
-            <div class="board-wrapper">
-                <div class="player-bar" id="topPlayer">
-                    <div class="player-indicator ${if (flippedBoard) "white" else "black"}"></div>
-                    <span class="player-name">${if (flippedBoard) whiteName else blackName}</span>
-                    <span class="player-rating">${if (flippedBoard) whiteRating else blackRating}</span>
-                </div>
-                <div id="board" style="width: 320px;"></div>
-                <div class="player-bar bottom" id="bottomPlayer">
-                    <div class="player-indicator ${if (flippedBoard) "black" else "white"}"></div>
-                    <span class="player-name">${if (flippedBoard) blackName else whiteName}</span>
-                    <span class="player-rating">${if (flippedBoard) blackRating else whiteRating}</span>
-                </div>
-            </div>
-            <!-- Move list box -->
-            <div class="moves-box">
-                <div class="moves-box-title">Moves with Stockfish Scores</div>
-                $moveListHtml
-            </div>
-        </div>
-        <!-- Position info text below board -->
-        <div class="position-info">
-            $positionInfoText
-        </div>
-    </div>
-
-    <!-- Tabs -->
-    <div class="tabs-container">
-        $tabsHtml
-    </div>
-
-    <!-- Tab panels -->
-    $panelsHtml
-
-    <script>
-        // Initialize chessboard
-        var board = Chessboard('board', {
-            position: '$fen',
-            orientation: '${if (flippedBoard) "black" else "white"}',
-            pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png'
-        });
-
-        // Tab switching
-        function showTab(serviceName) {
-            // Hide all panels
-            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-            // Deactivate all buttons
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            // Show selected panel
-            document.getElementById('panel-' + serviceName).classList.add('active');
-            // Activate selected button
-            event.target.classList.add('active');
-        }
-    </script>
-
-    <div class="generated-footer">
-        Generated by Eval $appVersion on $generatedDate
-    </div>
-</body>
-</html>
-"""
 }
 
 /**
@@ -2277,56 +1425,6 @@ private fun buildMoveListHtml(uiState: GameUiState): String {
     return sb.toString()
 }
 
-/**
- * Builds HTML for the AI reports move list with Stockfish scores.
- */
-private fun buildAiReportsMoveListHtml(
-    moveDetails: List<MoveDetails>,
-    analyseScores: Map<Int, MoveScore>,
-    currentMoveIndex: Int
-): String {
-    if (moveDetails.isEmpty()) return "<div style=\"color: #888; text-align: center;\">No moves</div>"
-
-    val sb = StringBuilder()
-    sb.append("<div class=\"moves-grid\">")
-
-    for (i in moveDetails.indices step 2) {
-        val moveNum = (i / 2) + 1
-        val whiteMove = moveDetails[i]
-        val blackMove = moveDetails.getOrNull(i + 1)
-
-        val whiteCurrent = if (i == currentMoveIndex) "current" else ""
-        val blackCurrent = if (i + 1 == currentMoveIndex) "current" else ""
-
-        // Get scores for white and black moves
-        val whiteScore = analyseScores[i]
-        val blackScore = analyseScores.getOrElse(i + 1) { null }
-
-        fun formatScore(score: MoveScore?): String {
-            if (score == null) return ""
-            return if (score.isMate) {
-                val mateText = if (score.mateIn > 0) "M${score.mateIn}" else "M${-score.mateIn}"
-                val scoreClass = if (score.mateIn > 0) "positive" else "negative"
-                """<span class="move-score $scoreClass">$mateText</span>"""
-            } else {
-                val scoreClass = if (score.score >= 0) "positive" else "negative"
-                val scoreText = if (score.score >= 0) "+%.1f".format(score.score) else "%.1f".format(score.score)
-                """<span class="move-score $scoreClass">$scoreText</span>"""
-            }
-        }
-
-        sb.append("<div class=\"move-number\">$moveNum.</div>")
-        sb.append("<div class=\"move-cell $whiteCurrent\"><span class=\"move-san\">${whiteMove.san}</span>${formatScore(whiteScore)}</div>")
-        if (blackMove != null) {
-            sb.append("<div class=\"move-cell $blackCurrent\"><span class=\"move-san\">${blackMove.san}</span>${formatScore(blackScore)}</div>")
-        } else {
-            sb.append("<div></div>")
-        }
-    }
-
-    sb.append("</div>")
-    return sb.toString()
-}
 
 /**
  * Builds HTML for the Stockfish analysis.

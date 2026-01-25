@@ -5,8 +5,13 @@
     <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- Query Stockfish package to use system-installed engine -->
+    <!-- Query AI app for report generation -->
     <queries>
         <package android:name="com.stockfish141" />
+        <package android:name="com.ai" />
+        <intent>
+            <action android:name="com.ai.ACTION_NEW_REPORT" />
+        </intent>
     </queries>
 
     <application

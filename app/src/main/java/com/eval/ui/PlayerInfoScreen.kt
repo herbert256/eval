@@ -35,6 +35,7 @@ fun PlayerInfoScreenNav(
     onNavigateBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
 
     PlayerInfoScreen(
         playerInfo = uiState.playerInfo,
@@ -55,10 +56,14 @@ fun PlayerInfoScreenNav(
                 } else {
                     "lichess.org"
                 }
-                viewModel.showPlayerAiReportsSelectionDialog(info.username, serverName, info)
+                if (serverName != null) {
+                    viewModel.launchServerPlayerAnalysis(context, info.username, serverName)
+                } else {
+                    viewModel.launchOtherPlayerAnalysis(context, info.username)
+                }
             }
         },
-        hasAiApiKeys = uiState.aiSettings.hasAnyApiKey(),
+        hasAiApiKeys = viewModel.isAiAppInstalled(context),
         onDismiss = onNavigateBack
     )
 }

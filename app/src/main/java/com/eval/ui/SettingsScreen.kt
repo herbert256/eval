@@ -13,7 +13,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.eval.data.AiService
 
 /**
  * Settings sub-screen navigation enum.
@@ -26,24 +25,7 @@ enum class SettingsSubScreen {
     BOARD_LAYOUT,
     GRAPH_SETTINGS,
     INTERFACE_VISIBILITY,
-    // Old AI settings structure (kept for backwards compatibility in navigation)
-    AI_SETTINGS,
-    AI_CHATGPT,
-    AI_CLAUDE,
-    AI_GEMINI,
-    AI_GROK,
-    AI_GROQ,
-    AI_DEEPSEEK,
-    AI_MISTRAL,
-    AI_PERPLEXITY,
-    AI_TOGETHER,
-    AI_OPENROUTER,
-    AI_DUMMY,
-    // New three-tier AI architecture
-    AI_SETUP,       // Hub with 3 navigation cards
-    AI_PROVIDERS,   // Provider model configuration
-    AI_PROMPTS,     // Prompts CRUD
-    AI_AGENTS       // Agents CRUD
+    AI_PROMPTS     // Prompts for external AI app
 }
 
 /**
@@ -57,42 +39,14 @@ fun SettingsScreen(
     graphSettings: GraphSettings,
     interfaceVisibility: InterfaceVisibilitySettings,
     generalSettings: GeneralSettings,
-    aiSettings: AiSettings,
-    availableChatGptModels: List<String>,
-    isLoadingChatGptModels: Boolean,
-    availableGeminiModels: List<String>,
-    isLoadingGeminiModels: Boolean,
-    availableGrokModels: List<String>,
-    isLoadingGrokModels: Boolean,
-    availableGroqModels: List<String>,
-    isLoadingGroqModels: Boolean,
-    availableDeepSeekModels: List<String>,
-    isLoadingDeepSeekModels: Boolean,
-    availableMistralModels: List<String>,
-    isLoadingMistralModels: Boolean,
-    availablePerplexityModels: List<String>,
-    isLoadingPerplexityModels: Boolean,
-    availableTogetherModels: List<String>,
-    isLoadingTogetherModels: Boolean,
-    availableOpenRouterModels: List<String>,
-    isLoadingOpenRouterModels: Boolean,
+    aiPromptsSettings: AiPromptsSettings,
     onBack: () -> Unit,
     onSaveStockfish: (StockfishSettings) -> Unit,
     onSaveBoardLayout: (BoardLayoutSettings) -> Unit,
     onSaveGraph: (GraphSettings) -> Unit,
     onSaveInterfaceVisibility: (InterfaceVisibilitySettings) -> Unit,
     onSaveGeneral: (GeneralSettings) -> Unit,
-    onSaveAi: (AiSettings) -> Unit,
-    onFetchChatGptModels: (String) -> Unit,
-    onFetchGeminiModels: (String) -> Unit,
-    onFetchGrokModels: (String) -> Unit,
-    onFetchGroqModels: (String) -> Unit,
-    onFetchDeepSeekModels: (String) -> Unit,
-    onFetchMistralModels: (String) -> Unit,
-    onFetchPerplexityModels: (String) -> Unit,
-    onFetchTogetherModels: (String) -> Unit,
-    onFetchOpenRouterModels: (String) -> Unit,
-    onTestAiModel: suspend (AiService, String, String) -> String? = { _, _, _ -> null }
+    onSaveAiPrompts: (AiPromptsSettings) -> Unit
 ) {
     var currentSubScreen by remember { mutableStateOf(SettingsSubScreen.MAIN) }
 
@@ -100,21 +54,6 @@ fun SettingsScreen(
     BackHandler {
         when (currentSubScreen) {
             SettingsSubScreen.MAIN -> onBack()
-            SettingsSubScreen.AI_CHATGPT,
-            SettingsSubScreen.AI_CLAUDE,
-            SettingsSubScreen.AI_GEMINI,
-            SettingsSubScreen.AI_GROK,
-            SettingsSubScreen.AI_GROQ,
-            SettingsSubScreen.AI_DEEPSEEK,
-            SettingsSubScreen.AI_MISTRAL,
-            SettingsSubScreen.AI_PERPLEXITY,
-            SettingsSubScreen.AI_TOGETHER,
-            SettingsSubScreen.AI_OPENROUTER,
-            SettingsSubScreen.AI_DUMMY -> currentSubScreen = SettingsSubScreen.AI_PROVIDERS
-            // New three-tier screens navigate back to AI_SETUP
-            SettingsSubScreen.AI_PROVIDERS,
-            SettingsSubScreen.AI_PROMPTS,
-            SettingsSubScreen.AI_AGENTS -> currentSubScreen = SettingsSubScreen.AI_SETUP
             else -> currentSubScreen = SettingsSubScreen.MAIN
         }
     }
@@ -160,141 +99,11 @@ fun SettingsScreen(
             onBackToGame = onBack,
             onSave = onSaveInterfaceVisibility
         )
-        SettingsSubScreen.AI_SETTINGS -> AiSettingsScreen(
-            aiSettings = aiSettings,
+        SettingsSubScreen.AI_PROMPTS -> AiPromptsSettingsScreen(
+            aiPromptsSettings = aiPromptsSettings,
             onBackToSettings = { currentSubScreen = SettingsSubScreen.MAIN },
             onBackToGame = onBack,
-            onNavigate = { currentSubScreen = it },
-            onSave = onSaveAi
-        )
-        SettingsSubScreen.AI_CHATGPT -> ChatGptSettingsScreen(
-            aiSettings = aiSettings,
-            availableModels = availableChatGptModels,
-            isLoadingModels = isLoadingChatGptModels,
-            onBackToAiSettings = { currentSubScreen = SettingsSubScreen.AI_PROVIDERS },
-            onBackToGame = onBack,
-            onSave = onSaveAi,
-            onFetchModels = onFetchChatGptModels
-        )
-        SettingsSubScreen.AI_CLAUDE -> ClaudeSettingsScreen(
-            aiSettings = aiSettings,
-            onBackToAiSettings = { currentSubScreen = SettingsSubScreen.AI_PROVIDERS },
-            onBackToGame = onBack,
-            onSave = onSaveAi
-        )
-        SettingsSubScreen.AI_GEMINI -> GeminiSettingsScreen(
-            aiSettings = aiSettings,
-            availableModels = availableGeminiModels,
-            isLoadingModels = isLoadingGeminiModels,
-            onBackToAiSettings = { currentSubScreen = SettingsSubScreen.AI_PROVIDERS },
-            onBackToGame = onBack,
-            onSave = onSaveAi,
-            onFetchModels = onFetchGeminiModels
-        )
-        SettingsSubScreen.AI_GROK -> GrokSettingsScreen(
-            aiSettings = aiSettings,
-            availableModels = availableGrokModels,
-            isLoadingModels = isLoadingGrokModels,
-            onBackToAiSettings = { currentSubScreen = SettingsSubScreen.AI_PROVIDERS },
-            onBackToGame = onBack,
-            onSave = onSaveAi,
-            onFetchModels = onFetchGrokModels
-        )
-        SettingsSubScreen.AI_GROQ -> GroqSettingsScreen(
-            aiSettings = aiSettings,
-            availableModels = availableGroqModels,
-            isLoadingModels = isLoadingGroqModels,
-            onBackToAiSettings = { currentSubScreen = SettingsSubScreen.AI_PROVIDERS },
-            onBackToGame = onBack,
-            onSave = onSaveAi,
-            onFetchModels = onFetchGroqModels
-        )
-        SettingsSubScreen.AI_DEEPSEEK -> DeepSeekSettingsScreen(
-            aiSettings = aiSettings,
-            availableModels = availableDeepSeekModels,
-            isLoadingModels = isLoadingDeepSeekModels,
-            onBackToAiSettings = { currentSubScreen = SettingsSubScreen.AI_PROVIDERS },
-            onBackToGame = onBack,
-            onSave = onSaveAi,
-            onFetchModels = onFetchDeepSeekModels
-        )
-        SettingsSubScreen.AI_MISTRAL -> MistralSettingsScreen(
-            aiSettings = aiSettings,
-            availableModels = availableMistralModels,
-            isLoadingModels = isLoadingMistralModels,
-            onBackToAiSettings = { currentSubScreen = SettingsSubScreen.AI_PROVIDERS },
-            onBackToGame = onBack,
-            onSave = onSaveAi,
-            onFetchModels = onFetchMistralModels
-        )
-        SettingsSubScreen.AI_PERPLEXITY -> PerplexitySettingsScreen(
-            aiSettings = aiSettings,
-            availableModels = availablePerplexityModels,
-            isLoadingModels = isLoadingPerplexityModels,
-            onBackToAiSettings = { currentSubScreen = SettingsSubScreen.AI_PROVIDERS },
-            onBackToGame = onBack,
-            onSave = onSaveAi,
-            onFetchModels = onFetchPerplexityModels
-        )
-        SettingsSubScreen.AI_TOGETHER -> TogetherSettingsScreen(
-            aiSettings = aiSettings,
-            availableModels = availableTogetherModels,
-            isLoadingModels = isLoadingTogetherModels,
-            onBackToAiSettings = { currentSubScreen = SettingsSubScreen.AI_PROVIDERS },
-            onBackToGame = onBack,
-            onSave = onSaveAi,
-            onFetchModels = onFetchTogetherModels
-        )
-        SettingsSubScreen.AI_OPENROUTER -> OpenRouterSettingsScreen(
-            aiSettings = aiSettings,
-            availableModels = availableOpenRouterModels,
-            isLoadingModels = isLoadingOpenRouterModels,
-            onBackToAiSettings = { currentSubScreen = SettingsSubScreen.AI_PROVIDERS },
-            onBackToGame = onBack,
-            onSave = onSaveAi,
-            onFetchModels = onFetchOpenRouterModels
-        )
-        SettingsSubScreen.AI_DUMMY -> DummySettingsScreen(
-            aiSettings = aiSettings,
-            onBackToAiSettings = { currentSubScreen = SettingsSubScreen.AI_PROVIDERS },
-            onBackToGame = onBack,
-            onSave = onSaveAi
-        )
-        // New three-tier AI architecture screens
-        SettingsSubScreen.AI_SETUP -> AiSetupScreen(
-            aiSettings = aiSettings,
-            onBackToSettings = { currentSubScreen = SettingsSubScreen.MAIN },
-            onBackToGame = onBack,
-            onNavigate = { currentSubScreen = it },
-            onSave = onSaveAi
-        )
-        SettingsSubScreen.AI_PROVIDERS -> AiProvidersScreen(
-            aiSettings = aiSettings,
-            onBackToAiSetup = { currentSubScreen = SettingsSubScreen.AI_SETUP },
-            onBackToGame = onBack,
-            onNavigate = { currentSubScreen = it }
-        )
-        SettingsSubScreen.AI_PROMPTS -> AiPromptsScreen(
-            aiSettings = aiSettings,
-            onBackToAiSetup = { currentSubScreen = SettingsSubScreen.AI_SETUP },
-            onBackToGame = onBack,
-            onSave = onSaveAi
-        )
-        SettingsSubScreen.AI_AGENTS -> AiAgentsScreen(
-            aiSettings = aiSettings,
-            availableChatGptModels = availableChatGptModels,
-            availableGeminiModels = availableGeminiModels,
-            availableGrokModels = availableGrokModels,
-            availableGroqModels = availableGroqModels,
-            availableDeepSeekModels = availableDeepSeekModels,
-            availableMistralModels = availableMistralModels,
-            availablePerplexityModels = availablePerplexityModels,
-            availableTogetherModels = availableTogetherModels,
-            availableOpenRouterModels = availableOpenRouterModels,
-            onBackToAiSetup = { currentSubScreen = SettingsSubScreen.AI_SETUP },
-            onBackToGame = onBack,
-            onSave = onSaveAi,
-            onTestAiModel = onTestAiModel
+            onSave = onSaveAiPrompts
         )
     }
 }
@@ -366,11 +175,11 @@ private fun SettingsMainScreen(
             onClick = { onNavigate(SettingsSubScreen.INTERFACE_VISIBILITY) }
         )
 
-        // AI Setup settings card (three-tier architecture)
+        // AI Prompts settings card
         SettingsNavigationCard(
-            title = "AI Setup",
-            description = "Providers, prompts, and agents",
-            onClick = { onNavigate(SettingsSubScreen.AI_SETUP) }
+            title = "AI Prompts",
+            description = "Configure prompts for AI analysis",
+            onClick = { onNavigate(SettingsSubScreen.AI_PROMPTS) }
         )
 
     }
@@ -421,3 +230,108 @@ private fun SettingsNavigationCard(
     }
 }
 
+/**
+ * AI Prompts settings screen - simple 3 text fields for prompts.
+ */
+@Composable
+fun AiPromptsSettingsScreen(
+    aiPromptsSettings: AiPromptsSettings,
+    onBackToSettings: () -> Unit,
+    onBackToGame: () -> Unit,
+    onSave: (AiPromptsSettings) -> Unit
+) {
+    var gamePrompt by remember { mutableStateOf(aiPromptsSettings.getGamePromptText()) }
+    var serverPlayerPrompt by remember { mutableStateOf(aiPromptsSettings.getServerPlayerPromptText()) }
+    var otherPlayerPrompt by remember { mutableStateOf(aiPromptsSettings.getOtherPlayerPromptText()) }
+
+    // Save when leaving
+    DisposableEffect(Unit) {
+        onDispose {
+            onSave(AiPromptsSettings(
+                gamePrompt = gamePrompt,
+                serverPlayerPrompt = serverPlayerPrompt,
+                otherPlayerPrompt = otherPlayerPrompt
+            ))
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        EvalTitleBar(
+            title = "AI Prompts",
+            onBackClick = onBackToSettings,
+            onEvalClick = onBackToGame
+        )
+
+        // Info text
+        Text(
+            text = "Prompts are sent to the external AI app. Use placeholders: @FEN@, @PLAYER@, @SERVER@, @DATE@",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color(0xFF888888)
+        )
+
+        // Game Analysis prompt
+        Text(
+            text = "Game Analysis Prompt",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold
+        )
+        OutlinedTextField(
+            value = gamePrompt,
+            onValueChange = { gamePrompt = it },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(150.dp),
+            textStyle = MaterialTheme.typography.bodySmall
+        )
+
+        // Server Player prompt
+        Text(
+            text = "Server Player Prompt (Lichess/Chess.com)",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold
+        )
+        OutlinedTextField(
+            value = serverPlayerPrompt,
+            onValueChange = { serverPlayerPrompt = it },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(150.dp),
+            textStyle = MaterialTheme.typography.bodySmall
+        )
+
+        // Other Player prompt
+        Text(
+            text = "Other Player Prompt",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold
+        )
+        OutlinedTextField(
+            value = otherPlayerPrompt,
+            onValueChange = { otherPlayerPrompt = it },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(150.dp),
+            textStyle = MaterialTheme.typography.bodySmall
+        )
+
+        // Reset to defaults button
+        TextButton(
+            onClick = {
+                gamePrompt = DEFAULT_GAME_PROMPT
+                serverPlayerPrompt = DEFAULT_SERVER_PLAYER_PROMPT
+                otherPlayerPrompt = DEFAULT_OTHER_PLAYER_PROMPT
+            }
+        ) {
+            Text("Reset to defaults")
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+    }
+}

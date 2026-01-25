@@ -18,7 +18,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.eval.chess.PieceColor
 import com.eval.chess.Square
-import com.eval.data.AiService
 
 // Chess piece Unicode symbols for game display
 private const val WHITE_KING = "♔"

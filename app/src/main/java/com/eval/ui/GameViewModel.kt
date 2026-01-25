@@ -6,10 +6,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.eval.chess.ChessBoard
 import com.eval.chess.Square
-import com.eval.data.AiAnalysisRepository
-import com.eval.data.AiAnalysisResponse
-import com.eval.data.AiHistoryManager
-import com.eval.data.AiService
 import com.eval.data.BroadcastInfo
 import com.eval.data.BroadcastRoundInfo
 import com.eval.data.ChessRepository
@@ -39,7 +35,6 @@ import kotlinx.coroutines.sync.withLock
 class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = ChessRepository()
     private val stockfish = StockfishEngine(application)
-    private val aiAnalysisRepository = AiAnalysisRepository()
     private val prefs = application.getSharedPreferences(SettingsPreferences.PREFS_NAME, Context.MODE_PRIVATE)
     private val gson = Gson()
 
@@ -88,8 +83,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private fun saveInterfaceVisibilitySettings(settings: InterfaceVisibilitySettings) = settingsPrefs.saveInterfaceVisibilitySettings(settings)
     private fun loadGeneralSettings(): GeneralSettings = settingsPrefs.loadGeneralSettings()
     private fun saveGeneralSettings(settings: GeneralSettings) = settingsPrefs.saveGeneralSettings(settings)
-    private fun loadAiSettings(): AiSettings = settingsPrefs.loadAiSettingsWithMigration()
-    private fun saveAiSettings(settings: AiSettings) = settingsPrefs.saveAiSettings(settings)
+    private fun loadAiPromptsSettings(): AiPromptsSettings = settingsPrefs.loadAiPromptsSettings()
+    private fun saveAiPromptsSettings(settings: AiPromptsSettings) = settingsPrefs.saveAiPromptsSettings(settings)
 
     private fun getAppVersionCode(): Long {
         return try {
@@ -179,12 +174,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             moveSoundPlayer = moveSoundPlayer
         )
 
-        // Initialize AiHistoryManager for AI report storage
-        AiHistoryManager.init(application)
-
         // Check if Stockfish is installed first
         val stockfishInstalled = stockfish.isStockfishInstalled()
-        _uiState.value = _uiState.value.copy(stockfishInstalled = stockfishInstalled)
+        // Check if AI app is installed
+        val aiAppInstalled = AiAppLauncher.isAiAppInstalled(application)
+        _uiState.value = _uiState.value.copy(
+            stockfishInstalled = stockfishInstalled,
+            aiAppInstalled = aiAppInstalled
+        )
 
         if (stockfishInstalled) {
             if (isFirstRun()) {
@@ -197,22 +194,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val interfaceVisibility = loadInterfaceVisibilitySettings()
             val generalSettings = loadGeneralSettings()
 
-            val aiSettings = loadAiSettings()
+            val aiPromptsSettings = loadAiPromptsSettings()
             val lichessMaxGames = settingsPrefs.lichessMaxGames
             val retrievesList = gameStorage.loadRetrievesList()
             val hasPreviousRetrieves = retrievesList.isNotEmpty()
             val hasAnalysedGames = gameStorage.hasAnalysedGames()
-
-            // Load cached AI models
-            val cachedChatGptModels = settingsPrefs.loadCachedChatGptModels()
-            val cachedGeminiModels = settingsPrefs.loadCachedGeminiModels()
-            val cachedGrokModels = settingsPrefs.loadCachedGrokModels()
-            val cachedGroqModels = settingsPrefs.loadCachedGroqModels()
-            val cachedDeepSeekModels = settingsPrefs.loadCachedDeepSeekModels()
-            val cachedMistralModels = settingsPrefs.loadCachedMistralModels()
-            val cachedPerplexityModels = settingsPrefs.loadCachedPerplexityModels()
-            val cachedTogetherModels = settingsPrefs.loadCachedTogetherModels()
-            val cachedOpenRouterModels = settingsPrefs.loadCachedOpenRouterModels()
 
             _uiState.value = _uiState.value.copy(
                 stockfishSettings = settings,
@@ -220,22 +206,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 graphSettings = graphSettings,
                 interfaceVisibility = interfaceVisibility,
                 generalSettings = generalSettings,
-                aiSettings = aiSettings,
+                aiPromptsSettings = aiPromptsSettings,
                 lichessMaxGames = lichessMaxGames,
                 hasPreviousRetrieves = hasPreviousRetrieves,
                 previousRetrievesList = retrievesList,
                 hasAnalysedGames = hasAnalysedGames,
                 playerGamesPageSize = generalSettings.paginationPageSize,
-                gameSelectionPageSize = generalSettings.paginationPageSize,
-                availableChatGptModels = cachedChatGptModels,
-                availableGeminiModels = cachedGeminiModels,
-                availableGrokModels = cachedGrokModels,
-                availableGroqModels = cachedGroqModels,
-                availableDeepSeekModels = cachedDeepSeekModels,
-                availableMistralModels = cachedMistralModels,
-                availablePerplexityModels = cachedPerplexityModels,
-                availableTogetherModels = cachedTogetherModels,
-                availableOpenRouterModels = cachedOpenRouterModels
+                gameSelectionPageSize = generalSettings.paginationPageSize
             )
 
             viewModelScope.launch {
@@ -281,6 +258,33 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     fun checkStockfishInstalled(): Boolean = stockfish.isStockfishInstalled()
 
+    fun checkAiAppInstalled(): Boolean {
+        val installed = AiAppLauncher.isAiAppInstalled(getApplication())
+        _uiState.value = _uiState.value.copy(aiAppInstalled = installed)
+        return installed
+    }
+
+    fun dismissAiAppWarning() {
+        _uiState.value = _uiState.value.copy(aiAppWarningDismissed = true)
+    }
+
+    fun showAiAppNotInstalledDialog() {
+        // Don't show if user chose "Don't ask again"
+        if (settingsPrefs.getAiAppDontAskAgain()) {
+            return
+        }
+        _uiState.value = _uiState.value.copy(showAiAppNotInstalledDialog = true)
+    }
+
+    fun hideAiAppNotInstalledDialog() {
+        _uiState.value = _uiState.value.copy(showAiAppNotInstalledDialog = false)
+    }
+
+    fun setAiAppDontAskAgain() {
+        settingsPrefs.setAiAppDontAskAgain(true)
+        _uiState.value = _uiState.value.copy(showAiAppNotInstalledDialog = false)
+    }
+
     fun initializeStockfish() {
         val installed = stockfish.isStockfishInstalled()
         if (!installed) return
@@ -296,19 +300,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val graphSettings = loadGraphSettings()
         val interfaceVisibility = loadInterfaceVisibilitySettings()
         val generalSettings = loadGeneralSettings()
-        val aiSettings = loadAiSettings()
+        val aiPromptsSettings = loadAiPromptsSettings()
         val lichessMaxGames = settingsPrefs.lichessMaxGames
-
-        // Load cached AI models
-        val cachedChatGptModels = settingsPrefs.loadCachedChatGptModels()
-        val cachedGeminiModels = settingsPrefs.loadCachedGeminiModels()
-        val cachedGrokModels = settingsPrefs.loadCachedGrokModels()
-        val cachedGroqModels = settingsPrefs.loadCachedGroqModels()
-        val cachedDeepSeekModels = settingsPrefs.loadCachedDeepSeekModels()
-        val cachedMistralModels = settingsPrefs.loadCachedMistralModels()
-        val cachedPerplexityModels = settingsPrefs.loadCachedPerplexityModels()
-        val cachedTogetherModels = settingsPrefs.loadCachedTogetherModels()
-        val cachedOpenRouterModels = settingsPrefs.loadCachedOpenRouterModels()
 
         _uiState.value = _uiState.value.copy(
             stockfishSettings = settings,
@@ -316,19 +309,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             graphSettings = graphSettings,
             interfaceVisibility = interfaceVisibility,
             generalSettings = generalSettings,
-            aiSettings = aiSettings,
+            aiPromptsSettings = aiPromptsSettings,
             lichessMaxGames = lichessMaxGames,
             playerGamesPageSize = generalSettings.paginationPageSize,
-            gameSelectionPageSize = generalSettings.paginationPageSize,
-            availableChatGptModels = cachedChatGptModels,
-            availableGeminiModels = cachedGeminiModels,
-            availableGrokModels = cachedGrokModels,
-            availableGroqModels = cachedGroqModels,
-            availableDeepSeekModels = cachedDeepSeekModels,
-            availableMistralModels = cachedMistralModels,
-            availablePerplexityModels = cachedPerplexityModels,
-            availableTogetherModels = cachedTogetherModels,
-            availableOpenRouterModels = cachedOpenRouterModels
+            gameSelectionPageSize = generalSettings.paginationPageSize
         )
 
         viewModelScope.launch {
@@ -1046,642 +1030,73 @@ ${opening.moves} *
         )
     }
 
-    fun updateAiSettings(settings: AiSettings) {
-        saveAiSettings(settings)
-        _uiState.value = _uiState.value.copy(aiSettings = settings)
-    }
-
-    // ===== AI ANALYSIS =====
-    fun requestAiAnalysis(service: AiService) {
-        val aiSettings = _uiState.value.aiSettings
-        val apiKey = aiSettings.getApiKey(service)
-        val model = aiSettings.getModel(service)
-        val serviceNameWithModel = if (model.isNotBlank()) {
-            "${service.displayName} ($model)"
-        } else {
-            service.displayName
-        }
-
-        if (apiKey.isBlank()) {
-            _uiState.value = _uiState.value.copy(
-                showAiAnalysisDialog = true,
-                aiAnalysisLoading = false,
-                aiAnalysisServiceName = serviceNameWithModel,
-                aiAnalysisResult = AiAnalysisResponse(
-                    service = service,
-                    analysis = null,
-                    error = "API key not configured for ${service.displayName}. Please configure it in Settings > AI Analysis."
-                )
-            )
-            return
-        }
-
-        val fen = _uiState.value.currentBoard.getFen()
-
-        _uiState.value = _uiState.value.copy(
-            showAiAnalysisDialog = true,
-            aiAnalysisLoading = true,
-            aiAnalysisServiceName = serviceNameWithModel,
-            aiAnalysisResult = null
-        )
-
-        viewModelScope.launch {
-            val prompt = when (service) {
-                AiService.CHATGPT -> aiSettings.chatGptPrompt
-                AiService.CLAUDE -> aiSettings.claudePrompt
-                AiService.GEMINI -> aiSettings.geminiPrompt
-                AiService.GROK -> aiSettings.grokPrompt
-                AiService.GROQ -> aiSettings.groqPrompt
-                AiService.DEEPSEEK -> aiSettings.deepSeekPrompt
-                AiService.MISTRAL -> aiSettings.mistralPrompt
-                AiService.PERPLEXITY -> aiSettings.perplexityPrompt
-                AiService.TOGETHER -> aiSettings.togetherPrompt
-                AiService.OPENROUTER -> aiSettings.openRouterPrompt
-                AiService.DUMMY -> ""
-            }
-            val result = aiAnalysisRepository.analyzePosition(
-                service = service,
-                fen = fen,
-                apiKey = apiKey,
-                prompt = prompt,
-                chatGptModel = aiSettings.chatGptModel,
-                claudeModel = aiSettings.claudeModel,
-                geminiModel = aiSettings.geminiModel,
-                grokModel = aiSettings.grokModel,
-                groqModel = aiSettings.groqModel,
-                deepSeekModel = aiSettings.deepSeekModel,
-                mistralModel = aiSettings.mistralModel,
-                perplexityModel = aiSettings.perplexityModel,
-                togetherModel = aiSettings.togetherModel,
-                openRouterModel = aiSettings.openRouterModel
-            )
-            _uiState.value = _uiState.value.copy(
-                aiAnalysisLoading = false,
-                aiAnalysisResult = result
-            )
-        }
-    }
-
-    fun dismissAiAnalysisDialog() {
-        _uiState.value = _uiState.value.copy(
-            showAiAnalysisDialog = false,
-            aiAnalysisResult = null,
-            aiAnalysisLoading = false
-        )
-    }
-
-    // ===== AI REPORTS (MULTI-SERVICE) =====
-
-    fun showAiReportsSelectionDialog() {
-        _uiState.value = _uiState.value.copy(showAiReportsSelectionDialog = true)
-    }
-
-    fun dismissAiReportsSelectionDialog() {
-        _uiState.value = _uiState.value.copy(showAiReportsSelectionDialog = false)
-    }
-
-    fun loadAiReportProviders(): Set<String> {
-        return settingsPrefs.loadAiReportProviders()
-    }
-
-    fun saveAiReportProviders(providers: Set<String>) {
-        settingsPrefs.saveAiReportProviders(providers)
-    }
-
-    // Agent-based AI Reports methods
-    fun loadAiReportAgents(): Set<String> {
-        return settingsPrefs.loadAiReportAgents()
-    }
-
-    fun saveAiReportAgents(agentIds: Set<String>) {
-        settingsPrefs.saveAiReportAgents(agentIds)
-    }
-
-    fun generateAiReportsWithAgents(selectedAgentIds: Set<String>) {
-        val aiSettings = _uiState.value.aiSettings
-
-        // Get agents with configured API keys
-        val agentsToCall = selectedAgentIds.mapNotNull { agentId ->
-            aiSettings.agents.find { it.id == agentId && it.apiKey.isNotBlank() }
-        }
-
-        if (agentsToCall.isEmpty()) {
-            _uiState.value = _uiState.value.copy(
-                errorMessage = "No configured agents selected. Please configure agents in Settings > AI Setup > AI Agents."
-            )
-            return
-        }
-
-        val fen = _uiState.value.currentBoard.getFen()
-
-        _uiState.value = _uiState.value.copy(
-            showAiReportsSelectionDialog = false,
-            showAiReportsDialog = true,
-            aiReportsProgress = 0,
-            aiReportsTotal = agentsToCall.size,
-            aiReportsAgentResults = emptyMap(),
-            aiReportsSelectedAgents = selectedAgentIds
-        )
-
-        viewModelScope.launch {
-            val results = mutableMapOf<String, AiAnalysisResponse>()
-            val mutex = Mutex()
-            var completedCount = 0
-
-            // Launch all API calls in parallel
-            val deferredResults = agentsToCall.map { agent ->
-                async {
-                    val prompt = aiSettings.getAgentGamePrompt(agent)
-
-                    var result = aiAnalysisRepository.analyzePositionWithAgent(
-                        agent = agent,
-                        fen = fen,
-                        prompt = prompt
-                    )
-
-                    // If failed, retry once after 1 second delay
-                    if (!result.isSuccess) {
-                        kotlinx.coroutines.delay(1000)
-                        result = aiAnalysisRepository.analyzePositionWithAgent(
-                            agent = agent,
-                            fen = fen,
-                            prompt = prompt
-                        )
-                    }
-
-                    mutex.withLock {
-                        results[agent.id] = result
-                        completedCount++
-                        _uiState.value = _uiState.value.copy(
-                            aiReportsProgress = completedCount,
-                            aiReportsAgentResults = results.toMap()
-                        )
-                    }
-                }
-            }
-
-            deferredResults.awaitAll()
-        }
-    }
-
-    fun startPlayerAiReportsWithAgents(selectedAgentIds: Set<String>) {
-        val aiSettings = _uiState.value.aiSettings
-        val playerName = _uiState.value.playerAiReportsPlayerName
-        val serverName = _uiState.value.playerAiReportsServer
-
-        // Get agents with configured API keys
-        val agentsToCall = selectedAgentIds.mapNotNull { agentId ->
-            aiSettings.agents.find { it.id == agentId && it.apiKey.isNotBlank() }
-        }
-
-        if (agentsToCall.isEmpty()) {
-            _uiState.value = _uiState.value.copy(
-                errorMessage = "No configured agents selected."
-            )
-            return
-        }
-
-        _uiState.value = _uiState.value.copy(
-            showPlayerAiReportsSelectionDialog = false,
-            showPlayerAiReportsDialog = true,
-            playerAiReportsProgress = 0,
-            playerAiReportsTotal = agentsToCall.size,
-            playerAiReportsAgentResults = emptyMap(),
-            playerAiReportsSelectedAgents = selectedAgentIds
-        )
-
-        viewModelScope.launch {
-            val results = mutableMapOf<String, AiAnalysisResponse>()
-            val mutex = Mutex()
-            var completedCount = 0
-
-            val deferredResults = agentsToCall.map { agent ->
-                async {
-                    // Select prompt based on server presence
-                    val prompt = if (serverName != null) {
-                        aiSettings.getAgentServerPlayerPrompt(agent)
-                    } else {
-                        aiSettings.getAgentOtherPlayerPrompt(agent)
-                    }
-
-                    // Replace placeholders in prompt
-                    val finalPrompt = prompt
-                        .replace("@PLAYER@", playerName)
-                        .replace("@SERVER@", serverName ?: "unknown")
-
-                    var result = aiAnalysisRepository.analyzePlayerWithAgent(
-                        agent = agent,
-                        prompt = finalPrompt
-                    )
-
-                    // If failed, retry once
-                    if (!result.isSuccess) {
-                        kotlinx.coroutines.delay(1000)
-                        result = aiAnalysisRepository.analyzePlayerWithAgent(
-                            agent = agent,
-                            prompt = finalPrompt
-                        )
-                    }
-
-                    mutex.withLock {
-                        results[agent.id] = result
-                        completedCount++
-                        _uiState.value = _uiState.value.copy(
-                            playerAiReportsProgress = completedCount,
-                            playerAiReportsAgentResults = results.toMap()
-                        )
-                    }
-                }
-            }
-
-            deferredResults.awaitAll()
-        }
-    }
-
-    fun generateAiReports(selectedProviders: Set<AiService>) {
-        val aiSettings = _uiState.value.aiSettings
-
-        // Filter to only selected providers that have API keys configured
-        val servicesToCall = selectedProviders.filter { service ->
-            aiSettings.getApiKey(service).isNotBlank()
-        }
-
-        if (servicesToCall.isEmpty()) {
-            _uiState.value = _uiState.value.copy(
-                errorMessage = "No AI services selected or configured. Please add API keys in Settings > AI Analysis."
-            )
-            return
-        }
-
-        val fen = _uiState.value.currentBoard.getFen()
-
-        _uiState.value = _uiState.value.copy(
-            showAiReportsSelectionDialog = false,
-            showAiReportsDialog = true,
-            aiReportsProgress = 0,
-            aiReportsTotal = servicesToCall.size,
-            aiReportsResults = emptyMap(),
-            aiReportsSelectedServices = servicesToCall.toSet()
-        )
-
-        viewModelScope.launch {
-            val results = mutableMapOf<AiService, AiAnalysisResponse>()
-            val mutex = Mutex()
-            var completedCount = 0
-
-            // Launch all API calls in parallel
-            val deferredResults = servicesToCall.map { service ->
-                async {
-                    val apiKey = aiSettings.getApiKey(service)
-                    val prompt = aiSettings.getPrompt(service)
-
-                    var result = aiAnalysisRepository.analyzePosition(
-                        service = service,
-                        fen = fen,
-                        apiKey = apiKey,
-                        prompt = prompt,
-                        chatGptModel = aiSettings.chatGptModel,
-                        claudeModel = aiSettings.claudeModel,
-                        geminiModel = aiSettings.geminiModel,
-                        grokModel = aiSettings.grokModel,
-                        deepSeekModel = aiSettings.deepSeekModel,
-                        mistralModel = aiSettings.mistralModel,
-                        perplexityModel = aiSettings.perplexityModel,
-                        togetherModel = aiSettings.togetherModel
-                    )
-
-                    // If failed, retry once after 1 second delay
-                    if (!result.isSuccess) {
-                        kotlinx.coroutines.delay(1000)
-                        result = aiAnalysisRepository.analyzePosition(
-                            service = service,
-                            fen = fen,
-                            apiKey = apiKey,
-                            prompt = prompt,
-                            chatGptModel = aiSettings.chatGptModel,
-                            claudeModel = aiSettings.claudeModel,
-                            geminiModel = aiSettings.geminiModel,
-                            grokModel = aiSettings.grokModel,
-                            deepSeekModel = aiSettings.deepSeekModel,
-                            mistralModel = aiSettings.mistralModel,
-                            perplexityModel = aiSettings.perplexityModel,
-                            togetherModel = aiSettings.togetherModel
-                        )
-                    }
-
-                    // Update progress as each call completes
-                    mutex.withLock {
-                        results[service] = result
-                        completedCount++
-                        _uiState.value = _uiState.value.copy(
-                            aiReportsProgress = completedCount,
-                            aiReportsResults = results.toMap()
-                        )
-                    }
-
-                    service to result
-                }
-            }
-
-            // Wait for all calls to complete
-            deferredResults.awaitAll()
-
-            // All done - keep dialog open until user exports
-        }
-    }
-
-    fun dismissAiReportsDialog() {
-        _uiState.value = _uiState.value.copy(
-            showAiReportsDialog = false,
-            aiReportsResults = emptyMap(),
-            aiReportsProgress = 0,
-            aiReportsTotal = 0,
-            aiReportsSelectedServices = emptySet()
-        )
-    }
-
-    // ===== PLAYER AI REPORTS =====
-
-    /**
-     * Show the provider selection dialog for player AI reports.
-     * @param playerName The name of the player to analyze
-     * @param server The chess server (e.g., "lichess.org", "chess.com") or null for other players
-     * @param playerInfo The full player info for HTML generation
-     */
-    fun showPlayerAiReportsSelectionDialog(playerName: String, server: String?, playerInfo: com.eval.data.PlayerInfo?) {
-        _uiState.value = _uiState.value.copy(
-            showPlayerAiReportsSelectionDialog = true,
-            playerAiReportsPlayerName = playerName,
-            playerAiReportsServer = server,
-            playerAiReportsPlayerInfo = playerInfo
-        )
-    }
-
-    fun dismissPlayerAiReportsSelectionDialog() {
-        _uiState.value = _uiState.value.copy(
-            showPlayerAiReportsSelectionDialog = false
-        )
+    fun updateAiPromptsSettings(settings: AiPromptsSettings) {
+        saveAiPromptsSettings(settings)
+        _uiState.value = _uiState.value.copy(aiPromptsSettings = settings)
     }
 
     /**
-     * Start player AI reports with selected providers.
+     * Launch the external AI app for game position analysis.
+     * Shows warning dialog if AI app is not installed.
+     * @param context Android context needed for intent launching
+     * @return true if AI app was launched, false if not installed
      */
-    fun startPlayerAiReports(selectedProviders: Set<AiService>) {
-        val aiSettings = _uiState.value.aiSettings
-        val playerName = _uiState.value.playerAiReportsPlayerName
-        val server = _uiState.value.playerAiReportsServer
-
-        // Filter to only selected providers that have API keys configured
-        val servicesToCall = selectedProviders.filter { service ->
-            aiSettings.getApiKey(service).isNotBlank()
+    fun launchGameAnalysis(context: android.content.Context): Boolean {
+        if (!AiAppLauncher.isAiAppInstalled(context)) {
+            showAiAppNotInstalledDialog()
+            return false
         }
-
-        if (servicesToCall.isEmpty()) {
-            _uiState.value = _uiState.value.copy(
-                errorMessage = "No AI services selected or configured. Please add API keys in Settings > AI Analysis."
-            )
-            return
-        }
-
-        _uiState.value = _uiState.value.copy(
-            showPlayerAiReportsSelectionDialog = false,
-            showPlayerAiReportsDialog = true,
-            playerAiReportsProgress = 0,
-            playerAiReportsTotal = servicesToCall.size,
-            playerAiReportsResults = emptyMap(),
-            playerAiReportsSelectedServices = servicesToCall.toSet()
-        )
-
-        viewModelScope.launch {
-            val results = mutableMapOf<AiService, AiAnalysisResponse>()
-            val mutex = Mutex()
-            var completedCount = 0
-
-            // Launch all API calls in parallel
-            val deferredResults = servicesToCall.map { service ->
-                async {
-                    val apiKey = aiSettings.getApiKey(service)
-                    // Choose prompt based on whether we have a server (lichess/chess.com) or not
-                    val prompt = if (server != null) {
-                        aiSettings.getServerPlayerPrompt(service)
-                    } else {
-                        aiSettings.getOtherPlayerPrompt(service)
-                    }
-
-                    var result = aiAnalysisRepository.analyzePlayer(
-                        service = service,
-                        playerName = playerName,
-                        server = server,
-                        apiKey = apiKey,
-                        prompt = prompt,
-                        chatGptModel = aiSettings.chatGptModel,
-                        claudeModel = aiSettings.claudeModel,
-                        geminiModel = aiSettings.geminiModel,
-                        grokModel = aiSettings.grokModel,
-                        deepSeekModel = aiSettings.deepSeekModel,
-                        mistralModel = aiSettings.mistralModel,
-                        perplexityModel = aiSettings.perplexityModel,
-                        togetherModel = aiSettings.togetherModel
-                    )
-
-                    // If failed, retry once after 1 second delay
-                    if (!result.isSuccess) {
-                        kotlinx.coroutines.delay(1000)
-                        result = aiAnalysisRepository.analyzePlayer(
-                            service = service,
-                            playerName = playerName,
-                            server = server,
-                            apiKey = apiKey,
-                            prompt = prompt,
-                            chatGptModel = aiSettings.chatGptModel,
-                            claudeModel = aiSettings.claudeModel,
-                            geminiModel = aiSettings.geminiModel,
-                            grokModel = aiSettings.grokModel,
-                            deepSeekModel = aiSettings.deepSeekModel,
-                            mistralModel = aiSettings.mistralModel,
-                            perplexityModel = aiSettings.perplexityModel,
-                            togetherModel = aiSettings.togetherModel
-                        )
-                    }
-
-                    // Update progress as each call completes
-                    mutex.withLock {
-                        results[service] = result
-                        completedCount++
-                        _uiState.value = _uiState.value.copy(
-                            playerAiReportsProgress = completedCount,
-                            playerAiReportsResults = results.toMap()
-                        )
-                    }
-
-                    service to result
-                }
-            }
-
-            // Wait for all calls to complete
-            deferredResults.awaitAll()
-
-            // All done - keep dialog open until user exports
-        }
-    }
-
-    fun dismissPlayerAiReportsDialog() {
-        _uiState.value = _uiState.value.copy(
-            showPlayerAiReportsDialog = false,
-            playerAiReportsResults = emptyMap(),
-            playerAiReportsProgress = 0,
-            playerAiReportsTotal = 0,
-            playerAiReportsSelectedServices = emptySet(),
-            playerAiReportsPlayerName = "",
-            playerAiReportsServer = null,
-            playerAiReportsPlayerInfo = null
-        )
-    }
-
-    // ===== AI MODEL FETCHING =====
-    fun fetchChatGptModels(apiKey: String) {
-        if (apiKey.isBlank()) return
-        _uiState.value = _uiState.value.copy(isLoadingChatGptModels = true)
-        viewModelScope.launch {
-            val models = aiAnalysisRepository.fetchChatGptModels(apiKey)
-            if (models.isNotEmpty()) {
-                settingsPrefs.saveCachedChatGptModels(models)
-            }
-            _uiState.value = _uiState.value.copy(
-                availableChatGptModels = models,
-                isLoadingChatGptModels = false
-            )
-        }
-    }
-
-    fun fetchGeminiModels(apiKey: String) {
-        if (apiKey.isBlank()) return
-        _uiState.value = _uiState.value.copy(isLoadingGeminiModels = true)
-        viewModelScope.launch {
-            val models = aiAnalysisRepository.fetchGeminiModels(apiKey)
-            if (models.isNotEmpty()) {
-                settingsPrefs.saveCachedGeminiModels(models)
-            }
-            _uiState.value = _uiState.value.copy(
-                availableGeminiModels = models,
-                isLoadingGeminiModels = false
-            )
-        }
-    }
-
-    fun fetchGrokModels(apiKey: String) {
-        if (apiKey.isBlank()) return
-        _uiState.value = _uiState.value.copy(isLoadingGrokModels = true)
-        viewModelScope.launch {
-            val models = aiAnalysisRepository.fetchGrokModels(apiKey)
-            if (models.isNotEmpty()) {
-                settingsPrefs.saveCachedGrokModels(models)
-            }
-            _uiState.value = _uiState.value.copy(
-                availableGrokModels = models,
-                isLoadingGrokModels = false
-            )
-        }
-    }
-
-    fun fetchGroqModels(apiKey: String) {
-        if (apiKey.isBlank()) return
-        _uiState.value = _uiState.value.copy(isLoadingGroqModels = true)
-        viewModelScope.launch {
-            val models = aiAnalysisRepository.fetchGroqModels(apiKey)
-            if (models.isNotEmpty()) {
-                settingsPrefs.saveCachedGroqModels(models)
-            }
-            _uiState.value = _uiState.value.copy(
-                availableGroqModels = models,
-                isLoadingGroqModels = false
-            )
-        }
-    }
-
-    fun fetchDeepSeekModels(apiKey: String) {
-        if (apiKey.isBlank()) return
-        _uiState.value = _uiState.value.copy(isLoadingDeepSeekModels = true)
-        viewModelScope.launch {
-            val models = aiAnalysisRepository.fetchDeepSeekModels(apiKey)
-            if (models.isNotEmpty()) {
-                settingsPrefs.saveCachedDeepSeekModels(models)
-            }
-            _uiState.value = _uiState.value.copy(
-                availableDeepSeekModels = models,
-                isLoadingDeepSeekModels = false
-            )
-        }
-    }
-
-    fun fetchMistralModels(apiKey: String) {
-        if (apiKey.isBlank()) return
-        _uiState.value = _uiState.value.copy(isLoadingMistralModels = true)
-        viewModelScope.launch {
-            val models = aiAnalysisRepository.fetchMistralModels(apiKey)
-            if (models.isNotEmpty()) {
-                settingsPrefs.saveCachedMistralModels(models)
-            }
-            _uiState.value = _uiState.value.copy(
-                availableMistralModels = models,
-                isLoadingMistralModels = false
-            )
-        }
-    }
-
-    fun fetchPerplexityModels(apiKey: String) {
-        if (apiKey.isBlank()) return
-        _uiState.value = _uiState.value.copy(isLoadingPerplexityModels = true)
-        viewModelScope.launch {
-            val models = aiAnalysisRepository.fetchPerplexityModels(apiKey)
-            if (models.isNotEmpty()) {
-                settingsPrefs.saveCachedPerplexityModels(models)
-            }
-            _uiState.value = _uiState.value.copy(
-                availablePerplexityModels = models,
-                isLoadingPerplexityModels = false
-            )
-        }
-    }
-
-    fun fetchTogetherModels(apiKey: String) {
-        if (apiKey.isBlank()) return
-        _uiState.value = _uiState.value.copy(isLoadingTogetherModels = true)
-        viewModelScope.launch {
-            val models = aiAnalysisRepository.fetchTogetherModels(apiKey)
-            if (models.isNotEmpty()) {
-                settingsPrefs.saveCachedTogetherModels(models)
-            }
-            _uiState.value = _uiState.value.copy(
-                availableTogetherModels = models,
-                isLoadingTogetherModels = false
-            )
-        }
-    }
-
-    fun fetchOpenRouterModels(apiKey: String) {
-        if (apiKey.isBlank()) return
-        _uiState.value = _uiState.value.copy(isLoadingOpenRouterModels = true)
-        viewModelScope.launch {
-            val models = aiAnalysisRepository.fetchOpenRouterModels(apiKey)
-            if (models.isNotEmpty()) {
-                settingsPrefs.saveCachedOpenRouterModels(models)
-            }
-            _uiState.value = _uiState.value.copy(
-                availableOpenRouterModels = models,
-                isLoadingOpenRouterModels = false
-            )
-        }
+        val fen = _uiState.value.currentBoard.getFen()
+        val promptTemplate = _uiState.value.aiPromptsSettings.getGamePromptText()
+        val whiteName = _uiState.value.game?.players?.white?.user?.name ?: ""
+        val blackName = _uiState.value.game?.players?.black?.user?.name ?: ""
+        return AiAppLauncher.launchGameAnalysis(context, fen, promptTemplate, whiteName, blackName)
     }
 
     /**
-     * Test if a model is accessible with the given API key.
-     * @return null if successful, error message if failed
+     * Launch the external AI app for server player analysis (Lichess/Chess.com).
+     * Shows warning dialog if AI app is not installed.
+     * @param context Android context needed for intent launching
+     * @param playerName The player's username
+     * @param server The chess server name (e.g., "lichess.org", "chess.com")
+     * @return true if AI app was launched, false if not installed
      */
-    suspend fun testAiModel(service: AiService, apiKey: String, model: String): String? {
-        return aiAnalysisRepository.testModel(service, apiKey, model)
+    fun launchServerPlayerAnalysis(context: android.content.Context, playerName: String, server: String): Boolean {
+        if (!AiAppLauncher.isAiAppInstalled(context)) {
+            showAiAppNotInstalledDialog()
+            return false
+        }
+        val promptTemplate = _uiState.value.aiPromptsSettings.getServerPlayerPromptText()
+        return AiAppLauncher.launchServerPlayerAnalysis(context, playerName, server, promptTemplate)
     }
 
+    /**
+     * Launch the external AI app for general player analysis.
+     * Shows warning dialog if AI app is not installed.
+     * @param context Android context needed for intent launching
+     * @param playerName The player's name
+     * @return true if AI app was launched, false if not installed
+     */
+    fun launchOtherPlayerAnalysis(context: android.content.Context, playerName: String): Boolean {
+        if (!AiAppLauncher.isAiAppInstalled(context)) {
+            showAiAppNotInstalledDialog()
+            return false
+        }
+        val promptTemplate = _uiState.value.aiPromptsSettings.getOtherPlayerPromptText()
+        return AiAppLauncher.launchOtherPlayerAnalysis(context, playerName, promptTemplate)
+    }
+
+    /**
+     * Check if the external AI app is installed.
+     */
+    fun isAiAppInstalled(context: android.content.Context): Boolean {
+        return AiAppLauncher.isAiAppInstalled(context)
+    }
+
+    // ===== REMOVED AI FUNCTIONS =====
+    // The following AI functions have been removed as the external AI app now handles:
+    // - requestAiAnalysis (direct API calls)
+    // - AI Reports generation (multi-service reports)
     // ===== MISC =====
     fun cycleArrowMode() {
         val currentSettings = _uiState.value.stockfishSettings

@@ -19,7 +19,6 @@ object NavRoutes {
     const val HELP = "help"
     const val RETRIEVE = "retrieve"
     const val PLAYER_INFO = "player_info"
-    const val AI_REPORTS = "ai_reports"
 }
 
 /**
@@ -42,8 +41,7 @@ fun EvalNavHost(
                 onNavigateToSettings = { navController.navigate(NavRoutes.SETTINGS) },
                 onNavigateToHelp = { navController.navigate(NavRoutes.HELP) },
                 onNavigateToRetrieve = { navController.navigate(NavRoutes.RETRIEVE) },
-                onNavigateToPlayerInfo = { navController.navigate(NavRoutes.PLAYER_INFO) },
-                onNavigateToAiReports = { navController.navigate(NavRoutes.AI_REPORTS) }
+                onNavigateToPlayerInfo = { navController.navigate(NavRoutes.PLAYER_INFO) }
             )
         }
 
@@ -74,13 +72,6 @@ fun EvalNavHost(
                 onNavigateBack = { navController.popBackStack() }
             )
         }
-
-        composable(NavRoutes.AI_REPORTS) {
-            AiReportsScreenNav(
-                viewModel = viewModel,
-                onNavigateBack = { navController.popBackStack() }
-            )
-        }
     }
 }
 
@@ -100,42 +91,14 @@ fun SettingsScreenNav(
         graphSettings = uiState.graphSettings,
         interfaceVisibility = uiState.interfaceVisibility,
         generalSettings = uiState.generalSettings,
-        aiSettings = uiState.aiSettings,
-        availableChatGptModels = uiState.availableChatGptModels,
-        isLoadingChatGptModels = uiState.isLoadingChatGptModels,
-        availableGeminiModels = uiState.availableGeminiModels,
-        isLoadingGeminiModels = uiState.isLoadingGeminiModels,
-        availableGrokModels = uiState.availableGrokModels,
-        isLoadingGrokModels = uiState.isLoadingGrokModels,
-        availableGroqModels = uiState.availableGroqModels,
-        isLoadingGroqModels = uiState.isLoadingGroqModels,
-        availableDeepSeekModels = uiState.availableDeepSeekModels,
-        isLoadingDeepSeekModels = uiState.isLoadingDeepSeekModels,
-        availableMistralModels = uiState.availableMistralModels,
-        isLoadingMistralModels = uiState.isLoadingMistralModels,
-        availablePerplexityModels = uiState.availablePerplexityModels,
-        isLoadingPerplexityModels = uiState.isLoadingPerplexityModels,
-        availableTogetherModels = uiState.availableTogetherModels,
-        isLoadingTogetherModels = uiState.isLoadingTogetherModels,
-        availableOpenRouterModels = uiState.availableOpenRouterModels,
-        isLoadingOpenRouterModels = uiState.isLoadingOpenRouterModels,
+        aiPromptsSettings = uiState.aiPromptsSettings,
         onBack = onNavigateBack,
         onSaveStockfish = { viewModel.updateStockfishSettings(it) },
         onSaveBoardLayout = { viewModel.updateBoardLayoutSettings(it) },
         onSaveGraph = { viewModel.updateGraphSettings(it) },
         onSaveInterfaceVisibility = { viewModel.updateInterfaceVisibilitySettings(it) },
         onSaveGeneral = { viewModel.updateGeneralSettings(it) },
-        onSaveAi = { viewModel.updateAiSettings(it) },
-        onFetchChatGptModels = { viewModel.fetchChatGptModels(it) },
-        onFetchGeminiModels = { viewModel.fetchGeminiModels(it) },
-        onFetchGrokModels = { viewModel.fetchGrokModels(it) },
-        onFetchGroqModels = { viewModel.fetchGroqModels(it) },
-        onFetchDeepSeekModels = { viewModel.fetchDeepSeekModels(it) },
-        onFetchMistralModels = { viewModel.fetchMistralModels(it) },
-        onFetchPerplexityModels = { viewModel.fetchPerplexityModels(it) },
-        onFetchTogetherModels = { viewModel.fetchTogetherModels(it) },
-        onFetchOpenRouterModels = { viewModel.fetchOpenRouterModels(it) },
-        onTestAiModel = { service, apiKey, model -> viewModel.testAiModel(service, apiKey, model) }
+        onSaveAiPrompts = { viewModel.updateAiPromptsSettings(it) }
     )
 }
 

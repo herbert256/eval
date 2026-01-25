@@ -1,8 +1,6 @@
 package com.eval.ui
 
 import com.eval.chess.ChessBoard
-import com.eval.data.AiAnalysisResponse
-import com.eval.data.AiService
 import com.eval.data.ChessServer
 import com.eval.data.TournamentInfo
 import com.eval.data.BroadcastInfo
@@ -257,6 +255,9 @@ data class RetrievedGamesEntry(
 
 data class GameUiState(
     val stockfishInstalled: Boolean = true,  // Assume true until checked
+    val aiAppInstalled: Boolean = true,  // Assume true until checked
+    val aiAppWarningDismissed: Boolean = false,  // User dismissed AI app warning at startup
+    val showAiAppNotInstalledDialog: Boolean = false,  // Show AI app warning dialog
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
     // Game list for selection
@@ -321,45 +322,14 @@ data class GameUiState(
     val analysedGamesList: List<AnalysedGame> = emptyList(),
     // Retrieve screen navigation
     val showRetrieveScreen: Boolean = false,
-    // AI Analysis settings and state
-    val aiSettings: AiSettings = AiSettings(),
-    val showAiAnalysisDialog: Boolean = false,
+    // AI Prompts settings (prompts are sent to external AI app)
+    val aiPromptsSettings: AiPromptsSettings = AiPromptsSettings(),
     // Share position dialog
     val showSharePositionDialog: Boolean = false,
     // Opening Explorer
     val openingExplorerData: com.eval.data.OpeningExplorerResponse? = null,
     val openingExplorerLoading: Boolean = false,
     val showOpeningExplorer: Boolean = true,
-    val aiAnalysisResult: AiAnalysisResponse? = null,
-    val aiAnalysisLoading: Boolean = false,
-    val aiAnalysisServiceName: String = "",
-    // ChatGPT model selection
-    val availableChatGptModels: List<String> = emptyList(),
-    val isLoadingChatGptModels: Boolean = false,
-    // Gemini model selection
-    val availableGeminiModels: List<String> = emptyList(),
-    val isLoadingGeminiModels: Boolean = false,
-    // Grok model selection
-    val availableGrokModels: List<String> = emptyList(),
-    val isLoadingGrokModels: Boolean = false,
-    // Groq model selection
-    val availableGroqModels: List<String> = emptyList(),
-    val isLoadingGroqModels: Boolean = false,
-    // DeepSeek model selection
-    val availableDeepSeekModels: List<String> = emptyList(),
-    val isLoadingDeepSeekModels: Boolean = false,
-    // Mistral model selection
-    val availableMistralModels: List<String> = emptyList(),
-    val isLoadingMistralModels: Boolean = false,
-    // Perplexity model selection
-    val availablePerplexityModels: List<String> = emptyList(),
-    val isLoadingPerplexityModels: Boolean = false,
-    // Together model selection
-    val availableTogetherModels: List<String> = emptyList(),
-    val isLoadingTogetherModels: Boolean = false,
-    // OpenRouter model selection
-    val availableOpenRouterModels: List<String> = emptyList(),
-    val isLoadingOpenRouterModels: Boolean = false,
     // Player info screen
     val showPlayerInfoScreen: Boolean = false,
     val playerInfo: PlayerInfo? = null,
@@ -421,27 +391,6 @@ data class GameUiState(
     val liveGameId: String? = null,
     val autoFollowLive: Boolean = true,
     val liveStreamConnected: Boolean = false,
-    // AI Reports export state
-    val showAiReportsSelectionDialog: Boolean = false,
-    val showAiReportsDialog: Boolean = false,
-    val aiReportsProgress: Int = 0,  // Number of completed calls
-    val aiReportsTotal: Int = 0,     // Total number of calls to make
-    val aiReportsResults: Map<AiService, AiAnalysisResponse> = emptyMap(),  // Legacy keyed by provider
-    val aiReportsAgentResults: Map<String, AiAnalysisResponse> = emptyMap(),  // Keyed by agent ID
-    val aiReportsSelectedServices: Set<AiService> = emptySet(),  // Services being called (legacy)
-    val aiReportsSelectedAgents: Set<String> = emptySet(),  // Agent IDs being called (new three-tier)
-    // Player AI Reports
-    val showPlayerAiReportsSelectionDialog: Boolean = false,
-    val showPlayerAiReportsDialog: Boolean = false,
-    val playerAiReportsProgress: Int = 0,
-    val playerAiReportsTotal: Int = 0,
-    val playerAiReportsResults: Map<AiService, AiAnalysisResponse> = emptyMap(),  // Legacy
-    val playerAiReportsAgentResults: Map<String, AiAnalysisResponse> = emptyMap(),  // Keyed by agent ID
-    val playerAiReportsSelectedServices: Set<AiService> = emptySet(),  // Legacy
-    val playerAiReportsSelectedAgents: Set<String> = emptySet(),  // Agent IDs (new three-tier)
-    val playerAiReportsPlayerName: String = "",
-    val playerAiReportsServer: String? = null,  // null for "other player" prompt
-    val playerAiReportsPlayerInfo: com.eval.data.PlayerInfo? = null,  // Full player info for HTML
     // ECO Opening selection
     val showOpeningSelection: Boolean = false,
     val ecoOpenings: List<EcoOpening> = emptyList(),
