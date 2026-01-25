@@ -262,7 +262,9 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             paginationPageSize = prefs.getInt(KEY_PAGINATION_PAGE_SIZE, 25).coerceIn(5, 50),
             moveSoundsEnabled = prefs.getBoolean(KEY_MOVE_SOUNDS_ENABLED, true),
             developerMode = prefs.getBoolean(KEY_DEVELOPER_MODE, false),
-            trackApiCalls = prefs.getBoolean(KEY_TRACK_API_CALLS, false)
+            trackApiCalls = prefs.getBoolean(KEY_TRACK_API_CALLS, false),
+            lichessUsername = prefs.getString(KEY_LICHESS_USERNAME, "") ?: "",
+            flipScoreWhenBlack = prefs.getBoolean(KEY_FLIP_SCORE_WHEN_BLACK, true)
         )
     }
 
@@ -274,6 +276,8 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             .putBoolean(KEY_MOVE_SOUNDS_ENABLED, settings.moveSoundsEnabled)
             .putBoolean(KEY_DEVELOPER_MODE, settings.developerMode)
             .putBoolean(KEY_TRACK_API_CALLS, settings.trackApiCalls)
+            .putString(KEY_LICHESS_USERNAME, settings.lichessUsername)
+            .putBoolean(KEY_FLIP_SCORE_WHEN_BLACK, settings.flipScoreWhenBlack)
             .apply()
     }
 
@@ -852,6 +856,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         private const val KEY_MOVE_SOUNDS_ENABLED = "move_sounds_enabled"
         private const val KEY_DEVELOPER_MODE = "developer_mode"
         private const val KEY_TRACK_API_CALLS = "track_api_calls"
+        private const val KEY_FLIP_SCORE_WHEN_BLACK = "flip_score_when_black"
 
         // AI Analysis settings
         private const val KEY_AI_REPORT_PROVIDERS = "ai_report_providers"

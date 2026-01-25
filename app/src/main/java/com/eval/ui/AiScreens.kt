@@ -440,6 +440,7 @@ private fun openHistoryFileInChromeNav(context: android.content.Context, file: j
 fun AiNewReportScreen(
     viewModel: GameViewModel,
     onNavigateBack: () -> Unit,
+    onNavigateToAiReports: () -> Unit = {},
     initialTitle: String = "",
     initialPrompt: String = ""
 ) {
@@ -448,27 +449,12 @@ fun AiNewReportScreen(
     var title by remember { mutableStateOf(initialTitle) }
     var prompt by remember { mutableStateOf(initialPrompt) }
 
-    // Handle agent selection dialog
-    if (uiState.showGenericAiAgentSelection) {
-        AiAgentsReportsSelectionDialog(
-            aiSettings = uiState.aiSettings,
-            savedAgentIds = viewModel.loadAiReportAgents(),
-            onGenerate = { selectedAgentIds ->
-                viewModel.saveAiReportAgents(selectedAgentIds)
-                viewModel.generateGenericAiReports(selectedAgentIds)
-            },
-            onDismiss = { viewModel.dismissGenericAiAgentSelection() },
-            title = "Select AI Agents"
-        )
-    }
-
-    // Handle AI reports generation dialog
-    if (uiState.showGenericAiReportsDialog) {
-        GenericAiReportsDialog(
-            uiState = uiState,
-            viewModel = viewModel,
-            onDismiss = { viewModel.dismissGenericAiReportsDialog() }
-        )
+    // Navigate to AI Reports screen when agent selection is triggered
+    LaunchedEffect(uiState.showGenericAiAgentSelection) {
+        if (uiState.showGenericAiAgentSelection) {
+            viewModel.dismissGenericAiAgentSelection()
+            onNavigateToAiReports()
+        }
     }
 
     Column(
@@ -548,107 +534,8 @@ fun AiNewReportScreen(
     }
 }
 
-/**
- * Dialog for showing generic AI reports generation progress.
- */
-@Composable
-private fun GenericAiReportsDialog(
-    uiState: GameUiState,
-    viewModel: GameViewModel,
-    onDismiss: () -> Unit
-) {
-    val context = LocalContext.current
-    val isComplete = uiState.genericAiReportsProgress >= uiState.genericAiReportsTotal && uiState.genericAiReportsTotal > 0
-
-    AlertDialog(
-        onDismissRequest = { if (isComplete) onDismiss() },
-        title = {
-            Text(
-                text = if (isComplete) "AI Reports Ready" else "Generating AI Reports",
-                fontWeight = FontWeight.Bold
-            )
-        },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                // Show all selected agents with their status
-                uiState.genericAiReportsSelectedAgents.mapNotNull { agentId ->
-                    uiState.aiSettings.getAgentById(agentId)
-                }.sortedBy { it.name.lowercase() }.forEach { agent ->
-                    val result = uiState.genericAiReportsAgentResults[agent.id]
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(agent.name, fontWeight = FontWeight.Medium)
-                        when {
-                            result == null -> {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    strokeWidth = 2.dp,
-                                    color = Color.Gray
-                                )
-                            }
-                            result.isSuccess -> {
-                                Text(
-                                    text = "\u2713",
-                                    color = Color(0xFF4CAF50),
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                            else -> {
-                                Text(
-                                    text = "\u2717",
-                                    color = Color(0xFFF44336),
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            if (isComplete) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Button(
-                        onClick = {
-                            shareGenericAiReportsNav(context, uiState)
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF4CAF50)
-                        )
-                    ) {
-                        Text("Share")
-                    }
-                    Button(
-                        onClick = {
-                            openGenericAiReportsInChromeNav(context, uiState)
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF8B5CF6)
-                        )
-                    ) {
-                        Text("Browser")
-                    }
-                }
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(if (isComplete) "Close" else "Cancel")
-            }
-        }
-    )
-}
-
 // Helper functions for sharing/opening generic AI reports
-private fun shareGenericAiReportsNav(context: android.content.Context, uiState: GameUiState) {
+internal fun shareGenericAiReports(context: android.content.Context, uiState: GameUiState) {
     try {
         val appVersion = try {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "unknown"
@@ -691,7 +578,7 @@ private fun shareGenericAiReportsNav(context: android.content.Context, uiState: 
     }
 }
 
-private fun openGenericAiReportsInChromeNav(context: android.content.Context, uiState: GameUiState) {
+internal fun openGenericAiReportsInChrome(context: android.content.Context, uiState: GameUiState) {
     try {
         val appVersion = try {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "unknown"
@@ -896,38 +783,337 @@ private fun PromptHistoryRow(
 }
 
 /**
- * Player info screen wrapper for navigation.
+ * Type of AI report being generated.
+ */
+enum class AiReportScreenType { GAME, PLAYER, GENERIC }
+
+/**
+ * Navigation wrapper for AI Reports screen.
  */
 @Composable
-fun PlayerInfoScreenNav(
+fun AiReportsScreenNav(
     viewModel: GameViewModel,
     onNavigateBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
 
-    PlayerInfoScreen(
-        playerInfo = uiState.playerInfo,
-        isLoading = uiState.playerInfoLoading,
-        error = uiState.playerInfoError,
-        games = uiState.playerGames,
-        gamesLoading = uiState.playerGamesLoading,
-        currentPage = uiState.playerGamesPage,
-        pageSize = uiState.playerGamesPageSize,
-        hasMoreGames = uiState.playerGamesHasMore,
-        onNextPage = { viewModel.nextPlayerGamesPage() },
-        onPreviousPage = { viewModel.previousPlayerGamesPage() },
-        onGameSelected = { game -> viewModel.selectGameFromPlayerInfo(game) },
-        onAiReportsClick = {
-            uiState.playerInfo?.let { info ->
-                val serverName = if (uiState.playerInfoError != null) {
-                    null
-                } else {
-                    "lichess.org"
-                }
-                viewModel.showPlayerAiReportsSelectionDialog(info.username, serverName, info)
+    // Determine report type: generic > player > game
+    val reportType = when {
+        uiState.genericAiPromptTitle.isNotEmpty() -> AiReportScreenType.GENERIC
+        uiState.playerAiReportsPlayerName.isNotEmpty() -> AiReportScreenType.PLAYER
+        else -> AiReportScreenType.GAME
+    }
+
+    AiReportsScreen(
+        uiState = uiState,
+        savedAgentIds = viewModel.loadAiReportAgents(),
+        reportType = reportType,
+        onGenerate = { selectedAgentIds ->
+            viewModel.saveAiReportAgents(selectedAgentIds)
+            when (reportType) {
+                AiReportScreenType.GENERIC -> viewModel.generateGenericAiReports(selectedAgentIds)
+                AiReportScreenType.PLAYER -> viewModel.startPlayerAiReportsWithAgents(selectedAgentIds)
+                AiReportScreenType.GAME -> viewModel.generateAiReportsWithAgents(selectedAgentIds)
             }
         },
-        hasAiApiKeys = uiState.aiSettings.hasAnyApiKey(),
-        onDismiss = onNavigateBack
+        onShare = {
+            when (reportType) {
+                AiReportScreenType.GENERIC -> shareGenericAiReports(context, uiState)
+                AiReportScreenType.PLAYER -> sharePlayerAiReports(context, uiState)
+                AiReportScreenType.GAME -> shareAiReports(context, uiState)
+            }
+        },
+        onOpenInBrowser = {
+            when (reportType) {
+                AiReportScreenType.GENERIC -> openGenericAiReportsInChrome(context, uiState)
+                AiReportScreenType.PLAYER -> openPlayerAiReportsInChrome(context, uiState)
+                AiReportScreenType.GAME -> openAiReportsInChrome(context, uiState)
+            }
+        },
+        onDismiss = {
+            when (reportType) {
+                AiReportScreenType.GENERIC -> viewModel.dismissGenericAiReportsDialog()
+                AiReportScreenType.PLAYER -> viewModel.dismissPlayerAiReportsDialog()
+                AiReportScreenType.GAME -> viewModel.dismissAiReportsDialog()
+            }
+            onNavigateBack()
+        }
     )
+}
+
+/**
+ * Full-screen AI Reports generation and results screen.
+ * Shows agent selection first, then progress and results.
+ * Supports game reports, player reports, and generic reports.
+ */
+@Composable
+fun AiReportsScreen(
+    uiState: GameUiState,
+    savedAgentIds: Set<String>,
+    reportType: AiReportScreenType = AiReportScreenType.GAME,
+    onGenerate: (Set<String>) -> Unit,
+    onShare: () -> Unit,
+    onOpenInBrowser: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    // Use appropriate state based on report type
+    val reportsTotal = when (reportType) {
+        AiReportScreenType.GENERIC -> uiState.genericAiReportsTotal
+        AiReportScreenType.PLAYER -> uiState.playerAiReportsTotal
+        AiReportScreenType.GAME -> uiState.aiReportsTotal
+    }
+    val reportsProgress = when (reportType) {
+        AiReportScreenType.GENERIC -> uiState.genericAiReportsProgress
+        AiReportScreenType.PLAYER -> uiState.playerAiReportsProgress
+        AiReportScreenType.GAME -> uiState.aiReportsProgress
+    }
+    val reportsAgentResults = when (reportType) {
+        AiReportScreenType.GENERIC -> uiState.genericAiReportsAgentResults
+        AiReportScreenType.PLAYER -> uiState.playerAiReportsAgentResults
+        AiReportScreenType.GAME -> uiState.aiReportsAgentResults
+    }
+    val reportsSelectedAgents = when (reportType) {
+        AiReportScreenType.GENERIC -> uiState.genericAiReportsSelectedAgents
+        AiReportScreenType.PLAYER -> uiState.playerAiReportsSelectedAgents
+        AiReportScreenType.GAME -> uiState.aiReportsSelectedAgents
+    }
+
+    val isGenerating = reportsTotal > 0
+    val isComplete = reportsProgress >= reportsTotal && reportsTotal > 0
+
+    // Agent selection state
+    val configuredAgents = uiState.aiSettings.getConfiguredAgents()
+    var selectedAgentIds by remember {
+        mutableStateOf(
+            if (savedAgentIds.isNotEmpty()) {
+                savedAgentIds.filter { id -> configuredAgents.any { it.id == id } }.toSet()
+            } else {
+                configuredAgents.map { it.id }.toSet()
+            }
+        )
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(16.dp)
+    ) {
+        EvalTitleBar(
+            title = when {
+                isComplete -> when (reportType) {
+                    AiReportScreenType.GENERIC -> "Report Ready"
+                    AiReportScreenType.PLAYER -> "Player Reports Ready"
+                    AiReportScreenType.GAME -> "AI Reports Ready"
+                }
+                isGenerating -> when (reportType) {
+                    AiReportScreenType.GENERIC -> "Generating Report"
+                    AiReportScreenType.PLAYER -> "Generating Player Reports"
+                    AiReportScreenType.GAME -> "Generating AI Reports"
+                }
+                else -> when (reportType) {
+                    AiReportScreenType.GENERIC -> "Report: ${uiState.genericAiPromptTitle}"
+                    AiReportScreenType.PLAYER -> "Player: ${uiState.playerAiReportsPlayerName}"
+                    AiReportScreenType.GAME -> "AI Reports"
+                }
+            },
+            onBackClick = onDismiss,
+            onEvalClick = onDismiss
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        if (!isGenerating) {
+            // Selection UI
+            Text(
+                text = "Select AI agents to generate reports:",
+                color = Color.White,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (configuredAgents.isEmpty()) {
+                        Text(
+                            text = "No AI agents configured. Please configure agents in Settings > AI Setup.",
+                            color = Color(0xFFAAAAAA)
+                        )
+                    } else {
+                        configuredAgents.sortedBy { it.name.lowercase() }.forEach { agent ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        selectedAgentIds = if (agent.id in selectedAgentIds) {
+                                            selectedAgentIds - agent.id
+                                        } else {
+                                            selectedAgentIds + agent.id
+                                        }
+                                    }
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = agent.id in selectedAgentIds,
+                                    onCheckedChange = { checked ->
+                                        selectedAgentIds = if (checked) {
+                                            selectedAgentIds + agent.id
+                                        } else {
+                                            selectedAgentIds - agent.id
+                                        }
+                                    }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = agent.name,
+                                        fontWeight = FontWeight.Medium,
+                                        color = Color.White
+                                    )
+                                    Text(
+                                        text = "${agent.provider.displayName} - ${agent.model}",
+                                        fontSize = 12.sp,
+                                        color = Color(0xFFAAAAAA)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Generate button
+            Button(
+                onClick = { onGenerate(selectedAgentIds) },
+                enabled = selectedAgentIds.isNotEmpty(),
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF8B5CF6)
+                )
+            ) {
+                Text("Generate Reports")
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Cancel button
+            OutlinedButton(
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Cancel")
+            }
+        } else {
+            // Progress/Results UI
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Show all selected agents with their status
+                    reportsSelectedAgents.mapNotNull { agentId ->
+                        uiState.aiSettings.getAgentById(agentId)
+                    }.sortedBy { it.name.lowercase() }.forEach { agent ->
+                        val result = reportsAgentResults[agent.id]
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = agent.name,
+                                fontWeight = FontWeight.Medium,
+                                color = Color.White
+                            )
+                            when {
+                                result == null -> {
+                                    // Still pending - show small spinner
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        strokeWidth = 2.dp,
+                                        color = Color.Gray
+                                    )
+                                }
+                                result.isSuccess -> {
+                                    Text(
+                                        text = "✓",
+                                        color = Color(0xFF4CAF50),
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 18.sp
+                                    )
+                                }
+                                else -> {
+                                    Text(
+                                        text = "✗",
+                                        color = Color(0xFFF44336),
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 18.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            // Action buttons at the bottom
+            if (isComplete) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Button(
+                        onClick = onShare,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF4CAF50)
+                        )
+                    ) {
+                        Text("Share")
+                    }
+                    Button(
+                        onClick = onOpenInBrowser,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF8B5CF6)
+                        )
+                    ) {
+                        Text("Browser")
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // Close/Cancel button
+            OutlinedButton(
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(if (isComplete) "Close" else "Cancel")
+            }
+        }
+    }
 }

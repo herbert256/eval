@@ -459,7 +459,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     fun showPlayerInfo(username: String) = contentSourceManager.showPlayerInfo(username, null)
     fun showPlayerInfo(username: String, server: ChessServer) = contentSourceManager.showPlayerInfoWithServer(username, server)
-    fun clearGoogleSearch() = contentSourceManager.clearGoogleSearch()
     fun nextPlayerGamesPage() = contentSourceManager.nextPlayerGamesPage()
     fun previousPlayerGamesPage() = contentSourceManager.previousPlayerGamesPage()
     fun selectGameFromPlayerInfo(game: LichessGame) = contentSourceManager.selectGameFromPlayerInfo(game)

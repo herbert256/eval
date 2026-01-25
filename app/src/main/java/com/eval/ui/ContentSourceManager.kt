@@ -432,11 +432,8 @@ internal class ContentSourceManager(
     // ==================== PLAYER INFO & RANKINGS ====================
 
     fun showPlayerInfo(username: String, server: ChessServer?) {
-        if (server == null) {
-            updateUiState { copy(googleSearchPlayerName = username) }
-            return
-        }
-        showPlayerInfoWithServer(username, server)
+        // Always use Lichess as default server
+        showPlayerInfoWithServer(username, server ?: ChessServer.LICHESS)
     }
 
     fun showPlayerInfoWithServer(username: String, server: ChessServer) {
@@ -613,9 +610,6 @@ internal class ContentSourceManager(
         }
     }
 
-    fun clearGoogleSearch() {
-        updateUiState { copy(googleSearchPlayerName = null) }
-    }
 
     // ==================== TOP RANKINGS ====================
 

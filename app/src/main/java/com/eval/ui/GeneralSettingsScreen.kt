@@ -26,12 +26,16 @@ fun GeneralSettingsScreen(
     var longTapForFullScreen by remember { mutableStateOf(generalSettings.longTapForFullScreen) }
     var paginationPageSize by remember { mutableFloatStateOf(generalSettings.paginationPageSize.toFloat()) }
     var moveSoundsEnabled by remember { mutableStateOf(generalSettings.moveSoundsEnabled) }
+    var lichessUsername by remember { mutableStateOf(generalSettings.lichessUsername) }
+    var flipScoreWhenBlack by remember { mutableStateOf(generalSettings.flipScoreWhenBlack) }
 
     fun saveSettings() {
         onSave(generalSettings.copy(
             longTapForFullScreen = longTapForFullScreen,
             paginationPageSize = paginationPageSize.roundToInt(),
-            moveSoundsEnabled = moveSoundsEnabled
+            moveSoundsEnabled = moveSoundsEnabled,
+            lichessUsername = lichessUsername,
+            flipScoreWhenBlack = flipScoreWhenBlack
         ))
     }
 
@@ -143,6 +147,78 @@ fun GeneralSettingsScreen(
                         checked = moveSoundsEnabled,
                         onCheckedChange = {
                             moveSoundsEnabled = it
+                            saveSettings()
+                        }
+                    )
+                }
+            }
+        }
+
+        // Lichess settings card
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Lichess",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White
+                )
+
+                // Lichess username field
+                Column {
+                    Text("User on lichess.org", color = Color.White)
+                    Text(
+                        text = "Your Lichess username for score perspective",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFAAAAAA)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = lichessUsername,
+                        onValueChange = {
+                            lichessUsername = it
+                            saveSettings()
+                        },
+                        placeholder = { Text("Enter username") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedBorderColor = Color(0xFF555555),
+                            focusedBorderColor = Color(0xFF629924),
+                            unfocusedPlaceholderColor = Color(0xFF666666),
+                            focusedPlaceholderColor = Color(0xFF666666)
+                        )
+                    )
+                }
+
+                HorizontalDivider(color = Color(0xFF404040))
+
+                // Flip score when black toggle
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Flip score when playing with black", color = Color.White)
+                        Text(
+                            text = "Show evaluation from your perspective when you play as black",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFFAAAAAA)
+                        )
+                    }
+                    Switch(
+                        checked = flipScoreWhenBlack,
+                        onCheckedChange = {
+                            flipScoreWhenBlack = it
                             saveSettings()
                         }
                     )

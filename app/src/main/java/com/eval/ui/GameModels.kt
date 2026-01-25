@@ -192,7 +192,9 @@ data class GeneralSettings(
     val paginationPageSize: Int = 25,
     val moveSoundsEnabled: Boolean = true,
     val developerMode: Boolean = false,
-    val trackApiCalls: Boolean = false
+    val trackApiCalls: Boolean = false,
+    val lichessUsername: String = "",
+    val flipScoreWhenBlack: Boolean = true
 )
 
 // Move quality assessment based on evaluation change
@@ -413,8 +415,6 @@ data class GameUiState(
     val pgnGamesByEvent: Map<String, List<LichessGame>> = emptyMap(),
     val selectedPgnEvent: String? = null,
     val pgnGamesForSelectedEvent: List<LichessGame> = emptyList(),
-    // Google search for player (for PGN file games without server info)
-    val googleSearchPlayerName: String? = null,
     // GIF export state
     val gifExportProgress: Float? = null,
     val showGifExportDialog: Boolean = false,

@@ -26,6 +26,7 @@ object NavRoutes {
     const val AI_NEW_REPORT_WITH_PARAMS = "ai_new_report/{title}/{prompt}"
     const val AI_PROMPT_HISTORY = "ai_prompt_history"
     const val PLAYER_INFO = "player_info"
+    const val AI_REPORTS = "ai_reports"
 
     fun traceDetail(filename: String) = "trace_detail/$filename"
     fun aiNewReportWithParams(title: String, prompt: String): String {
@@ -57,7 +58,8 @@ fun EvalNavHost(
                 onNavigateToTrace = { navController.navigate(NavRoutes.TRACE_LIST) },
                 onNavigateToRetrieve = { navController.navigate(NavRoutes.RETRIEVE) },
                 onNavigateToAi = { navController.navigate(NavRoutes.AI) },
-                onNavigateToPlayerInfo = { navController.navigate(NavRoutes.PLAYER_INFO) }
+                onNavigateToPlayerInfo = { navController.navigate(NavRoutes.PLAYER_INFO) },
+                onNavigateToAiReports = { navController.navigate(NavRoutes.AI_REPORTS) }
             )
         }
 
@@ -118,7 +120,8 @@ fun EvalNavHost(
         composable(NavRoutes.AI_NEW_REPORT) {
             AiNewReportScreen(
                 viewModel = viewModel,
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToAiReports = { navController.navigate(NavRoutes.AI_REPORTS) }
             )
         }
 
@@ -130,6 +133,7 @@ fun EvalNavHost(
             AiNewReportScreen(
                 viewModel = viewModel,
                 onNavigateBack = { navController.popBackStack() },
+                onNavigateToAiReports = { navController.navigate(NavRoutes.AI_REPORTS) },
                 initialTitle = title,
                 initialPrompt = prompt
             )
@@ -146,6 +150,13 @@ fun EvalNavHost(
 
         composable(NavRoutes.PLAYER_INFO) {
             PlayerInfoScreenNav(
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(NavRoutes.AI_REPORTS) {
+            AiReportsScreenNav(
                 viewModel = viewModel,
                 onNavigateBack = { navController.popBackStack() }
             )
