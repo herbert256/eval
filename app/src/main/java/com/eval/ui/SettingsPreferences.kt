@@ -947,6 +947,10 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         // AI report email
         const val KEY_AI_REPORT_EMAIL = "ai_report_email"
 
+        // Last AI report title and prompt (for New AI Report screen)
+        const val KEY_LAST_AI_REPORT_TITLE = "last_ai_report_title"
+        const val KEY_LAST_AI_REPORT_PROMPT = "last_ai_report_prompt"
+
         // AI prompts and agents (three-tier architecture)
         private const val KEY_AI_PROMPTS = "ai_prompts"
         private const val KEY_AI_AGENTS = "ai_agents"

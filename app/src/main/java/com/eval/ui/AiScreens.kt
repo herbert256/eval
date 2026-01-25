@@ -446,8 +446,15 @@ fun AiNewReportScreen(
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
-    var title by remember { mutableStateOf(initialTitle) }
-    var prompt by remember { mutableStateOf(initialPrompt) }
+
+    // Load last used title and prompt from SharedPreferences
+    val prefs = remember { context.getSharedPreferences(SettingsPreferences.PREFS_NAME, android.content.Context.MODE_PRIVATE) }
+    val lastTitle = remember { prefs.getString(SettingsPreferences.KEY_LAST_AI_REPORT_TITLE, "") ?: "" }
+    val lastPrompt = remember { prefs.getString(SettingsPreferences.KEY_LAST_AI_REPORT_PROMPT, "") ?: "" }
+
+    // Use initialTitle/initialPrompt if provided (from prompt history), otherwise use last saved values
+    var title by remember { mutableStateOf(initialTitle.ifEmpty { lastTitle }) }
+    var prompt by remember { mutableStateOf(initialPrompt.ifEmpty { lastPrompt }) }
 
     // Navigate to AI Reports screen when agent selection is triggered
     LaunchedEffect(uiState.showGenericAiAgentSelection) {
@@ -515,8 +522,13 @@ fun AiNewReportScreen(
         Button(
             onClick = {
                 if (title.isNotBlank() && prompt.isNotBlank()) {
+                    // Save as last used title and prompt
+                    prefs.edit()
+                        .putString(SettingsPreferences.KEY_LAST_AI_REPORT_TITLE, title)
+                        .putString(SettingsPreferences.KEY_LAST_AI_REPORT_PROMPT, prompt)
+                        .apply()
+
                     // Save to prompt history
-                    val prefs = context.getSharedPreferences(SettingsPreferences.PREFS_NAME, android.content.Context.MODE_PRIVATE)
                     val settingsPrefs = SettingsPreferences(prefs)
                     settingsPrefs.savePromptToHistory(title, prompt)
 
@@ -882,6 +894,21 @@ fun AiReportsScreen(
     val isGenerating = reportsTotal > 0
     val isComplete = reportsProgress >= reportsTotal && reportsTotal > 0
 
+    // Viewer state
+    var showViewer by remember { mutableStateOf(false) }
+    var selectedAgentForViewer by remember { mutableStateOf<String?>(null) }
+
+    // Show viewer screen when activated
+    if (showViewer) {
+        AiReportsViewerScreen(
+            agentResults = reportsAgentResults,
+            aiSettings = uiState.aiSettings,
+            initialSelectedAgentId = selectedAgentForViewer,
+            onDismiss = { showViewer = false }
+        )
+        return
+    }
+
     // Agent selection state
     val configuredAgents = uiState.aiSettings.getConfiguredAgents()
     var selectedAgentIds by remember {
@@ -1083,8 +1110,17 @@ fun AiReportsScreen(
             if (isComplete) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    Button(
+                        onClick = { showViewer = true },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF2196F3)
+                        )
+                    ) {
+                        Text("View")
+                    }
                     Button(
                         onClick = onShare,
                         modifier = Modifier.weight(1f),
@@ -1114,6 +1150,313 @@ fun AiReportsScreen(
             ) {
                 Text(if (isComplete) "Close" else "Cancel")
             }
+        }
+    }
+}
+
+/**
+ * Full-screen viewer for AI agent responses.
+ * Shows buttons for each agent at the top, displays HTML-converted markdown content.
+ */
+@Composable
+fun AiReportsViewerScreen(
+    agentResults: Map<String, com.eval.data.AiAnalysisResponse>,
+    aiSettings: AiSettings,
+    initialSelectedAgentId: String? = null,
+    onDismiss: () -> Unit
+) {
+    // Get agents with successful results
+    val agentsWithResults = agentResults.entries
+        .filter { it.value.isSuccess }
+        .mapNotNull { (agentId, result) ->
+            val agent = aiSettings.getAgentById(agentId)
+            if (agent != null) Triple(agentId, agent, result) else null
+        }
+        .sortedBy { it.second.name.lowercase() }
+
+    // Selected agent state
+    var selectedAgentId by remember {
+        mutableStateOf(initialSelectedAgentId ?: agentsWithResults.firstOrNull()?.first)
+    }
+
+    // Get the selected agent's result
+    val selectedResult = selectedAgentId?.let { agentResults[it] }
+    val selectedAgent = selectedAgentId?.let { aiSettings.getAgentById(it) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        // Header
+        EvalTitleBar(
+            title = "View Reports",
+            onBackClick = onDismiss,
+            onEvalClick = onDismiss
+        )
+
+        // Agent selection buttons - horizontal scrollable row
+        if (agentsWithResults.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                agentsWithResults.forEach { (agentId, agent, _) ->
+                    val isSelected = agentId == selectedAgentId
+                    Button(
+                        onClick = { selectedAgentId = agentId },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isSelected) Color(0xFF8B5CF6) else Color(0xFF3A3A4A)
+                        ),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = agent.name,
+                            fontSize = 14.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                }
+            }
+        }
+
+        // Content area
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .padding(horizontal = 16.dp)
+        ) {
+            if (agentsWithResults.isEmpty()) {
+                // No results
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "No successful reports to display",
+                        color = Color(0xFFAAAAAA),
+                        fontSize = 16.sp
+                    )
+                }
+            } else if (selectedResult?.analysis != null) {
+                // Show the HTML content in a WebView-like display
+                val htmlContent = remember(selectedResult.analysis) {
+                    convertMarkdownToSimpleHtml(selectedResult.analysis)
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    // Agent info header
+                    if (selectedAgent != null) {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color(0xFF2A3A4A)
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 12.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp)
+                            ) {
+                                Text(
+                                    text = selectedAgent.name,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                    fontSize = 18.sp
+                                )
+                                Text(
+                                    text = "${selectedAgent.provider.displayName} - ${selectedAgent.model}",
+                                    color = Color(0xFFAAAAAA),
+                                    fontSize = 13.sp
+                                )
+                            }
+                        }
+                    }
+
+                    // HTML content rendered as styled text
+                    HtmlContentDisplay(htmlContent = htmlContent)
+                }
+            } else {
+                // No analysis for selected agent
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "No analysis available",
+                        color = Color(0xFFAAAAAA),
+                        fontSize = 16.sp
+                    )
+                }
+            }
+        }
+
+        // Close button at the bottom
+        OutlinedButton(
+            onClick = onDismiss,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Text("Close")
+        }
+    }
+}
+
+/**
+ * Converts markdown text to simple HTML, removing multiple blank lines.
+ */
+private fun convertMarkdownToSimpleHtml(markdown: String): String {
+    // First normalize line endings and remove multiple blank lines
+    var html = markdown
+        .replace("\r\n", "\n")
+        .replace(Regex("\n{3,}"), "\n\n")  // Replace 3+ newlines with 2
+
+    // Basic markdown to HTML conversion
+    html = html
+        // Escape HTML entities first
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        // Headers
+        .replace(Regex("^### (.+)$", RegexOption.MULTILINE), "<h3>$1</h3>")
+        .replace(Regex("^## (.+)$", RegexOption.MULTILINE), "<h2>$1</h2>")
+        .replace(Regex("^# (.+)$", RegexOption.MULTILINE), "<h1>$1</h1>")
+        // Bold
+        .replace(Regex("\\*\\*(.+?)\\*\\*"), "<strong>$1</strong>")
+        // Italic
+        .replace(Regex("\\*(.+?)\\*"), "<em>$1</em>")
+        // Bullet points
+        .replace(Regex("^- (.+)$", RegexOption.MULTILINE), "<li>$1</li>")
+        .replace(Regex("^\\* (.+)$", RegexOption.MULTILINE), "<li>$1</li>")
+        // Numbered lists
+        .replace(Regex("^\\d+\\. (.+)$", RegexOption.MULTILINE), "<li>$1</li>")
+        // Line breaks - convert double newlines to paragraph breaks
+        .replace("\n\n", "</p><p>")
+        .replace("\n", "<br>")
+
+    // Wrap consecutive <li> items in <ul>
+    html = html.replace(Regex("(<li>.*?</li>)+")) { match ->
+        "<ul>${match.value}</ul>"
+    }
+
+    // Wrap in paragraph if not empty
+    if (html.isNotBlank()) {
+        html = "<p>$html</p>"
+    }
+
+    return html
+}
+
+/**
+ * Displays HTML content as styled Compose text.
+ */
+@Composable
+private fun HtmlContentDisplay(htmlContent: String) {
+    // Parse and display HTML content
+    val annotatedString = remember(htmlContent) {
+        parseHtmlToAnnotatedString(htmlContent)
+    }
+
+    Text(
+        text = annotatedString,
+        color = Color.White,
+        fontSize = 15.sp,
+        lineHeight = 22.sp,
+        modifier = Modifier.fillMaxWidth()
+    )
+}
+
+/**
+ * Parses HTML to AnnotatedString for display.
+ */
+private fun parseHtmlToAnnotatedString(html: String): androidx.compose.ui.text.AnnotatedString {
+    // First clean up HTML entities and structural tags
+    val cleanHtml = html
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("<p>", "")
+        .replace("</p>", "\n\n")
+        .replace("<br>", "\n")
+        .replace("<ul>", "\n")
+        .replace("</ul>", "\n")
+        .replace("<li>", "  \u2022 ")
+        .replace("</li>", "\n")
+        .replace(Regex("\n{3,}"), "\n\n")  // Remove excess blank lines
+        .trim()
+
+    return androidx.compose.ui.text.buildAnnotatedString {
+        // Process tags
+        val tagPattern = Regex("<(/?)(h[123]|strong|em)>")
+        var lastEnd = 0
+
+        val matches = tagPattern.findAll(cleanHtml).toList()
+        val styleStack = mutableListOf<Pair<String, Int>>()
+
+        for (match in matches) {
+            // Add text before this tag
+            if (match.range.first > lastEnd) {
+                append(cleanHtml.substring(lastEnd, match.range.first))
+            }
+
+            val isClosing = match.groupValues[1] == "/"
+            val tagName = match.groupValues[2]
+
+            if (!isClosing) {
+                styleStack.add(tagName to length)
+            } else {
+                // Find matching opening tag
+                val openTagIndex = styleStack.indexOfLast { it.first == tagName }
+                if (openTagIndex >= 0) {
+                    val (_, startPos) = styleStack.removeAt(openTagIndex)
+                    val style = when (tagName) {
+                        "h1" -> androidx.compose.ui.text.SpanStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 24.sp,
+                            color = Color.White
+                        )
+                        "h2" -> androidx.compose.ui.text.SpanStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 20.sp,
+                            color = Color(0xFF8BB8FF)
+                        )
+                        "h3" -> androidx.compose.ui.text.SpanStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp,
+                            color = Color(0xFF9FCFFF)
+                        )
+                        "strong" -> androidx.compose.ui.text.SpanStyle(
+                            fontWeight = FontWeight.Bold
+                        )
+                        "em" -> androidx.compose.ui.text.SpanStyle(
+                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                            color = Color(0xFFCCCCCC)
+                        )
+                        else -> null
+                    }
+                    if (style != null) {
+                        addStyle(style, startPos, length)
+                    }
+                }
+            }
+
+            lastEnd = match.range.last + 1
+        }
+
+        // Add remaining text
+        if (lastEnd < cleanHtml.length) {
+            append(cleanHtml.substring(lastEnd))
         }
     }
 }
