@@ -952,13 +952,26 @@ fun AiReportsScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         if (!isGenerating) {
-            // Selection UI
-            Text(
-                text = "Select AI agents to generate reports:",
-                color = Color.White,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(bottom = 12.dp)
-            )
+            // Select all / Select none buttons
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedButton(
+                    onClick = { selectedAgentIds = configuredAgents.map { it.id }.toSet() },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Select all")
+                }
+                OutlinedButton(
+                    onClick = { selectedAgentIds = emptySet() },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Select none")
+                }
+            }
 
             Card(
                 colors = CardDefaults.cardColors(
@@ -1188,21 +1201,27 @@ fun AiReportsViewerScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // Header
+        // Header - show provider and model of selected agent
+        val titleText = if (selectedAgent != null) {
+            "${selectedAgent.provider.displayName} - ${selectedAgent.model}"
+        } else {
+            "View Reports"
+        }
         EvalTitleBar(
-            title = "View Reports",
+            title = titleText,
             onBackClick = onDismiss,
             onEvalClick = onDismiss
         )
 
-        // Agent selection buttons - horizontal scrollable row
+        // Agent selection buttons - wrapping flow layout
         if (agentsWithResults.isNotEmpty()) {
-            Row(
+            @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+            androidx.compose.foundation.layout.FlowRow(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 agentsWithResults.forEach { (agentId, agent, _) ->
                     val isSelected = agentId == selectedAgentId
@@ -1211,11 +1230,12 @@ fun AiReportsViewerScreen(
                         colors = ButtonDefaults.buttonColors(
                             containerColor = if (isSelected) Color(0xFF8B5CF6) else Color(0xFF3A3A4A)
                         ),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                        modifier = Modifier.height(32.dp)
                     ) {
                         Text(
                             text = agent.name,
-                            fontSize = 14.sp,
+                            fontSize = 13.sp,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                         )
                     }
@@ -1253,36 +1273,20 @@ fun AiReportsViewerScreen(
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState())
                 ) {
-                    // Agent info header
-                    if (selectedAgent != null) {
-                        Card(
-                            colors = CardDefaults.cardColors(
-                                containerColor = Color(0xFF2A3A4A)
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 12.dp)
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(12.dp)
-                            ) {
-                                Text(
-                                    text = selectedAgent.name,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White,
-                                    fontSize = 18.sp
-                                )
-                                Text(
-                                    text = "${selectedAgent.provider.displayName} - ${selectedAgent.model}",
-                                    color = Color(0xFFAAAAAA),
-                                    fontSize = 13.sp
-                                )
-                            }
-                        }
-                    }
-
                     // HTML content rendered as styled text
                     HtmlContentDisplay(htmlContent = htmlContent)
+
+                    // Citations section (if available)
+                    selectedResult.citations?.takeIf { it.isNotEmpty() }?.let { citations ->
+                        Spacer(modifier = Modifier.height(16.dp))
+                        CitationsSection(citations = citations)
+                    }
+
+                    // Search results section (if available)
+                    selectedResult.searchResults?.takeIf { it.isNotEmpty() }?.let { searchResults ->
+                        Spacer(modifier = Modifier.height(16.dp))
+                        SearchResultsSection(searchResults = searchResults)
+                    }
                 }
             } else {
                 // No analysis for selected agent
@@ -1297,16 +1301,6 @@ fun AiReportsViewerScreen(
                     )
                 }
             }
-        }
-
-        // Close button at the bottom
-        OutlinedButton(
-            onClick = onDismiss,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Text("Close")
         }
     }
 }
@@ -1457,6 +1451,131 @@ private fun parseHtmlToAnnotatedString(html: String): androidx.compose.ui.text.A
         // Add remaining text
         if (lastEnd < cleanHtml.length) {
             append(cleanHtml.substring(lastEnd))
+        }
+    }
+}
+
+/**
+ * Displays a list of citations (URLs) returned by the AI service.
+ */
+@Composable
+private fun CitationsSection(citations: List<String>) {
+    val context = LocalContext.current
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF252525), shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+            .padding(16.dp)
+    ) {
+        Text(
+            text = "Sources",
+            fontWeight = FontWeight.Bold,
+            fontSize = 16.sp,
+            color = Color(0xFF8B5CF6),
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+
+        citations.forEachIndexed { index, url ->
+            Row(
+                modifier = Modifier
+                    .padding(vertical = 4.dp)
+                    .clickable {
+                        try {
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            // Ignore if URL can't be opened
+                        }
+                    }
+            ) {
+                Text(
+                    text = "${index + 1}. ",
+                    color = Color(0xFFAAAAAA),
+                    fontSize = 14.sp
+                )
+                Text(
+                    text = url,
+                    color = Color(0xFF64B5F6),
+                    fontSize = 14.sp,
+                    modifier = Modifier.weight(1f),
+                    textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Displays search results returned by the AI service.
+ */
+@Composable
+private fun SearchResultsSection(searchResults: List<com.eval.data.SearchResult>) {
+    val context = LocalContext.current
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF252525), shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+            .padding(16.dp)
+    ) {
+        Text(
+            text = "Search Results",
+            fontWeight = FontWeight.Bold,
+            fontSize = 16.sp,
+            color = Color(0xFFFF9800),
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+
+        searchResults.forEachIndexed { index, result ->
+            if (result.url != null) {
+                Column(
+                    modifier = Modifier
+                        .padding(vertical = 6.dp)
+                        .clickable {
+                            try {
+                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(result.url))
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                // Ignore if URL can't be opened
+                            }
+                        }
+                ) {
+                    // Title/Name with number
+                    Row {
+                        Text(
+                            text = "${index + 1}. ",
+                            color = Color(0xFFAAAAAA),
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            text = result.name ?: result.url,
+                            color = Color(0xFF64B5F6),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline
+                        )
+                    }
+                    // URL if different from name
+                    if (result.name != null && result.name != result.url) {
+                        Text(
+                            text = result.url,
+                            color = Color(0xFF888888),
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(start = 16.dp, top = 2.dp)
+                        )
+                    }
+                    // Snippet if available
+                    if (!result.snippet.isNullOrBlank()) {
+                        Text(
+                            text = result.snippet,
+                            color = Color(0xFFBBBBBB),
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }
