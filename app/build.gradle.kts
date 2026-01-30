@@ -1,14 +1,17 @@
+import java.util.Calendar
 import java.util.Properties
-import java.text.SimpleDateFormat
-import java.util.Date
 
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
 }
 
-// Generate version from timestamp: yy.mmdd.hhmmss
-val versionFromTimestamp: String = SimpleDateFormat("yy.MMdd.HHmmss").format(Date())
+// Generate version from timestamp: yy.DDD.minutes (year.dayOfYear.minutesInDay)
+val now = Calendar.getInstance()
+val versionFromTimestamp: String = String.format("%02d.%d.%d",
+    now.get(Calendar.YEAR) % 100,
+    now.get(Calendar.DAY_OF_YEAR),
+    now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE))
 
 // Load keystore properties from local.properties
 val keystoreProperties = Properties()
