@@ -83,8 +83,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private fun saveInterfaceVisibilitySettings(settings: InterfaceVisibilitySettings) = settingsPrefs.saveInterfaceVisibilitySettings(settings)
     private fun loadGeneralSettings(): GeneralSettings = settingsPrefs.loadGeneralSettings()
     private fun saveGeneralSettings(settings: GeneralSettings) = settingsPrefs.saveGeneralSettings(settings)
-    private fun loadAiPromptsSettings(): AiPromptsSettings = settingsPrefs.loadAiPromptsSettings()
-    private fun saveAiPromptsSettings(settings: AiPromptsSettings) = settingsPrefs.saveAiPromptsSettings(settings)
+    private fun loadAiPrompts(): List<AiPromptEntry> = settingsPrefs.loadAiPrompts()
+    private fun saveAiPrompts(prompts: List<AiPromptEntry>) = settingsPrefs.saveAiPrompts(prompts)
 
     private fun getAppVersionCode(): Long {
         return try {
@@ -194,7 +194,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val interfaceVisibility = loadInterfaceVisibilitySettings()
             val generalSettings = loadGeneralSettings()
 
-            val aiPromptsSettings = loadAiPromptsSettings()
+            val aiPrompts = loadAiPrompts()
             val lichessMaxGames = settingsPrefs.lichessMaxGames
             val retrievesList = gameStorage.loadRetrievesList()
             val hasPreviousRetrieves = retrievesList.isNotEmpty()
@@ -206,7 +206,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 graphSettings = graphSettings,
                 interfaceVisibility = interfaceVisibility,
                 generalSettings = generalSettings,
-                aiPromptsSettings = aiPromptsSettings,
+                aiPrompts = aiPrompts,
                 lichessMaxGames = lichessMaxGames,
                 hasPreviousRetrieves = hasPreviousRetrieves,
                 previousRetrievesList = retrievesList,
@@ -300,7 +300,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val graphSettings = loadGraphSettings()
         val interfaceVisibility = loadInterfaceVisibilitySettings()
         val generalSettings = loadGeneralSettings()
-        val aiPromptsSettings = loadAiPromptsSettings()
+        val aiPrompts = loadAiPrompts()
         val lichessMaxGames = settingsPrefs.lichessMaxGames
 
         _uiState.value = _uiState.value.copy(
@@ -309,7 +309,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             graphSettings = graphSettings,
             interfaceVisibility = interfaceVisibility,
             generalSettings = generalSettings,
-            aiPromptsSettings = aiPromptsSettings,
+            aiPrompts = aiPrompts,
             lichessMaxGames = lichessMaxGames,
             playerGamesPageSize = generalSettings.paginationPageSize,
             gameSelectionPageSize = generalSettings.paginationPageSize
@@ -1030,36 +1030,66 @@ ${opening.moves} *
         )
     }
 
-    fun updateAiPromptsSettings(settings: AiPromptsSettings) {
-        saveAiPromptsSettings(settings)
-        _uiState.value = _uiState.value.copy(aiPromptsSettings = settings)
+    // ===== AI Prompts CRUD =====
+
+    fun updateAiPrompts(prompts: List<AiPromptEntry>) {
+        saveAiPrompts(prompts)
+        _uiState.value = _uiState.value.copy(aiPrompts = prompts)
+    }
+
+    fun addAiPrompt(prompt: AiPromptEntry) {
+        val updated = _uiState.value.aiPrompts + prompt
+        updateAiPrompts(updated)
+    }
+
+    fun updateAiPrompt(prompt: AiPromptEntry) {
+        val updated = _uiState.value.aiPrompts.map { if (it.id == prompt.id) prompt else it }
+        updateAiPrompts(updated)
+    }
+
+    fun deleteAiPrompt(id: String) {
+        val updated = _uiState.value.aiPrompts.filter { it.id != id }
+        updateAiPrompts(updated)
+    }
+
+    // ===== AI Prompt Selection Dialog =====
+
+    fun showAiPromptSelectionDialog() {
+        _uiState.value = _uiState.value.copy(showAiPromptSelectionDialog = true)
+    }
+
+    fun hideAiPromptSelectionDialog() {
+        _uiState.value = _uiState.value.copy(showAiPromptSelectionDialog = false)
     }
 
     /**
-     * Launch the external AI app for game position analysis.
+     * Launch the external AI app for game position analysis with a selected prompt.
      * Shows warning dialog if AI app is not installed.
      * @param context Android context needed for intent launching
+     * @param promptEntry The selected AI prompt entry
      * @return true if AI app was launched, false if not installed
      */
-    fun launchGameAnalysis(context: android.content.Context): Boolean {
+    fun launchGameAnalysis(context: android.content.Context, promptEntry: AiPromptEntry): Boolean {
         if (!AiAppLauncher.isAiAppInstalled(context)) {
             showAiAppNotInstalledDialog()
             return false
         }
         val fen = _uiState.value.currentBoard.getFen()
-        val promptTemplate = _uiState.value.aiPromptsSettings.getGamePromptText()
         val whiteName = _uiState.value.game?.players?.white?.user?.name ?: ""
         val blackName = _uiState.value.game?.players?.black?.user?.name ?: ""
         val currentMoveIndex = _uiState.value.currentMoveIndex
         val lastMoveDetails = if (currentMoveIndex >= 0 && currentMoveIndex < _uiState.value.moveDetails.size) {
             _uiState.value.moveDetails[currentMoveIndex]
         } else null
-        return AiAppLauncher.launchGameAnalysis(context, fen, promptTemplate, whiteName, blackName, currentMoveIndex, lastMoveDetails)
+        return AiAppLauncher.launchGameAnalysis(
+            context, fen, promptEntry.prompt, whiteName, blackName,
+            currentMoveIndex, lastMoveDetails, promptEntry.instructions
+        )
     }
 
     /**
      * Launch the external AI app for server player analysis (Lichess/Chess.com).
-     * Shows warning dialog if AI app is not installed.
+     * Uses the first prompt that contains @SERVER@ placeholder, or falls back to first prompt.
      * @param context Android context needed for intent launching
      * @param playerName The player's username
      * @param server The chess server name (e.g., "lichess.org", "chess.com")
@@ -1070,13 +1100,18 @@ ${opening.moves} *
             showAiAppNotInstalledDialog()
             return false
         }
-        val promptTemplate = _uiState.value.aiPromptsSettings.getServerPlayerPromptText()
-        return AiAppLauncher.launchServerPlayerAnalysis(context, playerName, server, promptTemplate)
+        val prompts = _uiState.value.aiPrompts
+        val prompt = prompts.firstOrNull { it.prompt.contains("@SERVER@") }
+            ?: prompts.firstOrNull { it.prompt.contains("@PLAYER@") }
+            ?: prompts.firstOrNull()
+        val promptTemplate = prompt?.prompt ?: DEFAULT_SERVER_PLAYER_PROMPT
+        val instructions = prompt?.instructions ?: ""
+        return AiAppLauncher.launchServerPlayerAnalysis(context, playerName, server, promptTemplate, instructions)
     }
 
     /**
      * Launch the external AI app for general player analysis.
-     * Shows warning dialog if AI app is not installed.
+     * Uses the first prompt that contains @PLAYER@ but not @SERVER@, or falls back.
      * @param context Android context needed for intent launching
      * @param playerName The player's name
      * @return true if AI app was launched, false if not installed
@@ -1086,8 +1121,13 @@ ${opening.moves} *
             showAiAppNotInstalledDialog()
             return false
         }
-        val promptTemplate = _uiState.value.aiPromptsSettings.getOtherPlayerPromptText()
-        return AiAppLauncher.launchOtherPlayerAnalysis(context, playerName, promptTemplate)
+        val prompts = _uiState.value.aiPrompts
+        val prompt = prompts.firstOrNull { it.prompt.contains("@PLAYER@") && !it.prompt.contains("@SERVER@") }
+            ?: prompts.firstOrNull { it.prompt.contains("@PLAYER@") }
+            ?: prompts.firstOrNull()
+        val promptTemplate = prompt?.prompt ?: DEFAULT_OTHER_PLAYER_PROMPT
+        val instructions = prompt?.instructions ?: ""
+        return AiAppLauncher.launchOtherPlayerAnalysis(context, playerName, promptTemplate, instructions)
     }
 
     /**
@@ -1095,6 +1135,71 @@ ${opening.moves} *
      */
     fun isAiAppInstalled(context: android.content.Context): Boolean {
         return AiAppLauncher.isAiAppInstalled(context)
+    }
+
+    // ===== Settings Export / Import =====
+
+    /**
+     * Export all settings to a JSON file and share via share sheet.
+     */
+    fun exportSettings(context: android.content.Context) {
+        try {
+            val json = settingsPrefs.exportAllSettings()
+            val cacheDir = java.io.File(context.cacheDir, "settings_export")
+            cacheDir.mkdirs()
+            val file = java.io.File(cacheDir, "eval_settings.json")
+            file.writeText(json)
+
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file
+            )
+            val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "application/json"
+                putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(android.content.Intent.createChooser(shareIntent, "Export Settings"))
+        } catch (e: Exception) {
+            android.widget.Toast.makeText(context, "Export failed: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Import settings from a JSON file URI. Reloads all settings into UI state after import.
+     * @return true if import succeeded
+     */
+    fun importSettings(context: android.content.Context, uri: android.net.Uri): Boolean {
+        return try {
+            val inputStream = context.contentResolver.openInputStream(uri)
+            val json = inputStream?.bufferedReader()?.use { it.readText() } ?: return false
+            val success = settingsPrefs.importAllSettings(json)
+            if (success) {
+                // Reload all settings into UI state
+                val settings = loadStockfishSettings()
+                val boardSettings = loadBoardLayoutSettings()
+                val graphSettings = loadGraphSettings()
+                val interfaceVisibility = loadInterfaceVisibilitySettings()
+                val generalSettings = loadGeneralSettings()
+                val aiPrompts = loadAiPrompts()
+                _uiState.value = _uiState.value.copy(
+                    stockfishSettings = settings,
+                    boardLayoutSettings = boardSettings,
+                    graphSettings = graphSettings,
+                    interfaceVisibility = interfaceVisibility,
+                    generalSettings = generalSettings,
+                    aiPrompts = aiPrompts
+                )
+                android.widget.Toast.makeText(context, "Settings imported", android.widget.Toast.LENGTH_SHORT).show()
+            } else {
+                android.widget.Toast.makeText(context, "Import failed: invalid file", android.widget.Toast.LENGTH_SHORT).show()
+            }
+            success
+        } catch (e: Exception) {
+            android.widget.Toast.makeText(context, "Import failed: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+            false
+        }
     }
 
     // ===== REMOVED AI FUNCTIONS =====

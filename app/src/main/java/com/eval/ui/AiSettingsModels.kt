@@ -1,5 +1,7 @@
 package com.eval.ui
 
+import java.util.UUID
+
 /**
  * Default prompt template for AI chess game analysis.
  */
@@ -44,17 +46,33 @@ Current form (last 12 months) and realistic outlook
 End with a tight conclusion"""
 
 /**
- * AI Prompts Settings - simple storage for 3 prompt templates.
+ * AI Prompt Entry - a single prompt with name, template, and instructions.
  *
  * The Eval app stores prompts and sends them to the external AI app (com.ai)
  * which handles all API calls and agent configuration.
  */
-data class AiPromptsSettings(
-    val gamePrompt: String = DEFAULT_GAME_PROMPT,
-    val serverPlayerPrompt: String = DEFAULT_SERVER_PLAYER_PROMPT,
-    val otherPlayerPrompt: String = DEFAULT_OTHER_PLAYER_PROMPT
-) {
-    fun getGamePromptText(): String = gamePrompt.ifBlank { DEFAULT_GAME_PROMPT }
-    fun getServerPlayerPromptText(): String = serverPlayerPrompt.ifBlank { DEFAULT_SERVER_PLAYER_PROMPT }
-    fun getOtherPlayerPromptText(): String = otherPlayerPrompt.ifBlank { DEFAULT_OTHER_PLAYER_PROMPT }
-}
+data class AiPromptEntry(
+    val id: String = UUID.randomUUID().toString(),
+    val name: String,
+    val prompt: String,
+    val instructions: String = "",
+    val email: String = ""
+)
+
+/**
+ * Default prompt entries seeded on first load.
+ */
+fun defaultAiPrompts(): List<AiPromptEntry> = listOf(
+    AiPromptEntry(
+        name = "Game Analysis",
+        prompt = DEFAULT_GAME_PROMPT
+    ),
+    AiPromptEntry(
+        name = "Server Player",
+        prompt = DEFAULT_SERVER_PLAYER_PROMPT
+    ),
+    AiPromptEntry(
+        name = "Other Player",
+        prompt = DEFAULT_OTHER_PLAYER_PROMPT
+    )
+)

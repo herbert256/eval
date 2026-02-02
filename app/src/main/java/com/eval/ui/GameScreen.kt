@@ -169,8 +169,23 @@ fun GameScreenContent(
             onExportPgn = { viewModel.exportAnnotatedPgn(context) },
             onCopyPgn = { viewModel.copyPgnToClipboard(context) },
             onExportGif = { viewModel.exportAsGif(context) },
-            onGenerateAiReports = { viewModel.launchGameAnalysis(context) },
+            onGenerateAiReports = {
+                viewModel.hideSharePositionDialog()
+                viewModel.showAiPromptSelectionDialog()
+            },
             onDismiss = { viewModel.hideSharePositionDialog() }
+        )
+    }
+
+    // Show AI prompt selection dialog
+    if (uiState.showAiPromptSelectionDialog) {
+        AiPromptSelectionDialog(
+            prompts = uiState.aiPrompts,
+            onSelectPrompt = { promptEntry ->
+                viewModel.hideAiPromptSelectionDialog()
+                viewModel.launchGameAnalysis(context, promptEntry)
+            },
+            onDismiss = { viewModel.hideAiPromptSelectionDialog() }
         )
     }
 
@@ -1648,6 +1663,57 @@ fun SharePositionDialog(
                     )
                 ) {
                     Text("Generate AI Reports")
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+/**
+ * Dialog for selecting an AI prompt before launching analysis.
+ */
+@Composable
+fun AiPromptSelectionDialog(
+    prompts: List<AiPromptEntry>,
+    onSelectPrompt: (AiPromptEntry) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Select AI Prompt",
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (prompts.isEmpty()) {
+                    Text(
+                        text = "No prompts configured. Go to Settings > AI Prompts to add prompts.",
+                        color = Color(0xFFAAAAAA)
+                    )
+                } else {
+                    prompts.forEach { prompt ->
+                        Button(
+                            onClick = { onSelectPrompt(prompt) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF6B8E23)
+                            )
+                        ) {
+                            Text(prompt.name)
+                        }
+                    }
                 }
             }
         },

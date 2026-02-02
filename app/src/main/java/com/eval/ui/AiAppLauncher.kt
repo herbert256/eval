@@ -74,7 +74,8 @@ object AiAppLauncher {
         whiteName: String = "",
         blackName: String = "",
         currentMoveIndex: Int = -1,
-        lastMoveDetails: MoveDetails? = null
+        lastMoveDetails: MoveDetails? = null,
+        instructions: String = ""
     ): Boolean {
         val title = if (whiteName.isNotEmpty() && blackName.isNotEmpty()) {
             "Game Analysis: $whiteName vs $blackName"
@@ -82,7 +83,7 @@ object AiAppLauncher {
             "Chess Position Analysis"
         }
 
-        val prompt = processPrompt(
+        var prompt = processPrompt(
             template = promptTemplate,
             fen = fen,
             whiteName = whiteName,
@@ -90,6 +91,9 @@ object AiAppLauncher {
             currentMoveIndex = currentMoveIndex,
             lastMoveDetails = lastMoveDetails
         )
+        if (instructions.isNotBlank()) {
+            prompt += "\n-- end prompt --\n" + instructions
+        }
         return launchAiReport(context, title, prompt)
     }
 
@@ -105,10 +109,14 @@ object AiAppLauncher {
         context: Context,
         playerName: String,
         server: String,
-        promptTemplate: String
+        promptTemplate: String,
+        instructions: String = ""
     ): Boolean {
         val title = "Player Analysis: $playerName"
-        val prompt = processPrompt(promptTemplate, player = playerName, server = server)
+        var prompt = processPrompt(promptTemplate, player = playerName, server = server)
+        if (instructions.isNotBlank()) {
+            prompt += "\n-- end prompt --\n" + instructions
+        }
         return launchAiReport(context, title, prompt)
     }
 
@@ -122,10 +130,14 @@ object AiAppLauncher {
     fun launchOtherPlayerAnalysis(
         context: Context,
         playerName: String,
-        promptTemplate: String
+        promptTemplate: String,
+        instructions: String = ""
     ): Boolean {
         val title = "Player Profile: $playerName"
-        val prompt = processPrompt(promptTemplate, player = playerName)
+        var prompt = processPrompt(promptTemplate, player = playerName)
+        if (instructions.isNotBlank()) {
+            prompt += "\n-- end prompt --\n" + instructions
+        }
         return launchAiReport(context, title, prompt)
     }
 

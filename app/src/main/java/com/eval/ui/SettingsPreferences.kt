@@ -268,30 +268,36 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
     }
 
     // ============================================================================
-    // AI Prompts Settings (Simplified - uses external AI app)
+    // AI Prompts List (CRUD - uses external AI app)
     // ============================================================================
 
     /**
-     * Load AI prompts settings for use with external AI app.
-     * Simple 3-string storage for game, server player, and other player prompts.
+     * Load AI prompts list from JSON storage.
+     * Seeds 3 default entries on first load if empty.
      */
-    fun loadAiPromptsSettings(): AiPromptsSettings {
-        return AiPromptsSettings(
-            gamePrompt = prefs.getString(KEY_AI_GAME_PROMPT, DEFAULT_GAME_PROMPT) ?: DEFAULT_GAME_PROMPT,
-            serverPlayerPrompt = prefs.getString(KEY_AI_SERVER_PLAYER_PROMPT, DEFAULT_SERVER_PLAYER_PROMPT) ?: DEFAULT_SERVER_PLAYER_PROMPT,
-            otherPlayerPrompt = prefs.getString(KEY_AI_OTHER_PLAYER_PROMPT, DEFAULT_OTHER_PLAYER_PROMPT) ?: DEFAULT_OTHER_PLAYER_PROMPT
-        )
+    fun loadAiPrompts(): List<AiPromptEntry> {
+        val json = prefs.getString(KEY_AI_PROMPTS_LIST, null)
+        if (json != null) {
+            return try {
+                val type = object : TypeToken<List<AiPromptEntry>>() {}.type
+                val list: List<AiPromptEntry>? = gson.fromJson(json, type)
+                if (list.isNullOrEmpty()) defaultAiPrompts() else list
+            } catch (e: Exception) {
+                defaultAiPrompts()
+            }
+        }
+        // First load - seed defaults
+        val defaults = defaultAiPrompts()
+        saveAiPrompts(defaults)
+        return defaults
     }
 
     /**
-     * Save AI prompts settings.
+     * Save AI prompts list as JSON.
      */
-    fun saveAiPromptsSettings(settings: AiPromptsSettings) {
-        prefs.edit()
-            .putString(KEY_AI_GAME_PROMPT, settings.gamePrompt)
-            .putString(KEY_AI_SERVER_PLAYER_PROMPT, settings.serverPlayerPrompt)
-            .putString(KEY_AI_OTHER_PLAYER_PROMPT, settings.otherPlayerPrompt)
-            .apply()
+    fun saveAiPrompts(prompts: List<AiPromptEntry>) {
+        val json = gson.toJson(prompts)
+        prefs.edit().putString(KEY_AI_PROMPTS_LIST, json).apply()
     }
 
     /**
@@ -318,6 +324,66 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
 
     fun setFirstGameRetrievedVersion(version: Long) {
         prefs.edit().putLong(KEY_FIRST_GAME_RETRIEVED_VERSION, version).apply()
+    }
+
+    // ============================================================================
+    // Export / Import All Settings
+    // ============================================================================
+
+    /**
+     * Export all SharedPreferences entries as a JSON string.
+     * Each entry is stored with its key, type, and value.
+     */
+    fun exportAllSettings(): String {
+        val allEntries = prefs.all
+        val exportMap = mutableMapOf<String, Any?>()
+        for ((key, value) in allEntries) {
+            // Store type info so we can restore correctly
+            val typed: Any = when (value) {
+                is Boolean -> mapOf("_type" to "Boolean", "_value" to value)
+                is Int -> mapOf("_type" to "Int", "_value" to value)
+                is Long -> mapOf("_type" to "Long", "_value" to value)
+                is Float -> mapOf("_type" to "Float", "_value" to value)
+                is String -> mapOf("_type" to "String", "_value" to value)
+                is Set<*> -> mapOf("_type" to "StringSet", "_value" to value.toList())
+                else -> mapOf("_type" to "String", "_value" to value.toString())
+            }
+            exportMap[key] = typed
+        }
+        return gson.toJson(exportMap)
+    }
+
+    /**
+     * Import all settings from a JSON string, replacing current SharedPreferences.
+     * Returns true on success, false on parse failure.
+     */
+    fun importAllSettings(json: String): Boolean {
+        return try {
+            val type = object : TypeToken<Map<String, Map<String, Any>>>() {}.type
+            val importMap: Map<String, Map<String, Any>> = gson.fromJson(json, type)
+            val editor = prefs.edit()
+            editor.clear()
+            for ((key, typed) in importMap) {
+                val valueType = typed["_type"] as? String ?: continue
+                val rawValue = typed["_value"] ?: continue
+                when (valueType) {
+                    "Boolean" -> editor.putBoolean(key, rawValue as Boolean)
+                    "Int" -> editor.putInt(key, (rawValue as Number).toInt())
+                    "Long" -> editor.putLong(key, (rawValue as Number).toLong())
+                    "Float" -> editor.putFloat(key, (rawValue as Number).toFloat())
+                    "String" -> editor.putString(key, rawValue as String)
+                    "StringSet" -> {
+                        @Suppress("UNCHECKED_CAST")
+                        val list = rawValue as? List<String> ?: emptyList()
+                        editor.putStringSet(key, list.toSet())
+                    }
+                }
+            }
+            editor.apply()
+            true
+        } catch (e: Exception) {
+            false
+        }
     }
 
     // ============================================================================
@@ -532,10 +598,8 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         // AI report email
         const val KEY_AI_REPORT_EMAIL = "ai_report_email"
 
-        // AI prompts (simplified - just 3 strings)
-        private const val KEY_AI_GAME_PROMPT = "ai_game_prompt"
-        private const val KEY_AI_SERVER_PLAYER_PROMPT = "ai_server_player_prompt"
-        private const val KEY_AI_OTHER_PLAYER_PROMPT = "ai_other_player_prompt"
+        // AI prompts list (CRUD)
+        private const val KEY_AI_PROMPTS_LIST = "ai_prompts_list"
 
         // AI app not installed - don't ask again
         private const val KEY_AI_APP_DONT_ASK_AGAIN = "ai_app_dont_ask_again"

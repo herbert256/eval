@@ -84,6 +84,7 @@ fun SettingsScreenNav(
     onNavigateBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     SettingsScreen(
         stockfishSettings = uiState.stockfishSettings,
@@ -91,14 +92,18 @@ fun SettingsScreenNav(
         graphSettings = uiState.graphSettings,
         interfaceVisibility = uiState.interfaceVisibility,
         generalSettings = uiState.generalSettings,
-        aiPromptsSettings = uiState.aiPromptsSettings,
+        aiPrompts = uiState.aiPrompts,
         onBack = onNavigateBack,
         onSaveStockfish = { viewModel.updateStockfishSettings(it) },
         onSaveBoardLayout = { viewModel.updateBoardLayoutSettings(it) },
         onSaveGraph = { viewModel.updateGraphSettings(it) },
         onSaveInterfaceVisibility = { viewModel.updateInterfaceVisibilitySettings(it) },
         onSaveGeneral = { viewModel.updateGeneralSettings(it) },
-        onSaveAiPrompts = { viewModel.updateAiPromptsSettings(it) }
+        onAddAiPrompt = { viewModel.addAiPrompt(it) },
+        onUpdateAiPrompt = { viewModel.updateAiPrompt(it) },
+        onDeleteAiPrompt = { viewModel.deleteAiPrompt(it) },
+        onExportSettings = { viewModel.exportSettings(context) },
+        onImportSettings = { uri -> viewModel.importSettings(context, uri) }
     )
 }
 
