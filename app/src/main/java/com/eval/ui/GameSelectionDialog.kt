@@ -56,7 +56,7 @@ fun GameSelectionScreen(
             contentAlignment = Alignment.TopCenter
         ) {
             LazyColumn(
-                modifier = Modifier.widthIn(max = 400.dp),
+                modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 items(games) { game ->
@@ -214,7 +214,7 @@ fun PreviousRetrievesScreen(
             contentAlignment = Alignment.TopCenter
         ) {
             LazyColumn(
-                modifier = Modifier.widthIn(max = 400.dp),
+                modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 items(retrieves) { entry ->
@@ -342,7 +342,7 @@ fun SelectedRetrieveGamesScreen(
             contentAlignment = Alignment.TopCenter
         ) {
             Column(
-                modifier = Modifier.widthIn(max = 400.dp)
+                modifier = Modifier.fillMaxWidth()
             ) {
                 // Games list
                 LazyColumn(
@@ -588,7 +588,7 @@ fun AnalysedGamesSelectionScreen(
             contentAlignment = Alignment.TopCenter
         ) {
             Column(
-                modifier = Modifier.widthIn(max = 400.dp)
+                modifier = Modifier.fillMaxWidth()
             ) {
                 LazyColumn(
                     modifier = Modifier.weight(1f),
@@ -668,7 +668,8 @@ fun AnalysedGamesSelectionScreen(
 }
 
 /**
- * Individual row for an analysed game - shows players, speed, result, and date.
+ * Individual row for an analysed game - matches RetrieveGameListItem style.
+ * Shows white player on white row and black player on black row.
  */
 @Composable
 private fun AnalysedGameListItem(
@@ -690,54 +691,109 @@ private fun AnalysedGameListItem(
         ""
     }
 
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .background(Color.White, shape = RoundedCornerShape(4.dp))
-            .padding(horizontal = 8.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // Column 1: White vs Black
-        Text(
-            text = "${game.whiteName} vs ${game.blackName}",
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
-            color = Color.Black,
-            maxLines = 1,
-            modifier = Modifier.weight(1.2f)
-        )
-
-        // Column 2: Speed
-        Text(
-            text = game.speed ?: "",
-            fontSize = 13.sp,
-            color = Color.DarkGray,
-            maxLines = 1,
-            modifier = Modifier.weight(0.5f)
-        )
-
-        // Column 3: Result
-        Box(
-            modifier = Modifier.width(40.dp),
-            contentAlignment = Alignment.Center
+        // White player row (white background)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Text(
-                text = resultText,
-                fontWeight = FontWeight.Bold,
-                fontSize = 13.sp,
-                color = resultColor
-            )
+            // Column 1: White player name
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .background(Color.White)
+                    .padding(horizontal = 8.dp, vertical = 10.dp)
+            ) {
+                Text(
+                    text = game.whiteName,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.Black,
+                    maxLines = 1
+                )
+            }
+
+            // Column 2: Speed
+            Box(
+                modifier = Modifier
+                    .weight(0.6f)
+                    .background(Color.White)
+                    .padding(horizontal = 8.dp, vertical = 10.dp)
+            ) {
+                Text(
+                    text = game.speed ?: "",
+                    fontSize = 14.sp,
+                    color = Color.Black,
+                    maxLines = 1
+                )
+            }
+
+            // Column 3: Result
+            Box(
+                modifier = Modifier
+                    .width(50.dp)
+                    .background(Color.White)
+                    .padding(horizontal = 8.dp, vertical = 10.dp),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                Text(
+                    text = resultText,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    color = resultColor
+                )
+            }
         }
 
-        // Column 4: Date
-        Text(
-            text = dateText,
-            fontSize = 12.sp,
-            color = Color.Gray,
-            maxLines = 1,
-            modifier = Modifier.weight(0.6f)
-        )
+        // Black player row (black background)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            // Column 1: Black player name
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .background(Color.Black)
+                    .padding(horizontal = 8.dp, vertical = 10.dp)
+            ) {
+                Text(
+                    text = game.blackName,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White,
+                    maxLines = 1
+                )
+            }
+
+            // Column 2: Date
+            Box(
+                modifier = Modifier
+                    .weight(0.6f)
+                    .background(Color.Black)
+                    .padding(horizontal = 8.dp, vertical = 10.dp)
+            ) {
+                Text(
+                    text = dateText,
+                    fontSize = 14.sp,
+                    color = Color.White,
+                    maxLines = 1
+                )
+            }
+
+            // Column 3: Empty spacer to align with result column
+            Box(
+                modifier = Modifier
+                    .width(50.dp)
+                    .background(Color.Black)
+                    .padding(horizontal = 8.dp, vertical = 10.dp)
+            )
+        }
     }
 }
