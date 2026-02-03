@@ -322,8 +322,8 @@ fun GameScreenContent(
                         fontSize = 44,
                         offsetY = -12
                     )
-                    // Reload last game (only when game is loaded)
-                    if (uiState.game != null) {
+                    // Reload last game from server
+                    if (uiState.game != null || uiState.hasLastServerUser) {
                         TitleBarIcon(
                             icon = "↻",
                             onClick = { viewModel.reloadLastGame() },
@@ -402,10 +402,44 @@ fun GameScreenContent(
                     .weight(1f),
                 contentAlignment = androidx.compose.ui.Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier.offset(y = (-60).dp)
+                Column(
+                    modifier = Modifier.offset(y = (-60).dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     EvalLogo()
+
+                    Spacer(modifier = Modifier.height(32.dp))
+
+                    Text(
+                        text = "Welcome to the Eval app !",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Use the top left icon  ",
+                            fontSize = 18.sp,
+                            color = Color(0xFFCCCCCC)
+                        )
+                        Text(
+                            text = "≡",
+                            fontSize = 34.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Text(
+                            text = "  to select a game",
+                            fontSize = 18.sp,
+                            color = Color(0xFFCCCCCC)
+                        )
+                    }
                 }
             }
 
@@ -723,7 +757,7 @@ fun AiAppNotInstalledScreen(
 fun EvalLogo() {
     Card(
         modifier = Modifier
-            .padding(horizontal = 24.dp),
+            .padding(horizontal = 48.dp),
         colors = CardDefaults.cardColors(
             containerColor = Color(0xFF3A5A3A)  // Light green background
         ),
@@ -732,7 +766,7 @@ fun EvalLogo() {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 48.dp, horizontal = 32.dp),
+                .padding(48.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Top chess pieces - black pieces

@@ -105,7 +105,10 @@ private fun GameListItem(
     }
 
     // Determine result from user's perspective
+    val isOngoingGame = game.status == "*" || game.status == "started" ||
+        game.status == "unknown" || game.status.isNullOrBlank()
     val (resultText, resultColor) = when {
+        isOngoingGame -> "" to Color.Transparent  // No result for ongoing games
         game.winner == "white" && userPlayedWhite -> "won" to Color(0xFF4CAF50)  // Green
         game.winner == "black" && userPlayedBlack -> "won" to Color(0xFF4CAF50)  // Green
         game.winner == "white" && userPlayedBlack -> "lost" to Color(0xFFF44336) // Red
@@ -677,7 +680,8 @@ private fun AnalysedGameListItem(
         "1-0" -> "1-0" to Color(0xFF4CAF50)
         "0-1" -> "0-1" to Color(0xFFF44336)
         "1/2-1/2" -> "1/2" to Color(0xFF2196F3)
-        else -> "*" to Color.Gray
+        "*" -> "" to Color.Transparent
+        else -> "" to Color.Transparent
     }
 
     val dateText = try {

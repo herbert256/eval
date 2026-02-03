@@ -48,19 +48,14 @@ internal class AnalysisOrchestrator(
     /**
      * Build the list of move indices for analysis based on the current stage.
      * Preview stage: Forward sequence (move 1 to end)
-     * Analyse stage: Backwards sequence (end to move 1), unless board is visible then forward
+     * Analyse stage: Backwards sequence (end to move 1)
      */
     private fun buildMoveIndices(): List<Int> {
         val state = getUiState()
         val moves = state.moves
-        val showBoardInAnalyse = state.interfaceVisibility.analyseStage.showBoard
         return when (state.currentStage) {
             AnalysisStage.PREVIEW -> (0 until moves.size).toList()
-            AnalysisStage.ANALYSE -> if (showBoardInAnalyse) {
-                (0 until moves.size).toList()
-            } else {
-                (moves.size - 1 downTo 0).toList()
-            }
+            AnalysisStage.ANALYSE -> (moves.size - 1 downTo 0).toList()
             AnalysisStage.MANUAL -> emptyList()
         }
     }

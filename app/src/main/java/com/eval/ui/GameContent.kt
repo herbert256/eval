@@ -3,7 +3,9 @@ package com.eval.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -418,6 +420,68 @@ fun GameContent(
     if (uiState.currentStage != AnalysisStage.MANUAL && (showScoreLineGraph || showScoreBarsGraph)) {
         GameInfoCard()
         Spacer(modifier = Modifier.height(8.dp))
+    }
+
+    // Main line card during Analyse stage - shows best PV line for current position
+    if (uiState.currentStage == AnalysisStage.ANALYSE) {
+        val analysisResult = uiState.analysisResult
+        val bestLine = analysisResult?.bestLine
+        if (bestLine != null && bestLine.pv.isNotBlank()) {
+            val isWhiteTurn = uiState.currentBoard.getTurn() == PieceColor.WHITE
+            val formattedMoves = formatUciMovesWithCaptures(
+                bestLine.pv, uiState.currentBoard, isWhiteTurn
+            )
+            if (formattedMoves.isNotEmpty()) {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFF1A3A5A)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Score
+                        val scoreText = if (bestLine.isMate) {
+                            if (bestLine.mateIn > 0) "+M${bestLine.mateIn}" else "-M${kotlin.math.abs(bestLine.mateIn)}"
+                        } else {
+                            if (bestLine.score >= 0) "+%.1f".format(bestLine.score) else "%.1f".format(bestLine.score)
+                        }
+                        val scoreColor = when {
+                            bestLine.isMate && bestLine.mateIn > 0 -> Color(0xFF00E676)
+                            bestLine.isMate && bestLine.mateIn < 0 -> Color(0xFFFF5252)
+                            bestLine.score > 0.5f -> Color(0xFF00E676)
+                            bestLine.score < -0.5f -> Color(0xFFFF5252)
+                            else -> Color(0xFF64B5F6)
+                        }
+                        Text(
+                            text = scoreText,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = scoreColor
+                        )
+                        Text(
+                            text = "│",
+                            fontSize = 14.sp,
+                            color = Color(0xFF37474F)
+                        )
+                        // Moves
+                        for (move in formattedMoves) {
+                            Text(
+                                text = move,
+                                fontSize = 14.sp,
+                                color = Color(0xFFCCCCCC)
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+        }
     }
 
     // Result bar above board in manual stage

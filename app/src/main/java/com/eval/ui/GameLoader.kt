@@ -45,10 +45,11 @@ internal class GameLoader(
      * Reload the last stored analysed game.
      */
     fun reloadLastGame() {
-        viewModelScope.launch {
-            val storedGame = gameStorage.loadCurrentAnalysedGame()
-            if (storedGame != null) {
-                loadAnalysedGameDirectly(storedGame)
+        val username = settingsPrefs.lastServerUser
+        val serverName = settingsPrefs.lastServerName
+        if (username != null && serverName == "lichess.org") {
+            viewModelScope.launch {
+                fetchLastGameFromServer(ChessServer.LICHESS, username)
             }
         }
     }
@@ -103,6 +104,8 @@ internal class GameLoader(
 
     fun fetchGames(server: ChessServer, username: String) {
         settingsPrefs.saveLichessUsername(username)
+        settingsPrefs.saveLastServerUser(username, "lichess.org")
+        updateUiState { copy(hasLastServerUser = true) }
 
         settingsPrefs.setFirstGameRetrievedVersion(getAppVersionCode())
 

@@ -197,6 +197,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val retrievesList = gameStorage.loadRetrievesList()
             val hasPreviousRetrieves = retrievesList.isNotEmpty()
             val hasAnalysedGames = gameStorage.hasManualGames()
+            val hasLastServerUser = settingsPrefs.lastServerUser != null
 
             _uiState.value = _uiState.value.copy(
                 stockfishSettings = settings,
@@ -208,6 +209,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 lichessMaxGames = lichessMaxGames,
                 hasPreviousRetrieves = hasPreviousRetrieves,
                 hasAnalysedGames = hasAnalysedGames,
+                hasLastServerUser = hasLastServerUser,
                 previousRetrievesList = retrievesList,
                 playerGamesPageSize = generalSettings.paginationPageSize,
                 gameSelectionPageSize = generalSettings.paginationPageSize

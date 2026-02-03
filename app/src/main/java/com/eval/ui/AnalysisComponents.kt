@@ -223,11 +223,62 @@ fun EvaluationGraph(
             }
         }
 
-        // Draw analyse stage as white line
-        for (i in 0 until pointsAnalyse.size - 1) {
-            val p1 = pointsAnalyse[i]
-            val p2 = pointsAnalyse[i + 1]
-            drawLine(analyseColor, Offset(p1.x, p1.y), Offset(p2.x, p2.y), strokeWidth = 7f)
+        // Draw analyse stage: filled areas in Manual stage, white line otherwise
+        if (isManualStage) {
+            for (i in 0 until pointsAnalyse.size - 1) {
+                val p1 = pointsAnalyse[i]
+                val p2 = pointsAnalyse[i + 1]
+
+                val leftX = if (i == 0) p1.x else p1.x - overlap
+                val rightX = if (i == pointsAnalyse.size - 2) p2.x else p2.x + overlap
+
+                val crossesAxis = (p1.score >= 0 && p2.score < 0) || (p1.score < 0 && p2.score >= 0)
+
+                if (crossesAxis) {
+                    val t = kotlin.math.abs(p1.score) / (kotlin.math.abs(p1.score) + kotlin.math.abs(p2.score))
+                    val crossX = p1.x + (p2.x - p1.x) * t
+
+                    val color1 = if (p1.score >= 0) greenColor else redColor
+                    val path1 = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(leftX, p1.y)
+                        lineTo(crossX, centerY)
+                        lineTo(leftX, centerY)
+                        close()
+                    }
+                    drawPath(path1, color1)
+
+                    val color2 = if (p2.score >= 0) greenColor else redColor
+                    val path2 = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(crossX, centerY)
+                        lineTo(rightX, p2.y)
+                        lineTo(rightX, centerY)
+                        close()
+                    }
+                    drawPath(path2, color2)
+
+                    drawLine(color1, Offset(p1.x, p1.y), Offset(crossX, centerY), strokeWidth = 2f)
+                    drawLine(color2, Offset(crossX, centerY), Offset(p2.x, p2.y), strokeWidth = 2f)
+                } else {
+                    val color = if (p1.score >= 0) greenColor else redColor
+
+                    val path = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(leftX, p1.y)
+                        lineTo(rightX, p2.y)
+                        lineTo(rightX, centerY)
+                        lineTo(leftX, centerY)
+                        close()
+                    }
+                    drawPath(path, color)
+
+                    drawLine(color, Offset(p1.x, p1.y), Offset(p2.x, p2.y), strokeWidth = 2f)
+                }
+            }
+        } else {
+            for (i in 0 until pointsAnalyse.size - 1) {
+                val p1 = pointsAnalyse[i]
+                val p2 = pointsAnalyse[i + 1]
+                drawLine(analyseColor, Offset(p1.x, p1.y), Offset(p2.x, p2.y), strokeWidth = 7f)
+            }
         }
 
         // Draw current move indicator (only in manual stage)
@@ -762,7 +813,7 @@ private fun PvLineRow(
 /**
  * Format UCI moves with piece symbols and capture notation.
  */
-private fun formatUciMovesWithCaptures(pv: String, startBoard: ChessBoard, isWhiteTurn: Boolean): List<String> {
+internal fun formatUciMovesWithCaptures(pv: String, startBoard: ChessBoard, isWhiteTurn: Boolean): List<String> {
     if (pv.isBlank()) return emptyList()
 
     val moves = pv.split(" ").filter { it.isNotBlank() }

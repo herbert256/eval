@@ -47,8 +47,8 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
                 useNnue = prefs.getBoolean(KEY_PREVIEW_NNUE, false)
             ),
             analyseStage = AnalyseStageSettings(
-                secondsForMove = prefs.getFloat(KEY_ANALYSE_SECONDS, 1.00f),
-                threads = prefs.getInt(KEY_ANALYSE_THREADS, 2),
+                secondsForMove = prefs.getFloat(KEY_ANALYSE_SECONDS, 2.00f),
+                threads = prefs.getInt(KEY_ANALYSE_THREADS, 4),
                 hashMb = prefs.getInt(KEY_ANALYSE_HASH, 32),
                 useNnue = prefs.getBoolean(KEY_ANALYSE_NNUE, true)
             ),
@@ -602,6 +602,10 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         private const val KEY_CACHED_TOGETHER_MODELS = "cached_together_models"
         private const val KEY_CACHED_OPENROUTER_MODELS = "cached_openrouter_models"
 
+        // Last server user/name for reload
+        private const val KEY_LAST_SERVER_USER = "last_server_user"
+        private const val KEY_LAST_SERVER_NAME = "last_server_name"
+
         // Manual games list (previously analysed games)
         const val KEY_LIST_MANUAL_GAMES = "list_manual_games"
         const val MAX_MANUAL_GAMES = 50
@@ -636,6 +640,23 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         val json = gson.toJson(trimmed)
         prefs.edit().putString(KEY_FEN_HISTORY, json).apply()
     }
+
+    // ============================================================================
+    // Last Server User/Name (for reload button)
+    // ============================================================================
+
+    fun saveLastServerUser(username: String, serverName: String) {
+        prefs.edit()
+            .putString(KEY_LAST_SERVER_USER, username)
+            .putString(KEY_LAST_SERVER_NAME, serverName)
+            .apply()
+    }
+
+    val lastServerUser: String?
+        get() = prefs.getString(KEY_LAST_SERVER_USER, null)
+
+    val lastServerName: String?
+        get() = prefs.getString(KEY_LAST_SERVER_NAME, null)
 
     // ============================================================================
     // AI Report Providers Selection

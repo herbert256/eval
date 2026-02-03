@@ -36,8 +36,8 @@ data class PreviewStageSettings(
 
 // Settings for Analyse Stage (auto-analysis)
 data class AnalyseStageSettings(
-    val secondsForMove: Float = 1.00f,  // 0.50, 0.75, 1.00, 1.50, 2.50, 5.00, 10.00
-    val threads: Int = 2,               // 1-8
+    val secondsForMove: Float = 2.00f,  // 0.50, 0.75, 1.00, 1.50, 2.00, 2.50, 5.00, 10.00
+    val threads: Int = 4,               // 1-8
     val hashMb: Int = 64,               // 16, 64, 96, 128, 192, 256
     val useNnue: Boolean = true
 )
@@ -392,6 +392,8 @@ data class GameUiState(
     val showOpeningSelection: Boolean = false,
     val ecoOpenings: List<EcoOpening> = emptyList(),
     val ecoOpeningsLoading: Boolean = false,
+    // Last server user for reload
+    val hasLastServerUser: Boolean = false,
     // Previously analysed games
     val hasAnalysedGames: Boolean = false,
     val showAnalysedGamesSelection: Boolean = false,
