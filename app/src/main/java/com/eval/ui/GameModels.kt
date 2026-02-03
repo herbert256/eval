@@ -391,5 +391,9 @@ data class GameUiState(
     // ECO Opening selection
     val showOpeningSelection: Boolean = false,
     val ecoOpenings: List<EcoOpening> = emptyList(),
-    val ecoOpeningsLoading: Boolean = false
+    val ecoOpeningsLoading: Boolean = false,
+    // Previously analysed games
+    val hasAnalysedGames: Boolean = false,
+    val showAnalysedGamesSelection: Boolean = false,
+    val analysedGamesList: List<AnalysedGame> = emptyList()
 )

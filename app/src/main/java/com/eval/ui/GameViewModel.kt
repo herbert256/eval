@@ -125,7 +125,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             getBoardHistory = { boardHistory },
             storeAnalysedGame = { },
             fetchOpeningExplorer = { fetchOpeningExplorer() },
-            saveManualGame = { game -> gameStorage.saveManualStageGame(game) }
+            saveManualGame = { game -> gameStorage.saveManualStageGame(game) },
+            storeManualGameToList = { game ->
+                gameStorage.storeManualGameToList(game)
+                _uiState.value = _uiState.value.copy(hasAnalysedGames = true)
+            }
         )
 
         gameLoader = GameLoader(
@@ -192,6 +196,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val lichessMaxGames = settingsPrefs.lichessMaxGames
             val retrievesList = gameStorage.loadRetrievesList()
             val hasPreviousRetrieves = retrievesList.isNotEmpty()
+            val hasAnalysedGames = gameStorage.hasManualGames()
 
             _uiState.value = _uiState.value.copy(
                 stockfishSettings = settings,
@@ -202,6 +207,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 aiPrompts = aiPrompts,
                 lichessMaxGames = lichessMaxGames,
                 hasPreviousRetrieves = hasPreviousRetrieves,
+                hasAnalysedGames = hasAnalysedGames,
                 previousRetrievesList = retrievesList,
                 playerGamesPageSize = generalSettings.paginationPageSize,
                 gameSelectionPageSize = generalSettings.paginationPageSize
@@ -361,6 +367,31 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun nextGameSelectionPage() = gameLoader.nextGameSelectionPage()
     fun previousGameSelectionPage() = gameLoader.previousGameSelectionPage()
     fun setLichessMaxGames(max: Int) = gameLoader.setLichessMaxGames(max)
+
+    // Previously analysed games
+    fun showAnalysedGames() {
+        val list = gameStorage.loadManualGamesList()
+        _uiState.value = _uiState.value.copy(
+            analysedGamesList = list,
+            showAnalysedGamesSelection = true,
+            gameSelectionPage = 0
+        )
+    }
+
+    fun dismissAnalysedGamesSelection() {
+        _uiState.value = _uiState.value.copy(
+            showAnalysedGamesSelection = false,
+            analysedGamesList = emptyList()
+        )
+    }
+
+    fun selectAnalysedGame(game: AnalysedGame) {
+        _uiState.value = _uiState.value.copy(
+            showAnalysedGamesSelection = false,
+            analysedGamesList = emptyList()
+        )
+        gameLoader.loadAnalysedGameDirectly(game)
+    }
 
     // PGN file loading
     fun loadGamesFromPgnContent(pgnContent: String, onMultipleEvents: ((Boolean) -> Unit)? = null) =

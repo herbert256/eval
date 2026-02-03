@@ -602,6 +602,10 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         private const val KEY_CACHED_TOGETHER_MODELS = "cached_together_models"
         private const val KEY_CACHED_OPENROUTER_MODELS = "cached_openrouter_models"
 
+        // Manual games list (previously analysed games)
+        const val KEY_LIST_MANUAL_GAMES = "list_manual_games"
+        const val MAX_MANUAL_GAMES = 50
+
         // FEN history
         private const val KEY_FEN_HISTORY = "fen_history"
         const val MAX_FEN_HISTORY = 10

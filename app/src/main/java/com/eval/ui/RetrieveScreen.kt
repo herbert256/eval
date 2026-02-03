@@ -78,6 +78,20 @@ fun RetrieveScreen(
         }
     }
 
+    // Show analysed games selection screen
+    if (uiState.showAnalysedGamesSelection && uiState.analysedGamesList.isNotEmpty()) {
+        AnalysedGamesSelectionScreen(
+            games = uiState.analysedGamesList,
+            currentPage = uiState.gameSelectionPage,
+            pageSize = uiState.gameSelectionPageSize,
+            onNextPage = { viewModel.nextGameSelectionPage() },
+            onPreviousPage = { viewModel.previousGameSelectionPage() },
+            onSelectGame = { viewModel.selectAnalysedGame(it) },
+            onDismiss = { viewModel.dismissAnalysedGamesSelection() }
+        )
+        return
+    }
+
     // Show selected retrieve games screen (games from a username fetch)
     val selectedRetrieveEntry = uiState.selectedRetrieveEntry
     if (uiState.showSelectedRetrieveGames && selectedRetrieveEntry != null) {
@@ -402,6 +416,18 @@ private fun RetrieveMainScreen(
                 }
             }
 
+            // Button to select from previously analysed games
+            if (uiState.hasAnalysedGames) {
+                Button(
+                    onClick = { viewModel.showAnalysedGames() },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF3A5A7C)
+                    )
+                ) {
+                    Text("Select from previous analysed games")
+                }
+            }
 
             // Button to select from PGN file
             Button(

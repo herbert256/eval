@@ -158,7 +158,50 @@ class GameStorageManager(
     }
 
     // ============================================================================
-    // Analysed Games Storage
+    // Analysed Games List (Previously Analysed Games)
     // ============================================================================
+
+    /**
+     * Store a game to the manual games list when entering Manual stage.
+     * Deduplicates by whiteName+blackName+pgn, adds at front, trims to MAX_MANUAL_GAMES.
+     */
+    fun storeManualGameToList(analysedGame: AnalysedGame) {
+        val list = loadManualGamesList().toMutableList()
+        // Remove duplicate (same white, black, pgn)
+        list.removeAll {
+            it.whiteName == analysedGame.whiteName &&
+            it.blackName == analysedGame.blackName &&
+            it.pgn == analysedGame.pgn
+        }
+        // Add at front
+        list.add(0, analysedGame)
+        // Trim to max
+        while (list.size > SettingsPreferences.MAX_MANUAL_GAMES) {
+            list.removeAt(list.size - 1)
+        }
+        val json = gson.toJson(list)
+        prefs.edit().putString(SettingsPreferences.KEY_LIST_MANUAL_GAMES, json).apply()
+    }
+
+    /**
+     * Load the full list of previously analysed games.
+     */
+    fun loadManualGamesList(): List<AnalysedGame> {
+        val json = prefs.getString(SettingsPreferences.KEY_LIST_MANUAL_GAMES, null) ?: return emptyList()
+        return try {
+            val type = object : TypeToken<List<AnalysedGame>>() {}.type
+            gson.fromJson(json, type) ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * Quick check if there are any previously analysed games.
+     */
+    fun hasManualGames(): Boolean {
+        val json = prefs.getString(SettingsPreferences.KEY_LIST_MANUAL_GAMES, null)
+        return json != null && json != "[]"
+    }
 
 }

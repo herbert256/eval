@@ -22,7 +22,8 @@ internal class AnalysisOrchestrator(
     private val getBoardHistory: () -> MutableList<ChessBoard>,
     private val storeAnalysedGame: () -> Unit,
     private val fetchOpeningExplorer: () -> Unit,
-    private val saveManualGame: (AnalysedGame) -> Unit = {}
+    private val saveManualGame: (AnalysedGame) -> Unit = {},
+    private val storeManualGameToList: (AnalysedGame) -> Unit = {}
 ) {
     var autoAnalysisJob: Job? = null
     var manualAnalysisJob: Job? = null
@@ -446,6 +447,7 @@ internal class AnalysisOrchestrator(
                     speed = game.speed
                 )
                 saveManualGame(analysedGame)
+                storeManualGameToList(analysedGame)
             }
 
             val ready = stockfish.restart()

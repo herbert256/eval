@@ -538,3 +538,202 @@ private fun RetrieveGameListItem(
         }
     }
 }
+
+/**
+ * Full screen selection for previously analysed games.
+ */
+@Composable
+fun AnalysedGamesSelectionScreen(
+    games: List<AnalysedGame>,
+    currentPage: Int,
+    pageSize: Int,
+    onNextPage: () -> Unit,
+    onPreviousPage: () -> Unit,
+    onSelectGame: (AnalysedGame) -> Unit,
+    onDismiss: () -> Unit
+) {
+    BackHandler { onDismiss() }
+
+    val startIndex = currentPage * pageSize
+    val endIndex = minOf(startIndex + pageSize, games.size)
+    val currentGames = if (games.isNotEmpty() && startIndex < games.size) {
+        games.subList(startIndex, endIndex)
+    } else {
+        emptyList()
+    }
+
+    val dateFormat = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault())
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF3A5A7C))
+            .padding(16.dp)
+    ) {
+        Text(
+            text = "Previous Analysed Games",
+            fontWeight = FontWeight.Bold,
+            fontSize = 20.sp,
+            color = Color.White,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            Column(
+                modifier = Modifier.widthIn(max = 400.dp)
+            ) {
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    items(currentGames) { game ->
+                        AnalysedGameListItem(
+                            game = game,
+                            dateFormat = dateFormat,
+                            onClick = { onSelectGame(game) }
+                        )
+                    }
+                }
+
+                val showPagination = games.size > pageSize || currentPage > 0
+                if (showPagination) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (currentPage > 0) {
+                            TextButton(onClick = onPreviousPage) {
+                                Text(
+                                    text = "← Previous $pageSize",
+                                    color = Color(0xFF90CAF9),
+                                    fontSize = 14.sp
+                                )
+                            }
+                        } else {
+                            Spacer(modifier = Modifier.width(1.dp))
+                        }
+
+                        Text(
+                            text = "Page ${currentPage + 1}",
+                            color = Color.White,
+                            fontSize = 12.sp
+                        )
+
+                        val nextPageStartIndex = (currentPage + 1) * pageSize
+                        if (nextPageStartIndex < games.size) {
+                            TextButton(onClick = onNextPage) {
+                                Text(
+                                    text = "Next $pageSize →",
+                                    color = Color(0xFF90CAF9),
+                                    fontSize = 14.sp
+                                )
+                            }
+                        } else {
+                            Spacer(modifier = Modifier.width(1.dp))
+                        }
+                    }
+
+                    if (games.isNotEmpty()) {
+                        Text(
+                            text = "Showing ${startIndex + 1}-$endIndex of ${games.size} games",
+                            color = Color(0xFFCCCCCC),
+                            fontSize = 11.sp,
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(
+            onClick = onDismiss,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Cancel")
+        }
+    }
+}
+
+/**
+ * Individual row for an analysed game - shows players, speed, result, and date.
+ */
+@Composable
+private fun AnalysedGameListItem(
+    game: AnalysedGame,
+    dateFormat: java.text.SimpleDateFormat,
+    onClick: () -> Unit
+) {
+    val (resultText, resultColor) = when (game.result) {
+        "1-0" -> "1-0" to Color(0xFF4CAF50)
+        "0-1" -> "0-1" to Color(0xFFF44336)
+        "1/2-1/2" -> "1/2" to Color(0xFF2196F3)
+        else -> "*" to Color.Gray
+    }
+
+    val dateText = try {
+        dateFormat.format(java.util.Date(game.timestamp))
+    } catch (e: Exception) {
+        ""
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .background(Color.White, shape = RoundedCornerShape(4.dp))
+            .padding(horizontal = 8.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        // Column 1: White vs Black
+        Text(
+            text = "${game.whiteName} vs ${game.blackName}",
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            color = Color.Black,
+            maxLines = 1,
+            modifier = Modifier.weight(1.2f)
+        )
+
+        // Column 2: Speed
+        Text(
+            text = game.speed ?: "",
+            fontSize = 13.sp,
+            color = Color.DarkGray,
+            maxLines = 1,
+            modifier = Modifier.weight(0.5f)
+        )
+
+        // Column 3: Result
+        Box(
+            modifier = Modifier.width(40.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = resultText,
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                color = resultColor
+            )
+        }
+
+        // Column 4: Date
+        Text(
+            text = dateText,
+            fontSize = 12.sp,
+            color = Color.Gray,
+            maxLines = 1,
+            modifier = Modifier.weight(0.6f)
+        )
+    }
+}
