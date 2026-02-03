@@ -189,8 +189,7 @@ data class GeneralSettings(
     val longTapForFullScreen: Boolean = false,
     val paginationPageSize: Int = 25,
     val moveSoundsEnabled: Boolean = true,
-    val lichessUsername: String = "",
-    val flipScoreWhenBlack: Boolean = true
+    val lichessUsername: String = ""
 )
 
 // Move quality assessment based on evaluation change
@@ -316,10 +315,6 @@ data class GameUiState(
     val gameSelectionPageSize: Int = 10,
     val gameSelectionLoading: Boolean = false,
     val gameSelectionHasMore: Boolean = true,
-    // Analysed games
-    val hasAnalysedGames: Boolean = false,
-    val showAnalysedGamesSelection: Boolean = false,
-    val analysedGamesList: List<AnalysedGame> = emptyList(),
     // Retrieve screen navigation
     val showRetrieveScreen: Boolean = false,
     // AI Prompts list (prompts are sent to external AI app)

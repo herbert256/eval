@@ -41,17 +41,6 @@ internal class GameLoader(
     /**
      * Automatically load a game and start analysis on app startup.
      */
-    suspend fun autoLoadLastGame() {
-        android.util.Log.d("GameLoader", "autoLoadLastGame: Starting")
-        val storedGame = gameStorage.loadCurrentAnalysedGame()
-        if (storedGame != null) {
-            android.util.Log.d("GameLoader", "autoLoadLastGame: Found stored game, loading directly")
-            loadAnalysedGameDirectly(storedGame)
-            return
-        }
-        android.util.Log.d("GameLoader", "autoLoadLastGame: No stored game found")
-    }
-
     /**
      * Reload the last stored analysed game.
      */
@@ -242,6 +231,7 @@ internal class GameLoader(
         analysisOrchestrator.autoAnalysisJob?.cancel()
         analysisOrchestrator.manualAnalysisJob?.cancel()
         analysisOrchestrator.stop()
+        gameStorage.clearManualStageGame()
 
         val pgn = game.pgn
         if (pgn == null) {
@@ -491,11 +481,6 @@ internal class GameLoader(
         loadGame(game, entry.server, entry.accountName)
     }
 
-    fun selectAnalysedGame(game: AnalysedGame) {
-        updateUiState { copy(showAnalysedGamesSelection = false, showRetrieveScreen = false) }
-        loadAnalysedGameDirectly(game)
-    }
-
     private fun storeRetrievedGames(games: List<LichessGame>, username: String, server: ChessServer) {
         gameStorage.storeRetrievedGames(games, username, server)
         val retrievesList = gameStorage.loadRetrievesList()
@@ -561,23 +546,6 @@ internal class GameLoader(
                 selectedRetrieveGames = emptyList()
             )
         }
-    }
-
-    fun showAnalysedGames() {
-        val games = gameStorage.loadAnalysedGames()
-        if (games.isNotEmpty()) {
-            updateUiState {
-                copy(
-                    analysedGamesList = games,
-                    showAnalysedGamesSelection = true,
-                    showRetrieveScreen = false
-                )
-            }
-        }
-    }
-
-    fun dismissAnalysedGamesSelection() {
-        updateUiState { copy(showAnalysedGamesSelection = false) }
     }
 
     fun nextGameSelectionPage() {

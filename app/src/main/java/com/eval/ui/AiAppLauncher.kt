@@ -83,17 +83,18 @@ object AiAppLauncher {
             "Chess Position Analysis"
         }
 
-        var prompt = processPrompt(
-            template = promptTemplate,
+        var combined = promptTemplate
+        if (instructions.isNotBlank()) {
+            combined += "\n-- end prompt --\n" + instructions
+        }
+        val prompt = processPrompt(
+            template = combined,
             fen = fen,
             whiteName = whiteName,
             blackName = blackName,
             currentMoveIndex = currentMoveIndex,
             lastMoveDetails = lastMoveDetails
         )
-        if (instructions.isNotBlank()) {
-            prompt += "\n-- end prompt --\n" + instructions
-        }
         return launchAiReport(context, title, prompt)
     }
 
@@ -113,10 +114,11 @@ object AiAppLauncher {
         instructions: String = ""
     ): Boolean {
         val title = "Player Analysis: $playerName"
-        var prompt = processPrompt(promptTemplate, player = playerName, server = server)
+        var combined = promptTemplate
         if (instructions.isNotBlank()) {
-            prompt += "\n-- end prompt --\n" + instructions
+            combined += "\n-- end prompt --\n" + instructions
         }
+        val prompt = processPrompt(combined, player = playerName, server = server)
         return launchAiReport(context, title, prompt)
     }
 
@@ -134,10 +136,11 @@ object AiAppLauncher {
         instructions: String = ""
     ): Boolean {
         val title = "Player Profile: $playerName"
-        var prompt = processPrompt(promptTemplate, player = playerName)
+        var combined = promptTemplate
         if (instructions.isNotBlank()) {
-            prompt += "\n-- end prompt --\n" + instructions
+            combined += "\n-- end prompt --\n" + instructions
         }
+        val prompt = processPrompt(combined, player = playerName)
         return launchAiReport(context, title, prompt)
     }
 

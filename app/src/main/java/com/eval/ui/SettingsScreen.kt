@@ -123,6 +123,15 @@ fun SettingsScreen(
                 editingPromptId = null
                 currentSubScreen = SettingsSubScreen.AI_PROMPT_EDIT
             },
+            onCopyPrompt = { prompt ->
+                val copy = prompt.copy(
+                    id = java.util.UUID.randomUUID().toString(),
+                    name = prompt.name + " (copy)"
+                )
+                onAddAiPrompt(copy)
+                editingPromptId = copy.id
+                currentSubScreen = SettingsSubScreen.AI_PROMPT_EDIT
+            },
             onDeletePrompt = onDeleteAiPrompt
         )
         SettingsSubScreen.AI_PROMPT_EDIT -> {
@@ -310,6 +319,7 @@ fun AiPromptsListScreen(
     onBackToGame: () -> Unit,
     onEditPrompt: (String) -> Unit,
     onAddPrompt: () -> Unit,
+    onCopyPrompt: (AiPromptEntry) -> Unit,
     onDeletePrompt: (String) -> Unit
 ) {
     var promptToDelete by remember { mutableStateOf<AiPromptEntry?>(null) }
@@ -357,8 +367,8 @@ fun AiPromptsListScreen(
             color = Color(0xFF888888)
         )
 
-        // Prompt list
-        prompts.forEach { prompt ->
+        // Prompt list (sorted by name)
+        prompts.sortedBy { it.name.lowercase() }.forEach { prompt ->
             Card(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant
@@ -381,6 +391,11 @@ fun AiPromptsListScreen(
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
+                            text = prompt.safeCategory.displayName,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF6B8E23)
+                        )
+                        Text(
                             text = prompt.prompt.take(80).replace("\n", " ") + if (prompt.prompt.length > 80) "..." else "",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color(0xFFAAAAAA),
@@ -388,6 +403,11 @@ fun AiPromptsListScreen(
                         )
                     }
                     Row {
+                        TextButton(onClick = {
+                            onCopyPrompt(prompt)
+                        }) {
+                            Text("\u2398", color = Color(0xFF6B8E23))
+                        }
                         TextButton(onClick = { promptToDelete = prompt }) {
                             Text("X", color = Color(0xFFFF5252))
                         }
@@ -427,6 +447,7 @@ fun AiPromptEditScreen(
     onSave: (AiPromptEntry) -> Unit
 ) {
     var name by remember { mutableStateOf(existingPrompt?.name ?: "") }
+    var category by remember { mutableStateOf(existingPrompt?.safeCategory ?: AiPromptCategory.GAME) }
     var prompt by remember { mutableStateOf(existingPrompt?.prompt ?: "") }
     var instructions by remember { mutableStateOf(existingPrompt?.instructions ?: "") }
     var email by remember { mutableStateOf(existingPrompt?.email ?: "") }
@@ -459,6 +480,25 @@ fun AiPromptEditScreen(
             placeholder = { Text("e.g. Game Analysis") },
             textStyle = MaterialTheme.typography.bodyMedium
         )
+
+        // Category selector
+        Text(
+            text = "Category",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            AiPromptCategory.entries.forEach { cat ->
+                FilterChip(
+                    selected = category == cat,
+                    onClick = { category = cat },
+                    label = { Text(cat.displayName) }
+                )
+            }
+        }
 
         // Prompt field
         Text(
@@ -524,7 +564,8 @@ fun AiPromptEditScreen(
                         name = name.trim(),
                         prompt = prompt,
                         instructions = instructions,
-                        email = email.trim()
+                        email = email.trim(),
+                        category = category
                     )
                     onSave(entry)
                 }

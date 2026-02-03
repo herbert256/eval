@@ -21,7 +21,8 @@ internal class AnalysisOrchestrator(
     private val viewModelScope: CoroutineScope,
     private val getBoardHistory: () -> MutableList<ChessBoard>,
     private val storeAnalysedGame: () -> Unit,
-    private val fetchOpeningExplorer: () -> Unit
+    private val fetchOpeningExplorer: () -> Unit,
+    private val saveManualGame: (AnalysedGame) -> Unit = {}
 ) {
     var autoAnalysisJob: Job? = null
     var manualAnalysisJob: Job? = null
@@ -349,7 +350,6 @@ internal class AnalysisOrchestrator(
         if (scores.isEmpty()) return emptyMap()
 
         val qualities = mutableMapOf<Int, MoveQuality>()
-        val userPlayedBlack = state.userPlayedBlack
 
         for (moveIndex in scores.keys) {
             val prevSameColorIndex = moveIndex - 2
@@ -362,16 +362,12 @@ internal class AnalysisOrchestrator(
             val currentScore = scores[moveIndex]?.score ?: continue
             val prevScore = scores[prevSameColorIndex]?.score ?: continue
 
+            // Scores are from WHITE's perspective. For move quality:
+            // White move: positive change = good for white (the mover)
+            // Black move: negative change = good for black (the mover)
             val isWhiteMove = moveIndex % 2 == 0
-            val isUserMove = if (userPlayedBlack) !isWhiteMove else isWhiteMove
-
-            val change = if (userPlayedBlack) {
-                -(currentScore - prevScore)
-            } else {
-                currentScore - prevScore
-            }
-
-            val adjustedChange = if (isUserMove) change else -change
+            val change = currentScore - prevScore
+            val adjustedChange = if (isWhiteMove) change else -change
 
             val quality = when {
                 adjustedChange <= -MoveQualityThresholds.BLUNDER -> MoveQuality.BLUNDER
@@ -392,6 +388,12 @@ internal class AnalysisOrchestrator(
      * Internal function to enter Manual stage at a specific move.
      */
     fun enterManualStageInternal(moveIndex: Int) {
+        // Fill missing analyse scores from preview scores so the result is
+        // identical regardless of whether the analyse stage ran to completion
+        // or was interrupted early by the user.
+        val state = getUiState()
+        val filledAnalyseScores = state.previewScores + state.analyseScores
+
         val moveQualities = calculateMoveQualities()
         val boardHistory = getBoardHistory()
 
@@ -417,8 +419,33 @@ internal class AnalysisOrchestrator(
                     stockfishReady = false,
                     analysisResult = null,
                     analysisResultFen = null,
-                    moveQualities = moveQualities
+                    moveQualities = moveQualities,
+                    analyseScores = filledAnalyseScores
                 )
+            }
+
+            // Save the game for auto-restore on next startup
+            val updatedState = getUiState()
+            val game = updatedState.game
+            if (game != null) {
+                val analysedGame = AnalysedGame(
+                    timestamp = System.currentTimeMillis(),
+                    whiteName = game.players.white.user?.name ?: "White",
+                    blackName = game.players.black.user?.name ?: "Black",
+                    result = when (game.winner) {
+                        "white" -> "1-0"
+                        "black" -> "0-1"
+                        else -> if (game.status == "draw") "1/2-1/2" else "*"
+                    },
+                    pgn = game.pgn ?: "",
+                    moves = updatedState.moves,
+                    moveDetails = updatedState.moveDetails,
+                    previewScores = updatedState.previewScores,
+                    analyseScores = filledAnalyseScores,
+                    openingName = updatedState.openingName,
+                    speed = game.speed
+                )
+                saveManualGame(analysedGame)
             }
 
             val ready = stockfish.restart()

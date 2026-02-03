@@ -55,15 +55,13 @@ fun EvaluationGraph(
     onMoveSelected: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Score multiplier: invert scores when user played black so positive = good for user
-    val scorePerspective = if (userPlayedBlack) -1f else 1f
+    // Always show scores from WHITE's perspective (positive = good for white)
+    val scorePerspective = 1f
     val greenColor = Color(graphSettings.plusScoreColor.toInt())
     val redColor = Color(graphSettings.negativeScoreColor.toInt())
     val lineColor = Color(0xFF666666)
     val currentMoveColor = Color(graphSettings.verticalLineColor.toInt())
     val analyseColor = Color(graphSettings.analyseLineColor.toInt())
-    val blunderMarkerColor = Color(0xFFFF5252)  // Red for blunders
-    val mistakeMarkerColor = Color(0xFFFF9800)  // Orange for mistakes
 
     // Track the graph width for calculating move index from drag position
     var graphWidth by remember { mutableStateOf(0f) }
@@ -230,23 +228,6 @@ fun EvaluationGraph(
             val p1 = pointsAnalyse[i]
             val p2 = pointsAnalyse[i + 1]
             drawLine(analyseColor, Offset(p1.x, p1.y), Offset(p2.x, p2.y), strokeWidth = 7f)
-        }
-
-        // Draw blunder/mistake markers (only in manual stage)
-        if (isManualStage) {
-            moveQualities.forEach { (index, quality) ->
-                if (quality == MoveQuality.BLUNDER || quality == MoveQuality.MISTAKE) {
-                    val markerX = if (totalMoves > 1) index * pointSpacing else width / 2
-                    val markerColor = if (quality == MoveQuality.BLUNDER) blunderMarkerColor else mistakeMarkerColor
-                    // Draw a thin vertical line at the blunder/mistake position
-                    drawLine(
-                        color = markerColor.copy(alpha = 0.6f),
-                        start = Offset(markerX, 0f),
-                        end = Offset(markerX, height),
-                        strokeWidth = 2f
-                    )
-                }
-            }
         }
 
         // Draw current move indicator (only in manual stage)
@@ -423,8 +404,8 @@ fun ScoreDifferenceGraph(
     onMoveSelected: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Score multiplier: invert scores when user played black so positive = good for user
-    val scorePerspective = if (userPlayedBlack) -1f else 1f
+    // Always show scores from WHITE's perspective (positive = good for white)
+    val scorePerspective = 1f
     val goodMoveColor = Color(graphSettings.plusScoreColor.toInt())
     val blunderColor = Color(graphSettings.negativeScoreColor.toInt())
     val lineColor = Color(0xFF666666)
@@ -703,13 +684,10 @@ private fun PvLineRow(
     userPlayedBlack: Boolean,
     onMoveClick: (Int) -> Unit
 ) {
-    // Score display: from player's perspective (positive = good for player)
-    // First convert score to WHITE's perspective (Stockfish gives score from side-to-move's view)
-    val whiteScore = if (isWhiteTurn) line.score else -line.score
-    val whiteMateIn = if (isWhiteTurn) line.mateIn else -line.mateIn
-    // Then convert to player's perspective
-    val adjustedScore = if (userPlayedBlack) -whiteScore else whiteScore
-    val adjustedMateIn = if (userPlayedBlack) -whiteMateIn else whiteMateIn
+    // Score display: always from WHITE's perspective (positive = good for white)
+    // Convert score to WHITE's perspective (Stockfish gives score from side-to-move's view)
+    val adjustedScore = if (isWhiteTurn) line.score else -line.score
+    val adjustedMateIn = if (isWhiteTurn) line.mateIn else -line.mateIn
 
     val displayScore = if (line.isMate) {
         if (adjustedMateIn > 0) "+M${adjustedMateIn}" else "-M${kotlin.math.abs(adjustedMateIn)}"

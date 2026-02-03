@@ -46,6 +46,15 @@ Current form (last 12 months) and realistic outlook
 End with a tight conclusion"""
 
 /**
+ * Category for AI prompts - determines when the prompt is available.
+ */
+enum class AiPromptCategory(val displayName: String) {
+    GAME("Game"),
+    CHESS_SERVER_PLAYER("Chess Server Player"),
+    PLAYER("Player")
+}
+
+/**
  * AI Prompt Entry - a single prompt with name, template, and instructions.
  *
  * The Eval app stores prompts and sends them to the external AI app (com.ai)
@@ -53,26 +62,18 @@ End with a tight conclusion"""
  */
 data class AiPromptEntry(
     val id: String = UUID.randomUUID().toString(),
-    val name: String,
-    val prompt: String,
+    val name: String = "",
+    val prompt: String = "",
     val instructions: String = "",
-    val email: String = ""
-)
+    val email: String = "",
+    // Nullable for Gson compatibility - use safeCategory for access
+    val category: AiPromptCategory? = AiPromptCategory.GAME
+) {
+    /** Category with fallback for entries deserialized without the field. */
+    val safeCategory: AiPromptCategory get() = category ?: AiPromptCategory.GAME
+}
 
 /**
  * Default prompt entries seeded on first load.
  */
-fun defaultAiPrompts(): List<AiPromptEntry> = listOf(
-    AiPromptEntry(
-        name = "Game Analysis",
-        prompt = DEFAULT_GAME_PROMPT
-    ),
-    AiPromptEntry(
-        name = "Server Player",
-        prompt = DEFAULT_SERVER_PLAYER_PROMPT
-    ),
-    AiPromptEntry(
-        name = "Other Player",
-        prompt = DEFAULT_OTHER_PLAYER_PROMPT
-    )
-)
+fun defaultAiPrompts(): List<AiPromptEntry> = emptyList()

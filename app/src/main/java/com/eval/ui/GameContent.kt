@@ -192,23 +192,14 @@ fun GameContent(
                 } else {
                     storedScore
                 }
-                // Convert to PLAYER's perspective
-                val displayScore: MoveScore? = if (whiteScore != null && uiState.userPlayedBlack) {
-                    MoveScore(-whiteScore.score, whiteScore.isMate, -whiteScore.mateIn)
-                } else {
-                    whiteScore
-                }
+                // Always display from WHITE's perspective (positive = good for white)
+                val displayScore: MoveScore? = whiteScore
 
                 // Get previous move's score for delta calculation
                 val prevStoredScore = if (moveIndex > 0) {
                     uiState.analyseScores[moveIndex - 1] ?: uiState.previewScores[moveIndex - 1]
                 } else null
-                val prevWhiteScore: MoveScore? = prevStoredScore
-                val prevDisplayScore: MoveScore? = if (prevWhiteScore != null && uiState.userPlayedBlack) {
-                    MoveScore(-prevWhiteScore.score, prevWhiteScore.isMate, -prevWhiteScore.mateIn)
-                } else {
-                    prevWhiteScore
-                }
+                val prevDisplayScore: MoveScore? = prevStoredScore
 
                 if (displayScore != null) {
                     val scoreText = if (displayScore.isMate) {
@@ -560,11 +551,9 @@ fun GameContent(
                             val toFile = firstMove[2] - 'a'
                             val toRank = firstMove[3] - '1'
                             if (fromFile in 0..7 && fromRank in 0..7 && toFile in 0..7 && toRank in 0..7) {
-                                // Convert score to WHITE's perspective, then to player's perspective
-                                val whiteScore = if (isWhiteTurnNow) line.score else -line.score
-                                val whiteMateIn = if (isWhiteTurnNow) line.mateIn else -line.mateIn
-                                val adjustedScore = if (uiState.userPlayedBlack) -whiteScore else whiteScore
-                                val adjustedMateIn = if (uiState.userPlayedBlack) -whiteMateIn else whiteMateIn
+                                // Convert score to WHITE's perspective (positive = good for white)
+                                val adjustedScore = if (isWhiteTurnNow) line.score else -line.score
+                                val adjustedMateIn = if (isWhiteTurnNow) line.mateIn else -line.mateIn
 
                                 // Format score for display
                                 val scoreText = if (line.isMate) {
@@ -633,7 +622,7 @@ fun GameContent(
                     range = uiState.boardLayoutSettings.evalBarRange,
                     color1 = Color(uiState.boardLayoutSettings.evalBarColor1.toInt()),
                     color2 = Color(uiState.boardLayoutSettings.evalBarColor2.toInt()),
-                    flipped = uiState.userPlayedBlack,
+                    flipped = uiState.flippedBoard,
                     modifier = Modifier.fillMaxHeight()
                 )
             }
@@ -663,7 +652,7 @@ fun GameContent(
                     range = uiState.boardLayoutSettings.evalBarRange,
                     color1 = Color(uiState.boardLayoutSettings.evalBarColor1.toInt()),
                     color2 = Color(uiState.boardLayoutSettings.evalBarColor2.toInt()),
-                    flipped = uiState.userPlayedBlack,
+                    flipped = uiState.flippedBoard,
                     modifier = Modifier.fillMaxHeight()
                 )
             }

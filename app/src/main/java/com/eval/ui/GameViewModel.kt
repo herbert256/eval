@@ -104,13 +104,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private fun isFirstRun(): Boolean {
         val savedVersionCode = settingsPrefs.getFirstGameRetrievedVersion()
         val currentVersion = getAppVersionCode()
-        // If stored version code is 0 (legacy bug), check if there's a stored game
-        // If there's a stored game, this isn't truly a first run
-        if (savedVersionCode == 0L && gameStorage.hasAnalysedGames()) {
-            // Fix the stored version code for future runs
-            settingsPrefs.setFirstGameRetrievedVersion(currentVersion)
-            return false
-        }
         return savedVersionCode != currentVersion
     }
 
@@ -130,8 +123,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             updateUiState = { transform -> _uiState.value = _uiState.value.transform() },
             viewModelScope = viewModelScope,
             getBoardHistory = { boardHistory },
-            storeAnalysedGame = { storeAnalysedGame() },
-            fetchOpeningExplorer = { fetchOpeningExplorer() }
+            storeAnalysedGame = { },
+            fetchOpeningExplorer = { fetchOpeningExplorer() },
+            saveManualGame = { game -> gameStorage.saveManualStageGame(game) }
         )
 
         gameLoader = GameLoader(
@@ -198,7 +192,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val lichessMaxGames = settingsPrefs.lichessMaxGames
             val retrievesList = gameStorage.loadRetrievesList()
             val hasPreviousRetrieves = retrievesList.isNotEmpty()
-            val hasAnalysedGames = gameStorage.hasAnalysedGames()
 
             _uiState.value = _uiState.value.copy(
                 stockfishSettings = settings,
@@ -210,7 +203,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 lichessMaxGames = lichessMaxGames,
                 hasPreviousRetrieves = hasPreviousRetrieves,
                 previousRetrievesList = retrievesList,
-                hasAnalysedGames = hasAnalysedGames,
                 playerGamesPageSize = generalSettings.paginationPageSize,
                 gameSelectionPageSize = generalSettings.paginationPageSize
             )
@@ -222,8 +214,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 _uiState.value = _uiState.value.copy(stockfishReady = ready)
 
-                if (ready && !isFirstRun()) {
-                    gameLoader.autoLoadLastGame()
+                // Auto-restore manual stage game from previous session
+                if (ready) {
+                    val manualGame = gameStorage.loadManualStageGame()
+                    if (manualGame != null) {
+                        gameLoader.loadAnalysedGameDirectly(manualGame)
+                    }
                 }
             }
 
@@ -321,10 +317,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 analysisOrchestrator.configureForManualStage()
             }
             _uiState.value = _uiState.value.copy(stockfishReady = ready)
-
-            if (ready && !isFirstRun()) {
-                gameLoader.autoLoadLastGame()
-            }
         }
 
         viewModelScope.launch {
@@ -362,13 +354,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun dismissGameSelection() = gameLoader.dismissGameSelection()
     fun clearGame() = gameLoader.clearGame()
     fun selectGameFromRetrieve(game: LichessGame) = gameLoader.selectGameFromRetrieve(game)
-    fun selectAnalysedGame(game: AnalysedGame) = gameLoader.selectAnalysedGame(game)
     fun showPreviousRetrieves() = gameLoader.showPreviousRetrieves()
     fun dismissPreviousRetrievesSelection() = gameLoader.dismissPreviousRetrievesSelection()
     fun selectPreviousRetrieve(entry: RetrievedGamesEntry) = gameLoader.selectPreviousRetrieve(entry)
     fun dismissSelectedRetrieveGames() = gameLoader.dismissSelectedRetrieveGames()
-    fun showAnalysedGames() = gameLoader.showAnalysedGames()
-    fun dismissAnalysedGamesSelection() = gameLoader.dismissAnalysedGamesSelection()
     fun nextGameSelectionPage() = gameLoader.nextGameSelectionPage()
     fun previousGameSelectionPage() = gameLoader.previousGameSelectionPage()
     fun setLichessMaxGames(max: Int) = gameLoader.setLichessMaxGames(max)
@@ -467,22 +456,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // ===== GAME STORAGE =====
-    private fun storeAnalysedGame() {
-        val game = _uiState.value.game ?: return
-        val moves = _uiState.value.moves
-        if (moves.isEmpty()) return
-
-        gameStorage.storeAnalysedGame(
-            game = game,
-            moves = moves,
-            moveDetails = _uiState.value.moveDetails,
-            previewScores = _uiState.value.previewScores,
-            analyseScores = _uiState.value.analyseScores,
-            openingName = _uiState.value.openingName
-        )
-
-        _uiState.value = _uiState.value.copy(hasAnalysedGames = true)
-    }
 
     // ===== OPENING EXPLORER =====
     fun fetchOpeningExplorer() {
@@ -526,6 +499,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun getCurrentFen(): String = _uiState.value.currentBoard.getFen()
+
+    /** Extract the Site URL from the current game's PGN headers, if it's a lichess.org or chess.com URL. */
+    fun getGameSiteUrl(): String? {
+        val pgn = _uiState.value.game?.pgn ?: return null
+        val headers = com.eval.chess.PgnParser.parseHeaders(pgn)
+        val site = headers["Site"] ?: return null
+        return when {
+            site.contains("lichess.org") -> site
+            site.contains("chess.com") -> site
+            else -> null
+        }
+    }
 
     fun copyFenToClipboard(context: android.content.Context) {
         val fen = getCurrentFen()
@@ -854,9 +839,11 @@ ${opening.moves} *
      * No PGN, no move list, no graphs - just board analysis.
      */
     fun startFromFen(fen: String) {
+        // Replace underscores with spaces (common in URLs and clipboard pastes)
+        val normalizedFen = fen.replace('_', ' ')
         // Validate FEN by trying to set up the board
         val board = com.eval.chess.ChessBoard()
-        if (!board.setFen(fen)) {
+        if (!board.setFen(normalizedFen)) {
             _uiState.value = _uiState.value.copy(
                 errorMessage = "Invalid FEN position"
             )
@@ -884,7 +871,7 @@ ${opening.moves} *
                     aiLevel = null
                 )
             ),
-            pgn = "[FEN \"$fen\"]\n\n*",
+            pgn = "[FEN \"$normalizedFen\"]\n\n*",
             moves = null,
             clock = null,
             createdAt = System.currentTimeMillis(),
@@ -1089,11 +1076,7 @@ ${opening.moves} *
 
     /**
      * Launch the external AI app for server player analysis (Lichess/Chess.com).
-     * Uses the first prompt that contains @SERVER@ placeholder, or falls back to first prompt.
-     * @param context Android context needed for intent launching
-     * @param playerName The player's username
-     * @param server The chess server name (e.g., "lichess.org", "chess.com")
-     * @return true if AI app was launched, false if not installed
+     * Uses the first CHESS_SERVER_PLAYER prompt, falling back to defaults.
      */
     fun launchServerPlayerAnalysis(context: android.content.Context, playerName: String, server: String): Boolean {
         if (!AiAppLauncher.isAiAppInstalled(context)) {
@@ -1101,8 +1084,7 @@ ${opening.moves} *
             return false
         }
         val prompts = _uiState.value.aiPrompts
-        val prompt = prompts.firstOrNull { it.prompt.contains("@SERVER@") }
-            ?: prompts.firstOrNull { it.prompt.contains("@PLAYER@") }
+        val prompt = prompts.firstOrNull { it.safeCategory == AiPromptCategory.CHESS_SERVER_PLAYER }
             ?: prompts.firstOrNull()
         val promptTemplate = prompt?.prompt ?: DEFAULT_SERVER_PLAYER_PROMPT
         val instructions = prompt?.instructions ?: ""
@@ -1111,10 +1093,7 @@ ${opening.moves} *
 
     /**
      * Launch the external AI app for general player analysis.
-     * Uses the first prompt that contains @PLAYER@ but not @SERVER@, or falls back.
-     * @param context Android context needed for intent launching
-     * @param playerName The player's name
-     * @return true if AI app was launched, false if not installed
+     * Uses the first PLAYER prompt, falling back to defaults.
      */
     fun launchOtherPlayerAnalysis(context: android.content.Context, playerName: String): Boolean {
         if (!AiAppLauncher.isAiAppInstalled(context)) {
@@ -1122,8 +1101,7 @@ ${opening.moves} *
             return false
         }
         val prompts = _uiState.value.aiPrompts
-        val prompt = prompts.firstOrNull { it.prompt.contains("@PLAYER@") && !it.prompt.contains("@SERVER@") }
-            ?: prompts.firstOrNull { it.prompt.contains("@PLAYER@") }
+        val prompt = prompts.firstOrNull { it.safeCategory == AiPromptCategory.PLAYER }
             ?: prompts.firstOrNull()
         val promptTemplate = prompt?.prompt ?: DEFAULT_OTHER_PLAYER_PROMPT
         val instructions = prompt?.instructions ?: ""

@@ -121,89 +121,44 @@ class GameStorageManager(
     }
 
     // ============================================================================
-    // Analysed Games Storage
+    // Manual Stage Game Auto-Restore
     // ============================================================================
 
     /**
-     * Store an analysed game, maintaining a list of up to MAX_ANALYSED_GAMES.
+     * Save the current game when entering Manual stage for auto-restore on next startup.
      */
-    fun storeAnalysedGame(
-        game: LichessGame,
-        moves: List<String>,
-        moveDetails: List<MoveDetails>,
-        previewScores: Map<Int, MoveScore>,
-        analyseScores: Map<Int, MoveScore>,
-        openingName: String?
-    ) {
-        // Load existing analysed games
-        val analysedGames = loadAnalysedGames().toMutableList()
-
-        // Create new analysed game entry
-        val newGame = AnalysedGame(
-            timestamp = System.currentTimeMillis(),
-            whiteName = game.players.white.user?.name
-                ?: game.players.white.aiLevel?.let { "Stockfish $it" }
-                ?: "Anonymous",
-            blackName = game.players.black.user?.name
-                ?: game.players.black.aiLevel?.let { "Stockfish $it" }
-                ?: "Anonymous",
-            result = when {
-                game.winner == "white" -> "1-0"
-                game.winner == "black" -> "0-1"
-                game.status == "draw" || game.status == "stalemate" -> "1/2-1/2"
-                // For ongoing games (status "*", "started", etc.), keep the result as ongoing
-                game.status == "*" || game.status == "started" || game.status == "unknown" -> "*"
-                else -> "*"
-            },
-            pgn = game.pgn ?: "",
-            moves = moves,
-            moveDetails = moveDetails,
-            previewScores = previewScores,
-            analyseScores = analyseScores,
-            openingName = openingName,
-            speed = game.speed
-        )
-
-        // Remove any duplicate (same white, black, and PGN)
-        analysedGames.removeAll { existing ->
-            existing.whiteName == newGame.whiteName &&
-                    existing.blackName == newGame.blackName &&
-                    existing.pgn == newGame.pgn
-        }
-
-        // Add new game at the beginning
-        analysedGames.add(0, newGame)
-
-        // Trim to max size
-        while (analysedGames.size > SettingsPreferences.MAX_ANALYSED_GAMES) {
-            analysedGames.removeAt(analysedGames.size - 1)
-        }
-
-        // Save the list
-        val json = gson.toJson(analysedGames)
-        prefs.edit().putString(SettingsPreferences.KEY_ANALYSED_GAMES, json).apply()
-
-        // Also save as the current game for next app startup
-        saveCurrentAnalysedGame(newGame)
+    fun saveManualStageGame(analysedGame: AnalysedGame) {
+        val json = gson.toJson(analysedGame)
+        prefs.edit().putString(SettingsPreferences.KEY_CURRENT_MANUAL_GAME, json).apply()
+        android.util.Log.d("GameStorageManager", "saveManualStageGame: Saved ${analysedGame.whiteName} vs ${analysedGame.blackName}")
     }
 
     /**
-     * Load the list of analysed games.
+     * Load the manual stage game for auto-restore on startup.
+     * Returns null if no game is stored.
      */
-    fun loadAnalysedGames(): List<AnalysedGame> {
-        val json = prefs.getString(SettingsPreferences.KEY_ANALYSED_GAMES, null) ?: return emptyList()
+    fun loadManualStageGame(): AnalysedGame? {
+        val json = prefs.getString(SettingsPreferences.KEY_CURRENT_MANUAL_GAME, null) ?: return null
         return try {
-            val type = object : TypeToken<List<AnalysedGame>>() {}.type
-            gson.fromJson(json, type) ?: emptyList()
+            val game = gson.fromJson(json, AnalysedGame::class.java)
+            android.util.Log.d("GameStorageManager", "loadManualStageGame: Loaded ${game?.whiteName} vs ${game?.blackName}")
+            game
         } catch (e: Exception) {
-            emptyList()
+            android.util.Log.e("GameStorageManager", "loadManualStageGame: Failed to parse JSON", e)
+            null
         }
     }
 
     /**
-     * Check if there are any stored analysed games.
+     * Clear the manual stage game (called when a new game is loaded).
      */
-    fun hasAnalysedGames(): Boolean {
-        return prefs.getString(SettingsPreferences.KEY_ANALYSED_GAMES, null) != null
+    fun clearManualStageGame() {
+        prefs.edit().remove(SettingsPreferences.KEY_CURRENT_MANUAL_GAME).apply()
+        android.util.Log.d("GameStorageManager", "clearManualStageGame: Cleared")
     }
+
+    // ============================================================================
+    // Analysed Games Storage
+    // ============================================================================
+
 }

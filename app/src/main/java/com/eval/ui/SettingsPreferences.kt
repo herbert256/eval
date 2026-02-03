@@ -252,8 +252,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             longTapForFullScreen = false,
             paginationPageSize = prefs.getInt(KEY_PAGINATION_PAGE_SIZE, 25).coerceIn(5, 50),
             moveSoundsEnabled = prefs.getBoolean(KEY_MOVE_SOUNDS_ENABLED, true),
-            lichessUsername = prefs.getString(KEY_LICHESS_USERNAME, "") ?: "",
-            flipScoreWhenBlack = prefs.getBoolean(KEY_FLIP_SCORE_WHEN_BLACK, true)
+            lichessUsername = prefs.getString(KEY_LICHESS_USERNAME, "") ?: ""
         )
     }
 
@@ -263,7 +262,6 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             .putInt(KEY_PAGINATION_PAGE_SIZE, settings.paginationPageSize.coerceIn(5, 50))
             .putBoolean(KEY_MOVE_SOUNDS_ENABLED, settings.moveSoundsEnabled)
             .putString(KEY_LICHESS_USERNAME, settings.lichessUsername)
-            .putBoolean(KEY_FLIP_SCORE_WHEN_BLACK, settings.flipScoreWhenBlack)
             .apply()
     }
 
@@ -273,23 +271,16 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
 
     /**
      * Load AI prompts list from JSON storage.
-     * Seeds 3 default entries on first load if empty.
+     * Returns empty list if none configured.
      */
     fun loadAiPrompts(): List<AiPromptEntry> {
-        val json = prefs.getString(KEY_AI_PROMPTS_LIST, null)
-        if (json != null) {
-            return try {
-                val type = object : TypeToken<List<AiPromptEntry>>() {}.type
-                val list: List<AiPromptEntry>? = gson.fromJson(json, type)
-                if (list.isNullOrEmpty()) defaultAiPrompts() else list
-            } catch (e: Exception) {
-                defaultAiPrompts()
-            }
+        val json = prefs.getString(KEY_AI_PROMPTS_LIST, null) ?: return emptyList()
+        return try {
+            val type = object : TypeToken<List<AiPromptEntry>>() {}.type
+            gson.fromJson<List<AiPromptEntry>>(json, type) ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
         }
-        // First load - seed defaults
-        val defaults = defaultAiPrompts()
-        saveAiPrompts(defaults)
-        return defaults
     }
 
     /**
@@ -406,6 +397,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
 
         // Current game storage
         const val KEY_CURRENT_GAME_JSON = "current_game_json"
+        const val KEY_CURRENT_MANUAL_GAME = "current_manual_game"
 
         // Lichess settings
         private const val KEY_LICHESS_USERNAME = "lichess_username"
@@ -415,10 +407,6 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         const val KEY_RETRIEVES_LIST = "retrieves_list"
         const val KEY_RETRIEVED_GAMES_PREFIX = "retrieved_games_"
         const val MAX_RETRIEVES = 25
-
-        // Analysed games storage
-        const val KEY_ANALYSED_GAMES = "analysed_games"
-        const val MAX_ANALYSED_GAMES = 50
 
         // Preview stage settings
         private const val KEY_PREVIEW_SECONDS = "preview_seconds"
@@ -507,7 +495,6 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         // General settings
         private const val KEY_PAGINATION_PAGE_SIZE = "pagination_page_size"
         private const val KEY_MOVE_SOUNDS_ENABLED = "move_sounds_enabled"
-        private const val KEY_FLIP_SCORE_WHEN_BLACK = "flip_score_when_black"
 
         // AI Analysis settings
         private const val KEY_AI_REPORT_PROVIDERS = "ai_report_providers"

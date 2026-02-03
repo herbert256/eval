@@ -27,15 +27,13 @@ fun GeneralSettingsScreen(
     var paginationPageSize by remember { mutableFloatStateOf(generalSettings.paginationPageSize.toFloat()) }
     var moveSoundsEnabled by remember { mutableStateOf(generalSettings.moveSoundsEnabled) }
     var lichessUsername by remember { mutableStateOf(generalSettings.lichessUsername) }
-    var flipScoreWhenBlack by remember { mutableStateOf(generalSettings.flipScoreWhenBlack) }
 
     fun saveSettings() {
         onSave(generalSettings.copy(
             longTapForFullScreen = longTapForFullScreen,
             paginationPageSize = paginationPageSize.roundToInt(),
             moveSoundsEnabled = moveSoundsEnabled,
-            lichessUsername = lichessUsername,
-            flipScoreWhenBlack = flipScoreWhenBlack
+            lichessUsername = lichessUsername
         ))
     }
 
@@ -199,30 +197,6 @@ fun GeneralSettingsScreen(
                     )
                 }
 
-                HorizontalDivider(color = Color(0xFF404040))
-
-                // Flip score when black toggle
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Flip score when playing with black", color = Color.White)
-                        Text(
-                            text = "Show evaluation from your perspective when you play as black",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFFAAAAAA)
-                        )
-                    }
-                    Switch(
-                        checked = flipScoreWhenBlack,
-                        onCheckedChange = {
-                            flipScoreWhenBlack = it
-                            saveSettings()
-                        }
-                    )
-                }
             }
         }
 

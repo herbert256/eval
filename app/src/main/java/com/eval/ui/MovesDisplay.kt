@@ -186,12 +186,12 @@ private fun MoveChip(
             )
         }
 
-        // Show score if available (from player's perspective)
+        // Show score if available (always from WHITE's perspective)
         if (score != null) {
             Spacer(modifier = Modifier.width(4.dp))
-            // Convert score to player's perspective
-            val playerScore = if (userPlayedBlack) -score.score else score.score
-            val playerMateIn = if (userPlayedBlack) -score.mateIn else score.mateIn
+            // Scores are already stored from WHITE's perspective
+            val playerScore = score.score
+            val playerMateIn = score.mateIn
             val scoreText = if (score.isMate) {
                 "M${kotlin.math.abs(playerMateIn)}"
             } else {

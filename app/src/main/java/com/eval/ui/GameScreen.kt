@@ -162,8 +162,10 @@ fun GameScreenContent(
 
     // Show share position dialog
     if (uiState.showSharePositionDialog) {
+        val gameSiteUrl = viewModel.getGameSiteUrl()
         SharePositionDialog(
             fen = viewModel.getCurrentFen(),
+            gameSiteUrl = gameSiteUrl,
             onCopyFen = { viewModel.copyFenToClipboard(context) },
             onShare = { viewModel.sharePositionAsText(context) },
             onExportPgn = { viewModel.exportAnnotatedPgn(context) },
@@ -173,6 +175,12 @@ fun GameScreenContent(
                 viewModel.hideSharePositionDialog()
                 viewModel.showAiPromptSelectionDialog()
             },
+            onViewOnSite = {
+                gameSiteUrl?.let { url ->
+                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                    context.startActivity(intent)
+                }
+            },
             onDismiss = { viewModel.hideSharePositionDialog() }
         )
     }
@@ -180,7 +188,7 @@ fun GameScreenContent(
     // Show AI prompt selection dialog
     if (uiState.showAiPromptSelectionDialog) {
         AiPromptSelectionDialog(
-            prompts = uiState.aiPrompts,
+            prompts = uiState.aiPrompts.filter { it.safeCategory == AiPromptCategory.GAME },
             onSelectPrompt = { promptEntry ->
                 viewModel.hideAiPromptSelectionDialog()
                 viewModel.launchGameAnalysis(context, promptEntry)
@@ -1544,12 +1552,14 @@ private fun buildPgnHtml(uiState: GameUiState): String {
 @Composable
 fun SharePositionDialog(
     fen: String,
+    gameSiteUrl: String?,
     onCopyFen: () -> Unit,
     onShare: () -> Unit,
     onExportPgn: () -> Unit,
     onCopyPgn: () -> Unit,
     onExportGif: () -> Unit,
     onGenerateAiReports: () -> Unit,
+    onViewOnSite: () -> Unit,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
@@ -1565,22 +1575,6 @@ fun SharePositionDialog(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // FEN display
-                Text(
-                    text = "FEN:",
-                    fontWeight = FontWeight.Medium,
-                    color = Color(0xFFAAAAAA)
-                )
-                Text(
-                    text = fen,
-                    fontSize = 12.sp,
-                    color = Color.White,
-                    modifier = Modifier
-                        .background(Color(0xFF1A1A1A), RoundedCornerShape(4.dp))
-                        .padding(8.dp)
-                        .fillMaxWidth()
-                )
-
                 // Copy FEN button
                 Button(
                     onClick = {
@@ -1664,6 +1658,27 @@ fun SharePositionDialog(
                 ) {
                     Text("Generate AI Reports")
                 }
+
+                // View on lichess.org / chess.com button - only if game has a site URL
+                if (gameSiteUrl != null) {
+                    val siteName = when {
+                        gameSiteUrl.contains("lichess.org") -> "lichess.org"
+                        gameSiteUrl.contains("chess.com") -> "chess.com"
+                        else -> "site"
+                    }
+                    Button(
+                        onClick = {
+                            onViewOnSite()
+                            onDismiss()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF6B8E23)
+                        )
+                    ) {
+                        Text("View on $siteName")
+                    }
+                }
             }
         },
         confirmButton = {},
@@ -1703,7 +1718,7 @@ fun AiPromptSelectionDialog(
                         color = Color(0xFFAAAAAA)
                     )
                 } else {
-                    prompts.forEach { prompt ->
+                    prompts.sortedBy { it.name.lowercase() }.forEach { prompt ->
                         Button(
                             onClick = { onSelectPrompt(prompt) },
                             modifier = Modifier.fillMaxWidth(),

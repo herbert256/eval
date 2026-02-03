@@ -96,16 +96,6 @@ fun RetrieveScreen(
         return
     }
 
-    // Show analysed games selection screen
-    if (uiState.showAnalysedGamesSelection && uiState.analysedGamesList.isNotEmpty()) {
-        AnalysedGamesScreen(
-            games = uiState.analysedGamesList,
-            onSelectGame = { viewModel.selectAnalysedGame(it) },
-            onDismiss = { viewModel.dismissAnalysedGamesSelection() }
-        )
-        return
-    }
-
     // Show previous game retrieves selection screen
     if (uiState.showPreviousRetrievesSelection && uiState.previousRetrievesList.isNotEmpty()) {
         PreviousRetrievesScreen(
@@ -412,18 +402,6 @@ private fun RetrieveMainScreen(
                 }
             }
 
-            // Button to select from previous analysed games
-            if (uiState.hasAnalysedGames) {
-                Button(
-                    onClick = { viewModel.showAnalysedGames() },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF3A5A7C)
-                    )
-                ) {
-                    Text("Select from previous analysed games")
-                }
-            }
 
             // Button to select from PGN file
             Button(
