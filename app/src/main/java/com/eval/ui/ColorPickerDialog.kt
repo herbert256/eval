@@ -3,6 +3,7 @@ package com.eval.ui
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
@@ -99,7 +100,7 @@ fun ColorPickerDialog(
                                 }
                             }
                             .pointerInput(Unit) {
-                                detectHorizontalDragGestures { change, _ ->
+                                detectDragGestures { change, _ ->
                                     val offset = change.position
                                     hue = (offset.x / size.width * 360f).coerceIn(0f, 360f)
                                     saturation = (1f - offset.y / size.height).coerceIn(0f, 1f)

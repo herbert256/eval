@@ -27,26 +27,6 @@ class GameStorageManager(
         prefs.edit().putString(SettingsPreferences.KEY_CURRENT_GAME_JSON, json).apply()
     }
 
-    /**
-     * Load the current analysed game from SharedPreferences.
-     * Returns null if no game is stored.
-     */
-    fun loadCurrentAnalysedGame(): AnalysedGame? {
-        val json = prefs.getString(SettingsPreferences.KEY_CURRENT_GAME_JSON, null)
-        if (json == null) {
-            android.util.Log.d("GameStorageManager", "loadCurrentAnalysedGame: No JSON stored")
-            return null
-        }
-        return try {
-            val game = gson.fromJson(json, AnalysedGame::class.java)
-            android.util.Log.d("GameStorageManager", "loadCurrentAnalysedGame: Loaded game ${game?.whiteName} vs ${game?.blackName}")
-            game
-        } catch (e: Exception) {
-            android.util.Log.e("GameStorageManager", "loadCurrentAnalysedGame: Failed to parse JSON", e)
-            null
-        }
-    }
-
     // ============================================================================
     // Retrieved Games Storage (List of Lists)
     // ============================================================================

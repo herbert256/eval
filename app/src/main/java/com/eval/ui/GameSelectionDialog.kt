@@ -106,7 +106,7 @@ private fun GameListItem(
 
     // Determine result from user's perspective
     val isOngoingGame = game.status == "*" || game.status == "started" ||
-        game.status == "unknown" || game.status.isNullOrBlank()
+        game.status == "unknown" || game.status.isBlank()
     val (resultText, resultColor) = when {
         isOngoingGame -> "" to Color.Transparent  // No result for ongoing games
         game.winner == "white" && userPlayedWhite -> "won" to Color(0xFF4CAF50)  // Green
@@ -472,7 +472,7 @@ private fun RetrieveGameListItem(
     // Determine result from account's perspective
     // Don't show results for ongoing games (status "*", "started", "unknown", etc.)
     val isOngoingGame = game.status == "*" || game.status == "started" ||
-        game.status == "unknown" || game.status.isNullOrBlank()
+        game.status == "unknown" || game.status.isBlank()
     val (resultText, resultColor) = when {
         isOngoingGame -> "" to Color.Transparent  // No result for ongoing games
         game.winner == "white" && accountPlayedWhite -> "won" to Color(0xFF4CAF50)  // Green - won

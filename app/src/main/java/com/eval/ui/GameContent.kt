@@ -524,7 +524,7 @@ fun GameContent(
         // Calculate game results for each player
         // Don't show results for ongoing games (status "*", "started", "unknown", etc.)
         val isOngoingGame = game.status == "*" || game.status == "started" ||
-            game.status == "unknown" || game.status.isNullOrBlank()
+            game.status == "unknown" || game.status.isBlank()
         val whiteResult = if (isOngoingGame) null else when (game.winner) {
             "white" -> "won"
             "black" -> "lost"
@@ -1046,7 +1046,7 @@ fun GameContent(
                 }
                 // Result - don't show for ongoing games
                 val isOngoingStatus = game.status == "*" || game.status == "started" ||
-                    game.status == "unknown" || game.status.isNullOrBlank()
+                    game.status == "unknown" || game.status.isBlank()
                 if (!isOngoingStatus) {
                     val resultText = when (game.winner) {
                         "white" -> "1-0"
@@ -1746,7 +1746,6 @@ private fun expandOpeningAbbreviation(name: String): String {
         "TK" to "Two Knights Defense",
 
         // Other 1.e4 openings
-        "SC" to "Scotch Game",
         "SCO" to "Scotch Game",
         "PET" to "Petroff Defense",
         "RD" to "Russian Defense (Petroff)",
@@ -1758,7 +1757,6 @@ private fun expandOpeningAbbreviation(name: String): String {
         "MO" to "Modern Defense",
         "MD" to "Modern Defense",
         "SCD" to "Scandinavian Defense",
-        "SD" to "Scandinavian Defense",
         "CN" to "Center Game",
         "VG" to "Vienna Game",
         "BG" to "Bishop's Opening",

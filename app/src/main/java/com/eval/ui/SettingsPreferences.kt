@@ -49,19 +49,19 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             analyseStage = AnalyseStageSettings(
                 secondsForMove = prefs.getFloat(KEY_ANALYSE_SECONDS, 2.00f),
                 threads = prefs.getInt(KEY_ANALYSE_THREADS, 4),
-                hashMb = prefs.getInt(KEY_ANALYSE_HASH, 32),
+                hashMb = prefs.getInt(KEY_ANALYSE_HASH, 64),
                 useNnue = prefs.getBoolean(KEY_ANALYSE_NNUE, true)
             ),
             manualStage = ManualStageSettings(
                 depth = prefs.getInt(KEY_MANUAL_DEPTH, 32),
                 threads = prefs.getInt(KEY_MANUAL_THREADS, 4),
-                hashMb = prefs.getInt(KEY_MANUAL_HASH, 64),
+                hashMb = prefs.getInt(KEY_MANUAL_HASH, 128),
                 multiPv = prefs.getInt(KEY_MANUAL_MULTIPV, 3),
                 useNnue = prefs.getBoolean(KEY_MANUAL_NNUE, true),
                 arrowMode = try {
-                    ArrowMode.valueOf(prefs.getString(KEY_MANUAL_ARROW_MODE, ArrowMode.MAIN_LINE.name) ?: ArrowMode.MAIN_LINE.name)
+                    ArrowMode.valueOf(prefs.getString(KEY_MANUAL_ARROW_MODE, ArrowMode.NONE.name) ?: ArrowMode.NONE.name)
                 } catch (e: IllegalArgumentException) {
-                    ArrowMode.MAIN_LINE
+                    ArrowMode.NONE
                 },
                 numArrows = prefs.getInt(KEY_MANUAL_NUMARROWS, 4),
                 showArrowNumbers = prefs.getBoolean(KEY_MANUAL_SHOWNUMBERS, true),
@@ -252,7 +252,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             longTapForFullScreen = false,
             paginationPageSize = prefs.getInt(KEY_PAGINATION_PAGE_SIZE, 25).coerceIn(5, 50),
             moveSoundsEnabled = prefs.getBoolean(KEY_MOVE_SOUNDS_ENABLED, true),
-            lichessUsername = prefs.getString(KEY_LICHESS_USERNAME, "") ?: ""
+            lichessUsername = prefs.getString(KEY_LICHESS_USERNAME, "DrNykterstein") ?: ""
         )
     }
 
@@ -496,111 +496,11 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         private const val KEY_PAGINATION_PAGE_SIZE = "pagination_page_size"
         private const val KEY_MOVE_SOUNDS_ENABLED = "move_sounds_enabled"
 
-        // AI Analysis settings
-        private const val KEY_AI_REPORT_PROVIDERS = "ai_report_providers"
-        private const val KEY_AI_CHATGPT_API_KEY = "ai_chatgpt_api_key"
-        private const val KEY_AI_CHATGPT_MODEL = "ai_chatgpt_model"
-        private const val KEY_AI_CLAUDE_API_KEY = "ai_claude_api_key"
-        private const val KEY_AI_CLAUDE_MODEL = "ai_claude_model"
-        private const val KEY_AI_GEMINI_API_KEY = "ai_gemini_api_key"
-        private const val KEY_AI_GEMINI_MODEL = "ai_gemini_model"
-        private const val KEY_AI_GROK_API_KEY = "ai_grok_api_key"
-        private const val KEY_AI_GROK_MODEL = "ai_grok_model"
-        private const val KEY_AI_GROQ_API_KEY = "ai_groq_api_key"
-        private const val KEY_AI_GROQ_MODEL = "ai_groq_model"
-        private const val KEY_AI_DEEPSEEK_API_KEY = "ai_deepseek_api_key"
-        private const val KEY_AI_DEEPSEEK_MODEL = "ai_deepseek_model"
-
-        // AI prompts - Game prompts
-        private const val KEY_AI_CHATGPT_PROMPT = "ai_chatgpt_prompt"
-        private const val KEY_AI_CLAUDE_PROMPT = "ai_claude_prompt"
-        private const val KEY_AI_GEMINI_PROMPT = "ai_gemini_prompt"
-        private const val KEY_AI_GROK_PROMPT = "ai_grok_prompt"
-        private const val KEY_AI_GROQ_PROMPT = "ai_groq_prompt"
-        private const val KEY_AI_DEEPSEEK_PROMPT = "ai_deepseek_prompt"
-        private const val KEY_AI_MISTRAL_API_KEY = "ai_mistral_api_key"
-        private const val KEY_AI_MISTRAL_MODEL = "ai_mistral_model"
-        private const val KEY_AI_MISTRAL_PROMPT = "ai_mistral_prompt"
-        private const val KEY_AI_PERPLEXITY_API_KEY = "ai_perplexity_api_key"
-        private const val KEY_AI_PERPLEXITY_MODEL = "ai_perplexity_model"
-        private const val KEY_AI_PERPLEXITY_PROMPT = "ai_perplexity_prompt"
-        private const val KEY_AI_TOGETHER_API_KEY = "ai_together_api_key"
-        private const val KEY_AI_TOGETHER_MODEL = "ai_together_model"
-        private const val KEY_AI_TOGETHER_PROMPT = "ai_together_prompt"
-        private const val KEY_AI_OPENROUTER_API_KEY = "ai_openrouter_api_key"
-        private const val KEY_AI_OPENROUTER_MODEL = "ai_openrouter_model"
-        private const val KEY_AI_OPENROUTER_PROMPT = "ai_openrouter_prompt"
-        private const val KEY_AI_DUMMY_API_KEY = "ai_dummy_api_key"
-        private const val KEY_AI_DUMMY_MODEL = "ai_dummy_model"
-        private const val KEY_AI_DUMMY_MANUAL_MODELS = "ai_dummy_manual_models"
-
-        // AI prompts - Server player prompts
-        private const val KEY_AI_CHATGPT_SERVER_PLAYER_PROMPT = "ai_chatgpt_server_player_prompt"
-        private const val KEY_AI_CLAUDE_SERVER_PLAYER_PROMPT = "ai_claude_server_player_prompt"
-        private const val KEY_AI_GEMINI_SERVER_PLAYER_PROMPT = "ai_gemini_server_player_prompt"
-        private const val KEY_AI_GROK_SERVER_PLAYER_PROMPT = "ai_grok_server_player_prompt"
-        private const val KEY_AI_GROQ_SERVER_PLAYER_PROMPT = "ai_groq_server_player_prompt"
-        private const val KEY_AI_DEEPSEEK_SERVER_PLAYER_PROMPT = "ai_deepseek_server_player_prompt"
-        private const val KEY_AI_MISTRAL_SERVER_PLAYER_PROMPT = "ai_mistral_server_player_prompt"
-        private const val KEY_AI_PERPLEXITY_SERVER_PLAYER_PROMPT = "ai_perplexity_server_player_prompt"
-        private const val KEY_AI_TOGETHER_SERVER_PLAYER_PROMPT = "ai_together_server_player_prompt"
-        private const val KEY_AI_OPENROUTER_SERVER_PLAYER_PROMPT = "ai_openrouter_server_player_prompt"
-
-        // AI prompts - Other player prompts
-        private const val KEY_AI_CHATGPT_OTHER_PLAYER_PROMPT = "ai_chatgpt_other_player_prompt"
-        private const val KEY_AI_CLAUDE_OTHER_PLAYER_PROMPT = "ai_claude_other_player_prompt"
-        private const val KEY_AI_GEMINI_OTHER_PLAYER_PROMPT = "ai_gemini_other_player_prompt"
-        private const val KEY_AI_GROK_OTHER_PLAYER_PROMPT = "ai_grok_other_player_prompt"
-        private const val KEY_AI_GROQ_OTHER_PLAYER_PROMPT = "ai_groq_other_player_prompt"
-        private const val KEY_AI_DEEPSEEK_OTHER_PLAYER_PROMPT = "ai_deepseek_other_player_prompt"
-        private const val KEY_AI_MISTRAL_OTHER_PLAYER_PROMPT = "ai_mistral_other_player_prompt"
-        private const val KEY_AI_PERPLEXITY_OTHER_PLAYER_PROMPT = "ai_perplexity_other_player_prompt"
-        private const val KEY_AI_TOGETHER_OTHER_PLAYER_PROMPT = "ai_together_other_player_prompt"
-        private const val KEY_AI_OPENROUTER_OTHER_PLAYER_PROMPT = "ai_openrouter_other_player_prompt"
-
-        // AI model source (API or MANUAL)
-        private const val KEY_AI_CHATGPT_MODEL_SOURCE = "ai_chatgpt_model_source"
-        private const val KEY_AI_CLAUDE_MODEL_SOURCE = "ai_claude_model_source"
-        private const val KEY_AI_GEMINI_MODEL_SOURCE = "ai_gemini_model_source"
-        private const val KEY_AI_GROK_MODEL_SOURCE = "ai_grok_model_source"
-        private const val KEY_AI_GROQ_MODEL_SOURCE = "ai_groq_model_source"
-        private const val KEY_AI_DEEPSEEK_MODEL_SOURCE = "ai_deepseek_model_source"
-        private const val KEY_AI_MISTRAL_MODEL_SOURCE = "ai_mistral_model_source"
-        private const val KEY_AI_PERPLEXITY_MODEL_SOURCE = "ai_perplexity_model_source"
-        private const val KEY_AI_TOGETHER_MODEL_SOURCE = "ai_together_model_source"
-        private const val KEY_AI_OPENROUTER_MODEL_SOURCE = "ai_openrouter_model_source"
-
-        // AI manual models lists
-        private const val KEY_AI_CHATGPT_MANUAL_MODELS = "ai_chatgpt_manual_models"
-        private const val KEY_AI_CLAUDE_MANUAL_MODELS = "ai_claude_manual_models"
-        private const val KEY_AI_GEMINI_MANUAL_MODELS = "ai_gemini_manual_models"
-        private const val KEY_AI_GROK_MANUAL_MODELS = "ai_grok_manual_models"
-        private const val KEY_AI_GROQ_MANUAL_MODELS = "ai_groq_manual_models"
-        private const val KEY_AI_DEEPSEEK_MANUAL_MODELS = "ai_deepseek_manual_models"
-        private const val KEY_AI_MISTRAL_MANUAL_MODELS = "ai_mistral_manual_models"
-        private const val KEY_AI_PERPLEXITY_MANUAL_MODELS = "ai_perplexity_manual_models"
-        private const val KEY_AI_TOGETHER_MANUAL_MODELS = "ai_together_manual_models"
-        private const val KEY_AI_OPENROUTER_MANUAL_MODELS = "ai_openrouter_manual_models"
-
-        // AI report email
-        const val KEY_AI_REPORT_EMAIL = "ai_report_email"
-
         // AI prompts list (CRUD)
         private const val KEY_AI_PROMPTS_LIST = "ai_prompts_list"
 
         // AI app not installed - don't ask again
         private const val KEY_AI_APP_DONT_ASK_AGAIN = "ai_app_dont_ask_again"
-
-        // Cached AI models lists
-        private const val KEY_CACHED_CHATGPT_MODELS = "cached_chatgpt_models"
-        private const val KEY_CACHED_GEMINI_MODELS = "cached_gemini_models"
-        private const val KEY_CACHED_GROK_MODELS = "cached_grok_models"
-        private const val KEY_CACHED_GROQ_MODELS = "cached_groq_models"
-        private const val KEY_CACHED_DEEPSEEK_MODELS = "cached_deepseek_models"
-        private const val KEY_CACHED_MISTRAL_MODELS = "cached_mistral_models"
-        private const val KEY_CACHED_PERPLEXITY_MODELS = "cached_perplexity_models"
-        private const val KEY_CACHED_TOGETHER_MODELS = "cached_together_models"
-        private const val KEY_CACHED_OPENROUTER_MODELS = "cached_openrouter_models"
 
         // Last server user/name for reload
         private const val KEY_LAST_SERVER_USER = "last_server_user"
@@ -657,19 +557,5 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
 
     val lastServerName: String?
         get() = prefs.getString(KEY_LAST_SERVER_NAME, null)
-
-    // ============================================================================
-    // AI Report Providers Selection
-    // ============================================================================
-
-    fun loadAiReportProviders(): Set<String> {
-        val json = prefs.getString(KEY_AI_REPORT_PROVIDERS, null) ?: return emptySet()
-        return try {
-            val type = object : com.google.gson.reflect.TypeToken<Set<String>>() {}.type
-            gson.fromJson(json, type) ?: emptySet()
-        } catch (e: Exception) {
-            emptySet()
-        }
-    }
 
 }

@@ -216,10 +216,4 @@ object OpeningBook {
         return bestMatch
     }
 
-    /**
-     * Get the opening name from a list of moves, considering all moves played.
-     */
-    fun getOpeningName(moves: List<String>): String? {
-        return getOpeningName(moves, moves.size - 1)
-    }
 }

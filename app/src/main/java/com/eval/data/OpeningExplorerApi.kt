@@ -54,8 +54,4 @@ interface OpeningExplorerApi {
         @Query("ratings") ratings: String = "1600,1800,2000,2200,2500"
     ): Response<OpeningExplorerResponse>
 
-    @GET("masters")
-    suspend fun getMastersOpeningExplorer(
-        @Query("fen") fen: String
-    ): Response<OpeningExplorerResponse>
 }

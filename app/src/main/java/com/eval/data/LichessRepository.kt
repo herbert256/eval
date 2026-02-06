@@ -101,14 +101,6 @@ class ChessRepository(
     }
 
     /**
-     * Legacy method for backward compatibility - calls getLichessGames
-     */
-    suspend fun getRecentGames(
-        username: String,
-        maxGames: Int
-    ): Result<List<LichessGame>> = getLichessGames(username, maxGames)
-
-    /**
      * Get player info from Lichess
      */
     suspend fun getLichessPlayerInfo(username: String): Result<PlayerInfo> = withContext(Dispatchers.IO) {
@@ -244,7 +236,7 @@ class ChessRepository(
             // Parse the JSON array of streamers
             val streamers = mutableListOf<StreamerInfo>()
             try {
-                val jsonArray = com.google.gson.JsonParser().parse(responseBody).asJsonArray
+                val jsonArray = gson.fromJson(responseBody, com.google.gson.JsonArray::class.java)
                 for (element in jsonArray) {
                     val obj = element.asJsonObject
                     val username = obj.get("id")?.asString ?: continue
@@ -512,48 +504,6 @@ class ChessRepository(
                 ),
                 black = Player(
                     user = User(name = blackName, id = blackName.lowercase().replace(" ", "_")),
-                    rating = extractPgnTag(pgn, "BlackElo")?.toIntOrNull(),
-                    aiLevel = null
-                )
-            ),
-            pgn = pgn,
-            moves = null,
-            clock = null,
-            createdAt = null,
-            lastMoveAt = null
-        )
-    }
-
-    private fun convertBroadcastGameToLichessFormat(gameData: BroadcastGameData): LichessGame? {
-        val pgn = gameData.pgn ?: return null
-
-        // Parse player names from PGN tags if available
-        val whiteName = extractPgnTag(pgn, "White") ?: "White"
-        val blackName = extractPgnTag(pgn, "Black") ?: "Black"
-        val result = extractPgnTag(pgn, "Result")
-
-        val winner = when (result) {
-            "1-0" -> "white"
-            "0-1" -> "black"
-            else -> null
-        }
-
-        return LichessGame(
-            id = gameData.id ?: java.util.UUID.randomUUID().toString(),
-            rated = false,
-            variant = "standard",
-            speed = "classical",
-            perf = "classical",
-            status = if (result == "*") "started" else "ended",
-            winner = winner,
-            players = Players(
-                white = Player(
-                    user = User(name = whiteName, id = whiteName.lowercase()),
-                    rating = extractPgnTag(pgn, "WhiteElo")?.toIntOrNull(),
-                    aiLevel = null
-                ),
-                black = Player(
-                    user = User(name = blackName, id = blackName.lowercase()),
                     rating = extractPgnTag(pgn, "BlackElo")?.toIntOrNull(),
                     aiLevel = null
                 )
@@ -982,14 +932,6 @@ class ChessRepository(
         }
     }
 }
-
-/**
- * Broadcast game data from Lichess API
- */
-data class BroadcastGameData(
-    val id: String?,
-    val pgn: String?
-)
 
 /**
  * Unified leaderboard player from either Lichess or Chess.com

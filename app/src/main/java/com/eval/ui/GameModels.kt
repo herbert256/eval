@@ -81,11 +81,11 @@ data class StockfishSettings(
 // Default board colors
 const val DEFAULT_WHITE_SQUARE_COLOR = 0xFFF0D9B5L  // Light brown
 const val DEFAULT_BLACK_SQUARE_COLOR = 0xFFB58863L  // Dark brown
-const val DEFAULT_WHITE_PIECE_COLOR = 0xFFFFFFFF   // White
+const val DEFAULT_WHITE_PIECE_COLOR = 0xFFFFFFFFL   // White
 const val DEFAULT_BLACK_PIECE_COLOR = 0xFF000000L  // Black
 
 // Evaluation bar defaults
-const val DEFAULT_EVAL_BAR_COLOR_1 = 0xFFFFFFFF   // White (score color)
+const val DEFAULT_EVAL_BAR_COLOR_1 = 0xFFFFFFFFL   // White (score color)
 const val DEFAULT_EVAL_BAR_COLOR_2 = 0xFF000000L  // Black (filler color)
 
 // Graph color defaults

@@ -17,20 +17,15 @@ import com.eval.data.StreamerInfo
 import com.eval.data.TournamentInfo
 import com.eval.data.TvChannelInfo
 import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import com.eval.stockfish.StockfishEngine
 import org.json.JSONObject
 import com.eval.audio.MoveSoundPlayer
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = ChessRepository()

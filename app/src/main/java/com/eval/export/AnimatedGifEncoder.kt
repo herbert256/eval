@@ -202,7 +202,10 @@ class AnimatedGifEncoder {
         val h = img.height
         val scaledImg = if (w != width || h != height) {
             // create new image with right size/format
-            Bitmap.createScaledBitmap(img, width, height, true).also { image = it }
+            val scaled = Bitmap.createScaledBitmap(img, width, height, true)
+            img.recycle()
+            image = scaled
+            scaled
         } else {
             img
         }
@@ -535,7 +538,7 @@ private class NeuQuant(private val thePicture: ByteArray, private val lengthCoun
 
     private fun learn() {
         if (lengthCount < minPictureBytes) {
-            sampleFac
+            return
         }
         val alphadec = 30 + ((sampleFac - 1) / 3)
         val pix = thePicture
@@ -682,7 +685,7 @@ private class NeuQuant(private val thePicture: ByteArray, private val lengthCoun
     }
 
     private fun contest(b: Int, g: Int, r: Int): Int {
-        var bestd = Integer.MAX_VALUE.inv()
+        var bestd = Integer.MAX_VALUE
         var bestBiasd = bestd
         var bestPos = -1
         var bestBiasPos = bestPos

@@ -172,16 +172,6 @@ data class LichessBroadcastRound(
     val url: String?
 )
 
-data class LichessBroadcastPage(
-    val currentPage: Int?,
-    val maxPerPage: Int?,
-    val currentPageResults: List<LichessBroadcast>?,
-    val nbResults: Int?,
-    val previousPage: Int?,
-    val nextPage: Int?,
-    val nbPages: Int?
-)
-
 /**
  * Lichess TV channels
  */
