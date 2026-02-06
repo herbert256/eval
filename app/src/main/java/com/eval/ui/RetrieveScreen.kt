@@ -223,7 +223,6 @@ fun RetrieveScreen(
             }
         )
         RetrieveSubScreen.TOP_RANKINGS_LICHESS -> TopRankingsScreen(
-            viewModel = viewModel,
             uiState = uiState,
             onBack = { currentScreen = RetrieveSubScreen.LICHESS },
             onPlayerClick = { player ->
@@ -784,7 +783,6 @@ private fun LichessRetrieveScreen(
  */
 @Composable
 private fun TopRankingsScreen(
-    @Suppress("UNUSED_PARAMETER") viewModel: GameViewModel,
     uiState: GameUiState,
     onBack: () -> Unit,
     onPlayerClick: (LeaderboardPlayer) -> Unit
@@ -1853,7 +1851,6 @@ private fun StreamersScreen(
                     items(uiState.streamersList) { streamer ->
                         StreamerRow(
                             streamer = streamer,
-                            serverColor = serverColor,
                             onClick = { viewModel.selectStreamer(streamer) }
                         )
                     }
@@ -1866,7 +1863,6 @@ private fun StreamersScreen(
 @Composable
 private fun StreamerRow(
     streamer: com.eval.data.StreamerInfo,
-    @Suppress("UNUSED_PARAMETER") serverColor: Color,
     onClick: () -> Unit
 ) {
     Card(

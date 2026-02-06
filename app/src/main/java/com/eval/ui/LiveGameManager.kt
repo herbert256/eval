@@ -85,6 +85,7 @@ internal class LiveGameManager(
      */
     private fun handleLiveMove(moveData: StreamMoveData) {
         val uciMove = moveData.lm ?: return
+        if (uciMove.length < 4) return
         val state = getUiState()
         val currentMoves = state.moves.toMutableList()
         val currentMoveDetails = state.moveDetails.toMutableList()
@@ -124,9 +125,9 @@ internal class LiveGameManager(
             }
 
             val clockTime = if (currentMoves.size % 2 == 1) {
-                moveData.bc?.let { formatClockSeconds(it) }
-            } else {
                 moveData.wc?.let { formatClockSeconds(it) }
+            } else {
+                moveData.bc?.let { formatClockSeconds(it) }
             }
 
             val moveDetail = MoveDetails(

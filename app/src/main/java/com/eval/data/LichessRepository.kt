@@ -433,8 +433,7 @@ class ChessRepository(
     /**
      * Get games from a Lichess broadcast round
      */
-    @Suppress("UNUSED_PARAMETER")
-    suspend fun getLichessBroadcastGames(tournamentId: String, roundId: String): Result<List<LichessGame>> = withContext(Dispatchers.IO) {
+    suspend fun getLichessBroadcastGames(roundId: String): Result<List<LichessGame>> = withContext(Dispatchers.IO) {
         try {
             val response = lichessApi.getBroadcastRoundPgn(roundId)
 

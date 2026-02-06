@@ -188,7 +188,7 @@ internal class ContentSourceManager(
     }
 
     fun selectBroadcastRound(round: BroadcastRoundInfo) {
-        val broadcast = getUiState().selectedBroadcast ?: return
+        getUiState().selectedBroadcast ?: return
 
         updateUiState {
             copy(
@@ -199,7 +199,7 @@ internal class ContentSourceManager(
         }
 
         viewModelScope.launch {
-            when (val result = repository.getLichessBroadcastGames(broadcast.id, round.id)) {
+            when (val result = repository.getLichessBroadcastGames(round.id)) {
                 is Result.Success -> {
                     updateUiState {
                         copy(

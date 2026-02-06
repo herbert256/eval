@@ -35,7 +35,7 @@ class StockfishEngine(private val context: Context) {
         // Maximum number of moves to display in the principal variation line
         private const val MAX_PV_MOVES_DISPLAY = 8
         // Maximum safe hash table size in MB to prevent crashes on mobile devices
-        private const val MAX_SAFE_HASH_MB = 32
+        private const val MAX_SAFE_HASH_MB = 256
         // Maximum safe thread count for mobile devices
         private const val MAX_SAFE_THREADS = 4
     }
@@ -61,7 +61,6 @@ class StockfishEngine(private val context: Context) {
     private val pvLinesLock = Any()
 
     private var stockfishPath: String? = null
-    private var currentMultiPv = 1
     private val pvLines = mutableMapOf<Int, PvLine>()
     private var currentNodes: Long = 0
     private var currentNps: Long = 0
@@ -154,11 +153,13 @@ class StockfishEngine(private val context: Context) {
                 line = processReader?.readLine()
             }
 
-            // Send isready and wait for readyok
+            // Send isready and wait for readyok (with timeout)
             sendCommand("isready")
+            var readyAttempts = 0
             line = processReader?.readLine()
-            while (line != null && line != "readyok") {
+            while (line != null && line != "readyok" && readyAttempts < 50) {
                 line = processReader?.readLine()
+                readyAttempts++
             }
 
             _isReady.value = true
@@ -210,7 +211,6 @@ class StockfishEngine(private val context: Context) {
             android.util.Log.w("StockfishEngine", "Settings capped for stability: Hash ${hashMb}→${safeHashMb}MB, Threads ${threads}→${safeThreads}")
         }
 
-        currentMultiPv = multiPv
         sendCommand("setoption name Threads value $safeThreads")
         sendCommand("setoption name Hash value $safeHashMb")
         sendCommand("setoption name MultiPV value $multiPv")
@@ -428,16 +428,16 @@ class StockfishEngine(private val context: Context) {
             )
 
             // Update pvLines and emit result (synchronized for thread safety)
-            val sortedLines = synchronized(pvLinesLock) {
+            synchronized(pvLinesLock) {
                 pvLines[multipv] = pvLine
-                pvLines.values.sortedBy { it.multipv }
+                val sortedLines = pvLines.values.sortedBy { it.multipv }
+                _analysisResult.value = AnalysisResult(
+                    depth = depth,
+                    nodes = currentNodes,
+                    nps = currentNps,
+                    lines = sortedLines
+                )
             }
-            _analysisResult.value = AnalysisResult(
-                depth = depth,
-                nodes = currentNodes,
-                nps = currentNps,
-                lines = sortedLines
-            )
         } catch (e: Exception) {
             e.printStackTrace()
         }

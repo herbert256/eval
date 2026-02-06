@@ -40,8 +40,7 @@ fun EvalNavHost(
                 viewModel = viewModel,
                 onNavigateToSettings = { navController.navigate(NavRoutes.SETTINGS) },
                 onNavigateToHelp = { navController.navigate(NavRoutes.HELP) },
-                onNavigateToRetrieve = { navController.navigate(NavRoutes.RETRIEVE) },
-                onNavigateToPlayerInfo = { navController.navigate(NavRoutes.PLAYER_INFO) }
+                onNavigateToRetrieve = { navController.navigate(NavRoutes.RETRIEVE) }
             )
         }
 

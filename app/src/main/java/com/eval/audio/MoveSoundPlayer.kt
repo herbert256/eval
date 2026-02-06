@@ -39,7 +39,6 @@ class MoveSoundPlayer(context: Context) {
             captureSound = soundPool.load(context, com.eval.R.raw.capture, 1)
             checkSound = soundPool.load(context, com.eval.R.raw.check, 1)
             castleSound = soundPool.load(context, com.eval.R.raw.castle, 1)
-            isLoaded = true
         } catch (e: Exception) {
             android.util.Log.e("MoveSoundPlayer", "Error loading sounds: ${e.message}")
             isLoaded = false

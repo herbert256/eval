@@ -102,10 +102,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         return savedVersionCode != currentVersion
     }
 
-    private fun markFirstRunComplete() {
-        settingsPrefs.setFirstGameRetrievedVersion(getAppVersionCode())
-    }
-
     private fun resetSettingsToDefaults() {
         settingsPrefs.resetAllSettingsToDefaults()
     }
@@ -322,32 +318,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.value = _uiState.value.copy(stockfishReady = ready)
         }
 
-        viewModelScope.launch {
-            stockfish.analysisResult.collect { result ->
-                if (_uiState.value.currentStage != AnalysisStage.MANUAL) {
-                    if (result != null) {
-                        val expectedFen = analysisOrchestrator.currentAnalysisFen
-                        if (expectedFen != null && expectedFen == _uiState.value.currentBoard.getFen()) {
-                            _uiState.value = _uiState.value.copy(
-                                analysisResult = result,
-                                analysisResultFen = expectedFen
-                            )
-                        }
-                    } else {
-                        _uiState.value = _uiState.value.copy(
-                            analysisResult = null,
-                            analysisResultFen = null
-                        )
-                    }
-                }
-            }
-        }
-
-        viewModelScope.launch {
-            stockfish.isReady.collect { ready ->
-                _uiState.value = _uiState.value.copy(stockfishReady = ready)
-            }
-        }
+        // Collectors are already set up in init block, no need to duplicate
     }
 
     // ===== GAME LOADING DELEGATION =====

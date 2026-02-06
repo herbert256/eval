@@ -42,9 +42,7 @@ fun GameScreenContent(
     viewModel: GameViewModel = viewModel(),
     onNavigateToSettings: () -> Unit = {},
     onNavigateToHelp: () -> Unit = {},
-    onNavigateToRetrieve: () -> Unit = {},
-    @Suppress("UNUSED_PARAMETER") onNavigateToPlayerInfo: () -> Unit = {},
-    onNavigateToAiReports: () -> Unit = {}
+    onNavigateToRetrieve: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
@@ -159,7 +157,6 @@ fun GameScreenContent(
     if (uiState.showSharePositionDialog) {
         val gameSiteUrl = viewModel.getGameSiteUrl()
         SharePositionDialog(
-            fen = viewModel.getCurrentFen(),
             gameSiteUrl = gameSiteUrl,
             onCopyFen = { viewModel.copyFenToClipboard(context) },
             onShare = { viewModel.sharePositionAsText(context) },
@@ -1379,7 +1376,6 @@ private fun buildPgnHtml(uiState: GameUiState): String {
  */
 @Composable
 fun SharePositionDialog(
-    fen: String,
     gameSiteUrl: String?,
     onCopyFen: () -> Unit,
     onShare: () -> Unit,

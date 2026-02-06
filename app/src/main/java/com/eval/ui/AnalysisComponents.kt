@@ -56,7 +56,6 @@ fun EvaluationGraph(
     modifier: Modifier = Modifier
 ) {
     // Always show scores from WHITE's perspective (positive = good for white)
-    val scorePerspective = 1f
     val greenColor = Color(graphSettings.plusScoreColor.toInt())
     val redColor = Color(graphSettings.negativeScoreColor.toInt())
     val lineColor = Color(0xFF666666)
@@ -136,10 +135,9 @@ fun EvaluationGraph(
                 } else {
                     score.score
                 }
-                val adjustedScore = rawScore * scorePerspective
-                val clampedScore = adjustedScore.coerceIn(-maxScore, maxScore)
+                val clampedScore = rawScore.coerceIn(-maxScore, maxScore)
                 val y = centerY - (clampedScore / maxScore) * (height / 2 - 4)
-                points.add(GraphPoint(x, y, adjustedScore))
+                points.add(GraphPoint(x, y, rawScore))
             }
         }
 
@@ -216,10 +214,9 @@ fun EvaluationGraph(
                 } else {
                     score.score
                 }
-                val adjustedScore = rawScore * scorePerspective
-                val clampedScore = adjustedScore.coerceIn(-maxScore, maxScore)
+                val clampedScore = rawScore.coerceIn(-maxScore, maxScore)
                 val y = centerY - (clampedScore / maxScore) * (height / 2 - 4)
-                pointsAnalyse.add(GraphPoint(x, y, adjustedScore))
+                pointsAnalyse.add(GraphPoint(x, y, rawScore))
             }
         }
 
@@ -456,7 +453,6 @@ fun ScoreDifferenceGraph(
     modifier: Modifier = Modifier
 ) {
     // Always show scores from WHITE's perspective (positive = good for white)
-    val scorePerspective = 1f
     val goodMoveColor = Color(graphSettings.plusScoreColor.toInt())
     val blunderColor = Color(graphSettings.negativeScoreColor.toInt())
     val lineColor = Color(0xFF666666)
@@ -572,7 +568,7 @@ fun ScoreDifferenceGraph(
                 val rawDiff: Float = when {
                     // Both +M* (winning mate for both)
                     prevIsPositiveMate && currIsPositiveMate -> when {
-                        currMValue == prevMValue -> -1f
+                        currMValue == prevMValue -> 0f
                         currMValue == prevMValue - 1 -> 0f
                         currMValue > prevMValue -> -(1 + (currMValue - prevMValue)).toFloat().coerceAtMost(maxDiff)
                         currMValue < prevMValue -> ((prevMValue - currMValue) + 1).toFloat().coerceAtMost(3f)
@@ -581,7 +577,7 @@ fun ScoreDifferenceGraph(
 
                     // Both -M* (losing mate for both)
                     prevIsNegativeMate && currIsNegativeMate -> when {
-                        currMValue == prevMValue -> -1f
+                        currMValue == prevMValue -> 0f
                         currMValue == prevMValue - 1 -> 0f
                         currMValue > prevMValue -> (1 + (currMValue - prevMValue)).toFloat().coerceAtMost(maxDiff)
                         currMValue < prevMValue -> -((prevMValue - currMValue) + 1).toFloat().coerceAtLeast(-maxDiff)
@@ -618,14 +614,13 @@ fun ScoreDifferenceGraph(
                     else -> 0f
                 }
 
-                val diff = rawDiff * scorePerspective
-                val clampedDiff = diff.coerceIn(-maxDiff, maxDiff)
+                val clampedDiff = rawDiff.coerceIn(-maxDiff, maxDiff)
                 val barHeight = kotlin.math.abs(clampedDiff / maxDiff) * (height / 2 - 4)
 
                 val barX = moveIndex * barSpacing + (barSpacing - barWidth) / 2
-                val color = if (diff >= 0) goodMoveColor else blunderColor
+                val color = if (rawDiff >= 0) goodMoveColor else blunderColor
 
-                if (diff >= 0) {
+                if (rawDiff >= 0) {
                     // Bar goes up from center
                     drawRect(
                         color = color,
