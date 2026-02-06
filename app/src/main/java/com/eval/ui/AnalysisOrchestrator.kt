@@ -300,16 +300,22 @@ internal class AnalysisOrchestrator(
     }
 
     /**
-     * Find the move index with the biggest score change compared to the previous move.
+     * Merge preview and analyse scores: analyse scores override preview scores where available.
      */
-    fun findBiggestScoreChangeMove(): Int {
+    private fun getMergedScores(): Map<Int, MoveScore> {
         val state = getUiState()
-        // Merge scores: use analyseScores where available, otherwise previewScores
-        val scores = if (state.analyseScores.isNotEmpty()) {
+        return if (state.analyseScores.isNotEmpty()) {
             state.previewScores + state.analyseScores
         } else {
             state.previewScores
         }
+    }
+
+    /**
+     * Find the move index with the biggest score change compared to the previous move.
+     */
+    fun findBiggestScoreChangeMove(): Int {
+        val scores = getMergedScores()
         if (scores.size < 2) return 0
 
         var maxChange = 0f
@@ -336,13 +342,7 @@ internal class AnalysisOrchestrator(
      * Calculate move qualities based on evaluation changes.
      */
     fun calculateMoveQualities(): Map<Int, MoveQuality> {
-        val state = getUiState()
-        // Merge scores: use analyseScores where available, otherwise previewScores
-        val scores = if (state.analyseScores.isNotEmpty()) {
-            state.previewScores + state.analyseScores
-        } else {
-            state.previewScores
-        }
+        val scores = getMergedScores()
         if (scores.isEmpty()) return emptyMap()
 
         val qualities = mutableMapOf<Int, MoveQuality>()

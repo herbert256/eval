@@ -12,6 +12,33 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
 
     private val gson = Gson()
 
+    /**
+     * Generic helper to load an enum value from SharedPreferences by name.
+     * Returns the default value on missing key or invalid name.
+     */
+    private inline fun <reified T : Enum<T>> loadEnum(key: String, default: T): T {
+        val name = prefs.getString(key, default.name) ?: default.name
+        return try {
+            enumValueOf<T>(name)
+        } catch (e: IllegalArgumentException) {
+            default
+        }
+    }
+
+    /**
+     * Generic helper to load a JSON list from SharedPreferences.
+     * Returns emptyList() on missing key or parse failure.
+     */
+    private inline fun <reified T> loadJsonList(key: String): List<T> {
+        val json = prefs.getString(key, null) ?: return emptyList()
+        return try {
+            val type = object : TypeToken<List<T>>() {}.type
+            gson.fromJson(json, type) ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
     // ============================================================================
     // Username and Server Properties
     // ============================================================================
@@ -58,11 +85,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
                 hashMb = prefs.getInt(KEY_MANUAL_HASH, 128),
                 multiPv = prefs.getInt(KEY_MANUAL_MULTIPV, 3),
                 useNnue = prefs.getBoolean(KEY_MANUAL_NNUE, true),
-                arrowMode = try {
-                    ArrowMode.valueOf(prefs.getString(KEY_MANUAL_ARROW_MODE, ArrowMode.NONE.name) ?: ArrowMode.NONE.name)
-                } catch (e: IllegalArgumentException) {
-                    ArrowMode.NONE
-                },
+                arrowMode = loadEnum(KEY_MANUAL_ARROW_MODE, ArrowMode.NONE),
                 numArrows = prefs.getInt(KEY_MANUAL_NUMARROWS, 4),
                 showArrowNumbers = prefs.getBoolean(KEY_MANUAL_SHOWNUMBERS, true),
                 whiteArrowColor = prefs.getLong(KEY_MANUAL_WHITE_ARROW_COLOR, DEFAULT_WHITE_ARROW_COLOR),
@@ -274,13 +297,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
      * Returns empty list if none configured.
      */
     fun loadAiPrompts(): List<AiPromptEntry> {
-        val json = prefs.getString(KEY_AI_PROMPTS_LIST, null) ?: return emptyList()
-        return try {
-            val type = object : TypeToken<List<AiPromptEntry>>() {}.type
-            gson.fromJson<List<AiPromptEntry>>(json, type) ?: emptyList()
-        } catch (e: Exception) {
-            emptyList()
-        }
+        return loadJsonList(KEY_AI_PROMPTS_LIST)
     }
 
     /**
@@ -520,13 +537,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
     // ============================================================================
 
     fun loadFenHistory(): List<String> {
-        val json = prefs.getString(KEY_FEN_HISTORY, null) ?: return emptyList()
-        return try {
-            val type = object : com.google.gson.reflect.TypeToken<List<String>>() {}.type
-            gson.fromJson(json, type) ?: emptyList()
-        } catch (e: Exception) {
-            emptyList()
-        }
+        return loadJsonList(KEY_FEN_HISTORY)
     }
 
     fun saveFenToHistory(fen: String) {

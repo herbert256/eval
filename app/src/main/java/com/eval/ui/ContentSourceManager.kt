@@ -23,6 +23,17 @@ internal class ContentSourceManager(
     private val viewModelScope: CoroutineScope,
     private val loadGame: (LichessGame, ChessServer?, String?) -> Unit
 ) {
+    private fun <T> handleApiResult(
+        result: Result<T>,
+        onSuccess: GameUiState.(T) -> GameUiState,
+        onError: GameUiState.(String) -> GameUiState
+    ) {
+        when (result) {
+            is Result.Success -> updateUiState { onSuccess(result.data) }
+            is Result.Error -> updateUiState { onError(result.message) }
+        }
+    }
+
     // ==================== TOURNAMENTS ====================
 
     fun showTournaments(server: ChessServer) {
@@ -40,24 +51,11 @@ internal class ContentSourceManager(
 
         viewModelScope.launch {
             if (server == ChessServer.LICHESS) {
-                when (val result = repository.getLichessTournaments()) {
-                    is Result.Success -> {
-                        updateUiState {
-                            copy(
-                                tournamentsLoading = false,
-                                tournamentsList = result.data
-                            )
-                        }
-                    }
-                    is Result.Error -> {
-                        updateUiState {
-                            copy(
-                                tournamentsLoading = false,
-                                tournamentsError = result.message
-                            )
-                        }
-                    }
-                }
+                handleApiResult(
+                    result = repository.getLichessTournaments(),
+                    onSuccess = { copy(tournamentsLoading = false, tournamentsList = it) },
+                    onError = { copy(tournamentsLoading = false, tournamentsError = it) }
+                )
             } else {
                 updateUiState {
                     copy(
@@ -79,24 +77,11 @@ internal class ContentSourceManager(
         }
 
         viewModelScope.launch {
-            when (val result = repository.getLichessTournamentGames(tournament.id)) {
-                is Result.Success -> {
-                    updateUiState {
-                        copy(
-                            tournamentGamesLoading = false,
-                            tournamentGames = result.data
-                        )
-                    }
-                }
-                is Result.Error -> {
-                    updateUiState {
-                        copy(
-                            tournamentGamesLoading = false,
-                            tournamentsError = result.message
-                        )
-                    }
-                }
-            }
+            handleApiResult(
+                result = repository.getLichessTournamentGames(tournament.id),
+                onSuccess = { copy(tournamentGamesLoading = false, tournamentGames = it) },
+                onError = { copy(tournamentGamesLoading = false, tournamentsError = it) }
+            )
         }
     }
 
@@ -143,24 +128,11 @@ internal class ContentSourceManager(
         }
 
         viewModelScope.launch {
-            when (val result = repository.getLichessBroadcasts()) {
-                is Result.Success -> {
-                    updateUiState {
-                        copy(
-                            broadcastsLoading = false,
-                            broadcastsList = result.data
-                        )
-                    }
-                }
-                is Result.Error -> {
-                    updateUiState {
-                        copy(
-                            broadcastsLoading = false,
-                            broadcastsError = result.message
-                        )
-                    }
-                }
-            }
+            handleApiResult(
+                result = repository.getLichessBroadcasts(),
+                onSuccess = { copy(broadcastsLoading = false, broadcastsList = it) },
+                onError = { copy(broadcastsLoading = false, broadcastsError = it) }
+            )
         }
     }
 
@@ -199,24 +171,11 @@ internal class ContentSourceManager(
         }
 
         viewModelScope.launch {
-            when (val result = repository.getLichessBroadcastGames(round.id)) {
-                is Result.Success -> {
-                    updateUiState {
-                        copy(
-                            broadcastGamesLoading = false,
-                            broadcastGames = result.data
-                        )
-                    }
-                }
-                is Result.Error -> {
-                    updateUiState {
-                        copy(
-                            broadcastGamesLoading = false,
-                            broadcastsError = result.message
-                        )
-                    }
-                }
-            }
+            handleApiResult(
+                result = repository.getLichessBroadcastGames(round.id),
+                onSuccess = { copy(broadcastGamesLoading = false, broadcastGames = it) },
+                onError = { copy(broadcastGamesLoading = false, broadcastsError = it) }
+            )
         }
     }
 
@@ -278,24 +237,11 @@ internal class ContentSourceManager(
 
         viewModelScope.launch {
             try {
-                when (val result = repository.getLichessTvChannels()) {
-                    is Result.Success -> {
-                        updateUiState {
-                            copy(
-                                tvLoading = false,
-                                tvChannels = result.data
-                            )
-                        }
-                    }
-                    is Result.Error -> {
-                        updateUiState {
-                            copy(
-                                tvLoading = false,
-                                tvError = result.message
-                            )
-                        }
-                    }
-                }
+                handleApiResult(
+                    result = repository.getLichessTvChannels(),
+                    onSuccess = { copy(tvLoading = false, tvChannels = it) },
+                    onError = { copy(tvLoading = false, tvError = it) }
+                )
             } catch (e: Exception) {
                 updateUiState {
                     copy(
@@ -394,24 +340,11 @@ internal class ContentSourceManager(
         }
 
         viewModelScope.launch {
-            when (val result = repository.getLichessStreamers()) {
-                is Result.Success -> {
-                    updateUiState {
-                        copy(
-                            streamersLoading = false,
-                            streamersList = result.data
-                        )
-                    }
-                }
-                is Result.Error -> {
-                    updateUiState {
-                        copy(
-                            streamersLoading = false,
-                            errorMessage = result.message
-                        )
-                    }
-                }
-            }
+            handleApiResult(
+                result = repository.getLichessStreamers(),
+                onSuccess = { copy(streamersLoading = false, streamersList = it) },
+                onError = { copy(streamersLoading = false, errorMessage = it) }
+            )
         }
     }
 
@@ -507,28 +440,23 @@ internal class ContentSourceManager(
     }
 
     private suspend fun fetchPlayerGames(username: String, @Suppress("UNUSED_PARAMETER") server: ChessServer, count: Int) {
-        val gamesResult = repository.getLichessGames(username, count)
-        when (gamesResult) {
-            is Result.Success -> {
-                val fetchedGames = gamesResult.data
-                updateUiState {
-                    copy(
-                        playerGames = fetchedGames,
-                        playerGamesLoading = false,
-                        playerGamesHasMore = fetchedGames.size >= count
-                    )
-                }
+        handleApiResult(
+            result = repository.getLichessGames(username, count),
+            onSuccess = { fetchedGames ->
+                copy(
+                    playerGames = fetchedGames,
+                    playerGamesLoading = false,
+                    playerGamesHasMore = fetchedGames.size >= count
+                )
+            },
+            onError = {
+                copy(
+                    playerGames = emptyList(),
+                    playerGamesLoading = false,
+                    playerGamesHasMore = false
+                )
             }
-            is Result.Error -> {
-                updateUiState {
-                    copy(
-                        playerGames = emptyList(),
-                        playerGamesLoading = false,
-                        playerGamesHasMore = false
-                    )
-                }
-            }
-        }
+        )
     }
 
     fun nextPlayerGamesPage() {
@@ -546,29 +474,24 @@ internal class ContentSourceManager(
 
             viewModelScope.launch {
                 val newCount = currentGames.size + pageSize
-                val gamesResult = repository.getLichessGames(playerInfo.username, newCount)
-                when (gamesResult) {
-                    is Result.Success -> {
-                        val fetchedGames = gamesResult.data
+                handleApiResult(
+                    result = repository.getLichessGames(playerInfo.username, newCount),
+                    onSuccess = { fetchedGames ->
                         val gotMoreGames = fetchedGames.size > currentGames.size
-                        updateUiState {
-                            copy(
-                                playerGames = fetchedGames,
-                                playerGamesLoading = false,
-                                playerGamesPage = if (gotMoreGames) currentPage + 1 else currentPage,
-                                playerGamesHasMore = fetchedGames.size >= newCount
-                            )
-                        }
+                        copy(
+                            playerGames = fetchedGames,
+                            playerGamesLoading = false,
+                            playerGamesPage = if (gotMoreGames) currentPage + 1 else currentPage,
+                            playerGamesHasMore = fetchedGames.size >= newCount
+                        )
+                    },
+                    onError = {
+                        copy(
+                            playerGamesLoading = false,
+                            playerGamesHasMore = false
+                        )
                     }
-                    is Result.Error -> {
-                        updateUiState {
-                            copy(
-                                playerGamesLoading = false,
-                                playerGamesHasMore = false
-                            )
-                        }
-                    }
-                }
+                )
             }
         } else if (nextPageStartIndex < currentGames.size) {
             updateUiState { copy(playerGamesPage = currentPage + 1) }
@@ -627,25 +550,11 @@ internal class ContentSourceManager(
         viewModelScope.launch {
             val result = repository.getLichessLeaderboard()
 
-            when (result) {
-                is Result.Success -> {
-                    updateUiState {
-                        copy(
-                            topRankingsLoading = false,
-                            topRankings = result.data,
-                            topRankingsError = null
-                        )
-                    }
-                }
-                is Result.Error -> {
-                    updateUiState {
-                        copy(
-                            topRankingsLoading = false,
-                            topRankingsError = result.message
-                        )
-                    }
-                }
-            }
+            handleApiResult(
+                result = result,
+                onSuccess = { copy(topRankingsLoading = false, topRankings = it, topRankingsError = null) },
+                onError = { copy(topRankingsLoading = false, topRankingsError = it) }
+            )
         }
     }
 

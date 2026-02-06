@@ -58,7 +58,7 @@ fun EvaluationGraph(
     // Always show scores from WHITE's perspective (positive = good for white)
     val greenColor = Color(graphSettings.plusScoreColor.toInt())
     val redColor = Color(graphSettings.negativeScoreColor.toInt())
-    val lineColor = Color(0xFF666666)
+    val lineColor = AppColors.DimGray
     val currentMoveColor = Color(graphSettings.verticalLineColor.toInt())
     val analyseColor = Color(graphSettings.analyseLineColor.toInt())
 
@@ -304,7 +304,7 @@ fun TimeUsageGraph(
     modifier: Modifier = Modifier
 ) {
     val whiteTimeColor = Color(0xFFFFFFFF)  // White for white's time
-    val blackTimeColor = Color(0xFF888888)  // Gray for black's time
+    val blackTimeColor = AppColors.MediumGray  // Gray for black's time
     val lineColor = Color(0xFF444444)
     val currentMoveColor = Color(graphSettings.verticalLineColor.toInt())
 
@@ -455,7 +455,7 @@ fun ScoreDifferenceGraph(
     // Always show scores from WHITE's perspective (positive = good for white)
     val goodMoveColor = Color(graphSettings.plusScoreColor.toInt())
     val blunderColor = Color(graphSettings.negativeScoreColor.toInt())
-    val lineColor = Color(0xFF666666)
+    val lineColor = AppColors.DimGray
     val currentMoveColor = Color(graphSettings.verticalLineColor.toInt())
 
     var graphWidth by remember { mutableStateOf(0f) }
@@ -690,7 +690,7 @@ fun AnalysisPanel(
                     text = "Stockfish 17.1",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFFAAAAAA)
+                    color = AppColors.SubtleText
                 )
                 // Format nodes with K or M suffix
                 val nodesFormatted = when {
@@ -701,7 +701,7 @@ fun AnalysisPanel(
                 Text(
                     text = "Depth: ${result.depth}  Nodes: $nodesFormatted",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF888888)
+                    color = AppColors.MediumGray
                 )
             }
             result.lines.forEach { line ->
@@ -743,12 +743,12 @@ private fun PvLineRow(
     }
 
     val scoreColor = when {
-        line.isMate -> if (adjustedMateIn > 0) Color(0xFF00E676) else Color(0xFFFF5252)
+        line.isMate -> if (adjustedMateIn > 0) AppColors.PositiveGreen else AppColors.NegativeRed
         else -> {
             when {
-                adjustedScore > 0.3f -> Color(0xFF00E676)  // Green - good for player
-                adjustedScore < -0.3f -> Color(0xFFFF5252)  // Red - bad for player
-                else -> Color(0xFF6B9BFF)  // Blue - equal
+                adjustedScore > 0.3f -> AppColors.PositiveGreen  // Green - good for player
+                adjustedScore < -0.3f -> AppColors.NegativeRed  // Red - bad for player
+                else -> AppColors.AccentBlue  // Blue - equal
             }
         }
     }
@@ -793,7 +793,7 @@ private fun PvLineRow(
                 Text(
                     text = formattedMove,
                     fontSize = 14.sp,
-                    color = Color(0xFFCCCCCC),
+                    color = AppColors.LightGray,
                     modifier = Modifier
                         .clip(RoundedCornerShape(3.dp))
                         .clickable { onMoveClick(index) }

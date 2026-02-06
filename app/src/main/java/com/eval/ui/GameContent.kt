@@ -123,7 +123,7 @@ fun GameContent(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF555555), RoundedCornerShape(8.dp))
+                .background(AppColors.DarkGray, RoundedCornerShape(8.dp))
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -210,10 +210,10 @@ fun GameContent(
                         if (displayScore.score >= 0) "+%.1f".format(displayScore.score) else "%.1f".format(displayScore.score)
                     }
                     val scoreColor = when {
-                        displayScore.isMate && displayScore.mateIn > 0 -> Color(0xFF00E676)  // Green for player winning mate
-                        displayScore.isMate && displayScore.mateIn < 0 -> Color(0xFFFF5252)  // Red for player losing mate
-                        displayScore.score > 0.1f -> Color(0xFF00E676)  // Green for player better
-                        displayScore.score < -0.1f -> Color(0xFFFF5252)  // Red for player worse
+                        displayScore.isMate && displayScore.mateIn > 0 -> AppColors.PositiveGreen  // Green for player winning mate
+                        displayScore.isMate && displayScore.mateIn < 0 -> AppColors.NegativeRed  // Red for player losing mate
+                        displayScore.score > 0.1f -> AppColors.PositiveGreen  // Green for player better
+                        displayScore.score < -0.1f -> AppColors.NegativeRed  // Red for player worse
                         else -> Color(0xFF64B5F6)  // Bright blue for equal
                     }
 
@@ -224,8 +224,8 @@ fun GameContent(
                         val delta = displayScore.score - prevDisplayScore.score
                         deltaText = if (delta >= 0) "+%.1f".format(delta) else "%.1f".format(delta)
                         deltaColor = when {
-                            delta > 0.1f -> Color(0xFF00E676)  // Green - gained advantage
-                            delta < -0.1f -> Color(0xFFFF5252)  // Red - lost advantage
+                            delta > 0.1f -> AppColors.PositiveGreen  // Green - gained advantage
+                            delta < -0.1f -> AppColors.NegativeRed  // Red - lost advantage
                             else -> Color(0xFF64B5F6)  // Blue - neutral
                         }
                     } else {
@@ -452,10 +452,10 @@ fun GameContent(
                             if (bestLine.score >= 0) "+%.1f".format(bestLine.score) else "%.1f".format(bestLine.score)
                         }
                         val scoreColor = when {
-                            bestLine.isMate && bestLine.mateIn > 0 -> Color(0xFF00E676)
-                            bestLine.isMate && bestLine.mateIn < 0 -> Color(0xFFFF5252)
-                            bestLine.score > 0.5f -> Color(0xFF00E676)
-                            bestLine.score < -0.5f -> Color(0xFFFF5252)
+                            bestLine.isMate && bestLine.mateIn > 0 -> AppColors.PositiveGreen
+                            bestLine.isMate && bestLine.mateIn < 0 -> AppColors.NegativeRed
+                            bestLine.score > 0.5f -> AppColors.PositiveGreen
+                            bestLine.score < -0.5f -> AppColors.NegativeRed
                             else -> Color(0xFF64B5F6)
                         }
                         Text(
@@ -474,7 +474,7 @@ fun GameContent(
                             Text(
                                 text = move,
                                 fontSize = 14.sp,
-                                color = Color(0xFFCCCCCC)
+                                color = AppColors.LightGray
                             )
                         }
                     }
@@ -508,7 +508,7 @@ fun GameContent(
             Text(
                 text = displayOpeningText,
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFFAAAAAA),
+                color = AppColors.SubtleText,
                 fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
@@ -860,7 +860,7 @@ fun GameContent(
                         Button(
                             onClick = { viewModel.toggleAutoFollowLive() },
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = if (uiState.autoFollowLive) Color(0xFF4CAF50) else Color(0xFF404040)
+                                containerColor = if (uiState.autoFollowLive) Color(0xFF4CAF50) else AppColors.Divider
                             ),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                         ) {
@@ -875,7 +875,7 @@ fun GameContent(
                     Box(
                         modifier = Modifier
                             .size(36.dp)
-                            .background(Color(0xFF404040), CircleShape)
+                            .background(AppColors.Divider, CircleShape)
                             .clickable { viewModel.showSharePositionDialog() },
                         contentAlignment = Alignment.Center
                     ) {
@@ -886,7 +886,7 @@ fun GameContent(
                     Box(
                         modifier = Modifier
                             .size(36.dp)
-                            .background(Color(0xFF404040), CircleShape)
+                            .background(AppColors.Divider, CircleShape)
                             .clickable { viewModel.cycleArrowMode() },
                         contentAlignment = Alignment.Center
                     ) {
@@ -897,7 +897,7 @@ fun GameContent(
                     Box(
                         modifier = Modifier
                             .size(36.dp)
-                            .background(Color(0xFF404040), CircleShape)
+                            .background(AppColors.Divider, CircleShape)
                             .clickable { viewModel.flipBoard() },
                         contentAlignment = Alignment.Center
                     ) {
@@ -1006,12 +1006,12 @@ fun GameContent(
 
                 // White player
                 Row(modifier = Modifier.fillMaxWidth()) {
-                    Text("White:", fontSize = 13.sp, color = Color(0xFFAAAAAA), modifier = Modifier.width(labelWidth))
+                    Text("White:", fontSize = 13.sp, color = AppColors.SubtleText, modifier = Modifier.width(labelWidth))
                     Text("$whiteName${whiteRating?.let { " ($it)" } ?: ""}", fontSize = 13.sp, color = Color.White)
                 }
                 // Black player
                 Row(modifier = Modifier.fillMaxWidth()) {
-                    Text("Black:", fontSize = 13.sp, color = Color(0xFFAAAAAA), modifier = Modifier.width(labelWidth))
+                    Text("Black:", fontSize = 13.sp, color = AppColors.SubtleText, modifier = Modifier.width(labelWidth))
                     Text("$blackName${blackRating?.let { " ($it)" } ?: ""}", fontSize = 13.sp, color = Color.White)
                 }
                 // Format
@@ -1025,13 +1025,13 @@ fun GameContent(
                     if (game.rated) append(" • Rated") else append(" • Casual")
                 }
                 Row(modifier = Modifier.fillMaxWidth()) {
-                    Text("Format:", fontSize = 13.sp, color = Color(0xFFAAAAAA), modifier = Modifier.width(labelWidth))
+                    Text("Format:", fontSize = 13.sp, color = AppColors.SubtleText, modifier = Modifier.width(labelWidth))
                     Text(formatText, fontSize = 13.sp, color = Color.White)
                 }
                 // Opening
                 uiState.openingName?.let { opening ->
                     Row(modifier = Modifier.fillMaxWidth()) {
-                        Text("Opening:", fontSize = 13.sp, color = Color(0xFFAAAAAA), modifier = Modifier.width(labelWidth))
+                        Text("Opening:", fontSize = 13.sp, color = AppColors.SubtleText, modifier = Modifier.width(labelWidth))
                         Text(opening, fontSize = 13.sp, color = Color.White)
                     }
                 }
@@ -1040,7 +1040,7 @@ fun GameContent(
                     val date = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
                         .format(java.util.Date(timestamp))
                     Row(modifier = Modifier.fillMaxWidth()) {
-                        Text("Date:", fontSize = 13.sp, color = Color(0xFFAAAAAA), modifier = Modifier.width(labelWidth))
+                        Text("Date:", fontSize = 13.sp, color = AppColors.SubtleText, modifier = Modifier.width(labelWidth))
                         Text(date, fontSize = 13.sp, color = Color.White)
                     }
                 }
@@ -1054,7 +1054,7 @@ fun GameContent(
                         else -> if (game.status == "draw" || game.status == "stalemate") "½-½" else game.status
                     }
                     Row(modifier = Modifier.fillMaxWidth()) {
-                        Text("Result:", fontSize = 13.sp, color = Color(0xFFAAAAAA), modifier = Modifier.width(labelWidth))
+                        Text("Result:", fontSize = 13.sp, color = AppColors.SubtleText, modifier = Modifier.width(labelWidth))
                         Text(resultText, fontSize = 13.sp, color = Color.White)
                     }
                 }
@@ -1063,7 +1063,7 @@ fun GameContent(
                     val terminationMatch = Regex("\\[Termination \"([^\"]+)\"\\]").find(pgn)
                     terminationMatch?.groupValues?.get(1)?.let { termination ->
                         Row(modifier = Modifier.fillMaxWidth()) {
-                            Text("Termination:", fontSize = 13.sp, color = Color(0xFFAAAAAA), modifier = Modifier.width(labelWidth))
+                            Text("Termination:", fontSize = 13.sp, color = AppColors.SubtleText, modifier = Modifier.width(labelWidth))
                             Text(termination, fontSize = 13.sp, color = Color.White)
                         }
                     }
@@ -1102,14 +1102,14 @@ fun GameContent(
                     Text(
                         text = formattedPgn,
                         fontSize = 11.sp,
-                        color = Color(0xFFCCCCCC),
+                        color = AppColors.LightGray,
                         fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
                         lineHeight = 14.sp
                     )
                 } ?: Text(
                     text = "No PGN data available",
                     fontSize = 12.sp,
-                    color = Color(0xFF888888),
+                    color = AppColors.MediumGray,
                     fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
                 )
             }
@@ -1209,7 +1209,7 @@ private fun RawStockfishScoresCard(
                     Text(
                         text = scoreText,
                         fontSize = 12.sp,
-                        color = if (score != null) titleColor else Color(0xFF666666),
+                        color = if (score != null) titleColor else AppColors.DimGray,
                         fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
                         fontWeight = FontWeight.Medium
                     )
@@ -1578,10 +1578,10 @@ private fun StockfishAnalyseCard(uiState: GameUiState) {
                         if (currentScore.score >= 0) "+%.2f".format(currentScore.score) else "%.2f".format(currentScore.score)
                     }
                     val scoreColor = when {
-                        currentScore.isMate && currentScore.mateIn > 0 -> Color(0xFF00E676)
-                        currentScore.isMate && currentScore.mateIn < 0 -> Color(0xFFFF5252)
-                        currentScore.score > 0.5f -> Color(0xFF00E676)
-                        currentScore.score < -0.5f -> Color(0xFFFF5252)
+                        currentScore.isMate && currentScore.mateIn > 0 -> AppColors.PositiveGreen
+                        currentScore.isMate && currentScore.mateIn < 0 -> AppColors.NegativeRed
+                        currentScore.score > 0.5f -> AppColors.PositiveGreen
+                        currentScore.score < -0.5f -> AppColors.NegativeRed
                         else -> Color(0xFF64B5F6)
                     }
                     Text(

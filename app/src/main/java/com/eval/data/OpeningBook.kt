@@ -181,9 +181,18 @@ object OpeningBook {
         listOf("d2d4", "b7b6") to "English Defense"
     )
 
+    // Entries sorted by descending length for early termination.
+    // Once we find a match, no shorter sequence can beat it.
+    private val sortedOpenings: List<Pair<List<String>, String>> by lazy {
+        openings.entries
+            .map { (k, v) -> k to v }
+            .sortedByDescending { it.first.size }
+    }
+
     /**
      * Get the opening name for a sequence of moves.
      * Finds the longest matching opening in the book.
+     * Uses sorted entries for early termination on first match.
      *
      * @param moves List of UCI moves from the start of the game
      * @param upToIndex Find opening up to this move index (inclusive). Use -1 for starting position.
@@ -192,28 +201,17 @@ object OpeningBook {
     fun getOpeningName(moves: List<String>, upToIndex: Int = moves.size - 1): String? {
         if (upToIndex < 0 || moves.isEmpty()) return null
 
-        val sequence = moves.take(upToIndex + 1)
-        var bestMatch: String? = null
-        var bestMatchLength = 0
+        val sequenceLength = upToIndex + 1
 
-        for ((moveSeq, name) in openings) {
-            if (moveSeq.size <= sequence.size && moveSeq.size > bestMatchLength) {
-                // Check if the opening moves match the start of the sequence
-                var matches = true
-                for (i in moveSeq.indices) {
-                    if (moveSeq[i] != sequence[i]) {
-                        matches = false
-                        break
-                    }
-                }
-                if (matches) {
-                    bestMatch = name
-                    bestMatchLength = moveSeq.size
-                }
+        for ((moveSeq, name) in sortedOpenings) {
+            if (moveSeq.size > sequenceLength) continue
+            // Use subList for O(1) view instead of take() which copies
+            if (moves.subList(0, moveSeq.size) == moveSeq) {
+                return name
             }
         }
 
-        return bestMatch
+        return null
     }
 
 }

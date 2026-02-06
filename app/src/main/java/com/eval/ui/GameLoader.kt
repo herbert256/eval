@@ -251,61 +251,30 @@ internal class GameLoader(
         val openingName = pgnHeaders["Opening"] ?: pgnHeaders["ECO"]
 
         val parsedMoves = PgnParser.parseMovesWithClock(pgn)
-        val initialBoard = ChessBoard()
+        val moveDetailsList = mutableListOf<MoveDetails>()
+
+        val (boards, validMoves) = buildBoardHistory(
+            moves = parsedMoves.map { it.san },
+            onMoveApplied = { index, move, boardBefore, boardAfter ->
+                val details = buildMoveDetails(boardAfter, boardBefore, move, parsedMoves[index].clockTime)
+                if (details != null) {
+                    moveDetailsList.add(details)
+                }
+            },
+            onMoveFailed = { index, move, boardBefore ->
+                val moveNum = (index / 2) + 1
+                val isWhite = index % 2 == 0
+                val prefix = if (isWhite) "$moveNum." else "$moveNum..."
+                android.util.Log.e("GameLoader", "FAILED to apply move $prefix $move - FEN: ${boardBefore.getFen()}")
+            }
+        )
+
         val boardHistory = getBoardHistory()
         val exploringLineHistory = getExploringLineHistory()
         boardHistory.clear()
         exploringLineHistory.clear()
-        boardHistory.add(initialBoard.copy())
-
-        val tempBoard = ChessBoard()
-        val moveDetailsList = mutableListOf<MoveDetails>()
-        val validMoves = mutableListOf<String>()
-
-        for ((index, parsedMove) in parsedMoves.withIndex()) {
-            val move = parsedMove.san
-            val moveNum = (index / 2) + 1
-            val isWhite = index % 2 == 0
-            val boardBeforeMove = tempBoard.copy()
-            val moveSuccess = tempBoard.makeMove(move) || tempBoard.makeUciMove(move)
-            if (!moveSuccess) {
-                val prefix = if (isWhite) "$moveNum." else "$moveNum..."
-                android.util.Log.e("GameLoader", "FAILED to apply move $prefix $move - FEN: ${boardBeforeMove.getFen()}")
-                continue
-            }
-            validMoves.add(move)
-            boardHistory.add(tempBoard.copy())
-
-            val lastMove = tempBoard.getLastMove()
-            if (lastMove != null) {
-                val fromSquare = lastMove.from.toAlgebraic()
-                val toSquare = lastMove.to.toAlgebraic()
-                val capturedPiece = boardBeforeMove.getPiece(lastMove.to)
-                val movedPiece = tempBoard.getPiece(lastMove.to)
-                val pieceType = when (movedPiece?.type) {
-                    PieceType.KING -> "K"
-                    PieceType.QUEEN -> "Q"
-                    PieceType.ROOK -> "R"
-                    PieceType.BISHOP -> "B"
-                    PieceType.KNIGHT -> "N"
-                    PieceType.PAWN -> "P"
-                    else -> "P"
-                }
-                val isEnPassant = pieceType == "P" &&
-                    lastMove.from.file != lastMove.to.file &&
-                    capturedPiece == null
-                val isCapture = capturedPiece != null || isEnPassant
-
-                moveDetailsList.add(MoveDetails(
-                    san = move,
-                    from = fromSquare,
-                    to = toSquare,
-                    isCapture = isCapture,
-                    pieceType = pieceType,
-                    clockTime = parsedMove.clockTime
-                ))
-            }
-        }
+        boardHistory.addAll(boards)
+        val initialBoard = boards.first()
 
         val providedUsername = username ?: savedLichessUsername
         val whitePlayerName = game.players.white.user?.name ?: "White"
@@ -349,19 +318,13 @@ internal class GameLoader(
 
         val parsedMoves = PgnParser.parseMoves(analysedGame.pgn)
 
+        val (boards, _) = buildBoardHistory(parsedMoves)
+
         val boardHistory = getBoardHistory()
         val exploringLineHistory = getExploringLineHistory()
         boardHistory.clear()
         exploringLineHistory.clear()
-        val tempBoard = ChessBoard()
-        boardHistory.add(tempBoard.copy())
-
-        for (move in parsedMoves) {
-            val moveSuccess = tempBoard.makeMove(move) || tempBoard.makeUciMove(move)
-            if (moveSuccess) {
-                boardHistory.add(tempBoard.copy())
-            }
-        }
+        boardHistory.addAll(boards)
 
         val lichessGame = LichessGame(
             id = "analysed_${analysedGame.timestamp}",
@@ -445,6 +408,77 @@ internal class GameLoader(
             restartStockfishAndAnalyze(fenToAnalyze)
             fetchOpeningExplorer()
         }
+    }
+
+    private fun buildMoveDetails(
+        boardAfterMove: ChessBoard,
+        boardBeforeMove: ChessBoard,
+        san: String,
+        clockTime: String?
+    ): MoveDetails? {
+        val lastMove = boardAfterMove.getLastMove() ?: return null
+        val fromSquare = lastMove.from.toAlgebraic()
+        val toSquare = lastMove.to.toAlgebraic()
+        val capturedPiece = boardBeforeMove.getPiece(lastMove.to)
+        val movedPiece = boardAfterMove.getPiece(lastMove.to)
+        val pieceType = when (movedPiece?.type) {
+            PieceType.KING -> "K"
+            PieceType.QUEEN -> "Q"
+            PieceType.ROOK -> "R"
+            PieceType.BISHOP -> "B"
+            PieceType.KNIGHT -> "N"
+            PieceType.PAWN -> "P"
+            else -> "P"
+        }
+        val isEnPassant = pieceType == "P" &&
+            lastMove.from.file != lastMove.to.file &&
+            capturedPiece == null
+        val isCapture = capturedPiece != null || isEnPassant
+
+        return MoveDetails(
+            san = san,
+            from = fromSquare,
+            to = toSquare,
+            isCapture = isCapture,
+            pieceType = pieceType,
+            clockTime = clockTime
+        )
+    }
+
+    /**
+     * Build a board history by applying each move to a fresh ChessBoard.
+     * Returns the list of board states (starting with the initial position)
+     * and the list of moves that were successfully applied.
+     *
+     * @param moves list of SAN or UCI move strings to apply
+     * @param onMoveApplied optional callback invoked after each successful move with
+     *        (index, move, boardBefore, boardAfter)
+     * @param onMoveFailed optional callback invoked when a move fails with
+     *        (index, move, boardBefore)
+     */
+    private fun buildBoardHistory(
+        moves: List<String>,
+        onMoveApplied: ((index: Int, move: String, boardBefore: ChessBoard, boardAfter: ChessBoard) -> Unit)? = null,
+        onMoveFailed: ((index: Int, move: String, boardBefore: ChessBoard) -> Unit)? = null
+    ): Pair<List<ChessBoard>, List<String>> {
+        val boards = mutableListOf<ChessBoard>()
+        val validMoves = mutableListOf<String>()
+        val tempBoard = ChessBoard()
+        boards.add(tempBoard.copy())
+
+        for ((index, move) in moves.withIndex()) {
+            val boardBeforeMove = if (onMoveApplied != null || onMoveFailed != null) tempBoard.copy() else tempBoard
+            val moveSuccess = tempBoard.makeMove(move) || tempBoard.makeUciMove(move)
+            if (moveSuccess) {
+                validMoves.add(move)
+                boards.add(tempBoard.copy())
+                onMoveApplied?.invoke(index, move, boardBeforeMove, tempBoard)
+            } else {
+                onMoveFailed?.invoke(index, move, boardBeforeMove)
+            }
+        }
+
+        return Pair(boards, validMoves)
     }
 
     private fun findBiggestScoreChangeInScores(
@@ -691,4 +725,12 @@ internal class GameLoader(
         settingsPrefs.saveLichessMaxGames(validMax)
         updateUiState { copy(lichessMaxGames = validMax) }
     }
+}
+
+internal fun PieceType?.toUciSuffix(): String = when (this) {
+    PieceType.QUEEN -> "q"
+    PieceType.ROOK -> "r"
+    PieceType.BISHOP -> "b"
+    PieceType.KNIGHT -> "n"
+    else -> ""
 }

@@ -13,28 +13,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 /**
- * Reusable toggle row for interface visibility settings.
- */
-@Composable
-private fun VisibilityToggle(
-    label: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(label, color = Color.White)
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange
-        )
-    }
-}
-
-/**
  * Interface visibility settings screen for configuring which UI elements are shown in each stage.
  */
 @Composable
@@ -44,67 +22,12 @@ fun InterfaceSettingsScreen(
     onBackToGame: () -> Unit,
     onSave: (InterfaceVisibilitySettings) -> Unit
 ) {
-    // Preview Stage visibility state
-    var previewShowScoreBarsGraph by remember { mutableStateOf(interfaceVisibility.previewStage.showScoreBarsGraph) }
-    var previewShowResultBar by remember { mutableStateOf(interfaceVisibility.previewStage.showResultBar) }
-    var previewShowBoard by remember { mutableStateOf(interfaceVisibility.previewStage.showBoard) }
-    var previewShowMoveList by remember { mutableStateOf(interfaceVisibility.previewStage.showMoveList) }
-    var previewShowPgn by remember { mutableStateOf(interfaceVisibility.previewStage.showPgn) }
+    var preview by remember { mutableStateOf(interfaceVisibility.previewStage) }
+    var analyse by remember { mutableStateOf(interfaceVisibility.analyseStage) }
+    var manual by remember { mutableStateOf(interfaceVisibility.manualStage) }
 
-    // Analyse Stage visibility state
-    var analyseShowScoreLineGraph by remember { mutableStateOf(interfaceVisibility.analyseStage.showScoreLineGraph) }
-    var analyseShowScoreBarsGraph by remember { mutableStateOf(interfaceVisibility.analyseStage.showScoreBarsGraph) }
-    var analyseShowBoard by remember { mutableStateOf(interfaceVisibility.analyseStage.showBoard) }
-    var analyseShowStockfishAnalyse by remember { mutableStateOf(interfaceVisibility.analyseStage.showStockfishAnalyse) }
-    var analyseShowResultBar by remember { mutableStateOf(interfaceVisibility.analyseStage.showResultBar) }
-    var analyseShowMoveList by remember { mutableStateOf(interfaceVisibility.analyseStage.showMoveList) }
-    var analyseShowGameInfo by remember { mutableStateOf(interfaceVisibility.analyseStage.showGameInfo) }
-    var analyseShowPgn by remember { mutableStateOf(interfaceVisibility.analyseStage.showPgn) }
-
-    // Manual Stage visibility state
-    var manualShowResultBar by remember { mutableStateOf(interfaceVisibility.manualStage.showResultBar) }
-    var manualShowScoreLineGraph by remember { mutableStateOf(interfaceVisibility.manualStage.showScoreLineGraph) }
-    var manualShowScoreBarsGraph by remember { mutableStateOf(interfaceVisibility.manualStage.showScoreBarsGraph) }
-    var manualShowTimeGraph by remember { mutableStateOf(interfaceVisibility.manualStage.showTimeGraph) }
-    var manualShowOpeningExplorer by remember { mutableStateOf(interfaceVisibility.manualStage.showOpeningExplorer) }
-    var manualShowOpeningName by remember { mutableStateOf(interfaceVisibility.manualStage.showOpeningName) }
-    var manualShowRawStockfishScore by remember { mutableStateOf(interfaceVisibility.manualStage.showRawStockfishScore) }
-    var manualShowMoveList by remember { mutableStateOf(interfaceVisibility.manualStage.showMoveList) }
-    var manualShowGameInfo by remember { mutableStateOf(interfaceVisibility.manualStage.showGameInfo) }
-    var manualShowPgn by remember { mutableStateOf(interfaceVisibility.manualStage.showPgn) }
-
-    fun saveAllSettings() {
-        onSave(InterfaceVisibilitySettings(
-            previewStage = PreviewStageVisibility(
-                showScoreBarsGraph = previewShowScoreBarsGraph,
-                showResultBar = previewShowResultBar,
-                showBoard = previewShowBoard,
-                showMoveList = previewShowMoveList,
-                showPgn = previewShowPgn
-            ),
-            analyseStage = AnalyseStageVisibility(
-                showScoreLineGraph = analyseShowScoreLineGraph,
-                showScoreBarsGraph = analyseShowScoreBarsGraph,
-                showBoard = analyseShowBoard,
-                showStockfishAnalyse = analyseShowStockfishAnalyse,
-                showResultBar = analyseShowResultBar,
-                showMoveList = analyseShowMoveList,
-                showGameInfo = analyseShowGameInfo,
-                showPgn = analyseShowPgn
-            ),
-            manualStage = ManualStageVisibility(
-                showResultBar = manualShowResultBar,
-                showScoreLineGraph = manualShowScoreLineGraph,
-                showScoreBarsGraph = manualShowScoreBarsGraph,
-                showTimeGraph = manualShowTimeGraph,
-                showOpeningExplorer = manualShowOpeningExplorer,
-                showOpeningName = manualShowOpeningName,
-                showRawStockfishScore = manualShowRawStockfishScore,
-                showMoveList = manualShowMoveList,
-                showGameInfo = manualShowGameInfo,
-                showPgn = manualShowPgn
-            )
-        ))
+    fun save() {
+        onSave(InterfaceVisibilitySettings(preview, analyse, manual))
     }
 
     Column(
@@ -147,48 +70,48 @@ fun InterfaceSettingsScreen(
                     color = Color.Gray
                 )
 
-                VisibilityToggle(
+                SettingsToggle(
                     label = "Score Bars graph",
-                    checked = previewShowScoreBarsGraph,
+                    checked = preview.showScoreBarsGraph,
                     onCheckedChange = {
-                        previewShowScoreBarsGraph = it
-                        saveAllSettings()
+                        preview = preview.copy(showScoreBarsGraph = it)
+                        save()
                     }
                 )
 
-                VisibilityToggle(
+                SettingsToggle(
                     label = "Result bar",
-                    checked = previewShowResultBar,
+                    checked = preview.showResultBar,
                     onCheckedChange = {
-                        previewShowResultBar = it
-                        saveAllSettings()
+                        preview = preview.copy(showResultBar = it)
+                        save()
                     }
                 )
 
-                VisibilityToggle(
+                SettingsToggle(
                     label = "Board",
-                    checked = previewShowBoard,
+                    checked = preview.showBoard,
                     onCheckedChange = {
-                        previewShowBoard = it
-                        saveAllSettings()
+                        preview = preview.copy(showBoard = it)
+                        save()
                     }
                 )
 
-                VisibilityToggle(
+                SettingsToggle(
                     label = "Move list",
-                    checked = previewShowMoveList,
+                    checked = preview.showMoveList,
                     onCheckedChange = {
-                        previewShowMoveList = it
-                        saveAllSettings()
+                        preview = preview.copy(showMoveList = it)
+                        save()
                     }
                 )
 
-                VisibilityToggle(
+                SettingsToggle(
                     label = "PGN",
-                    checked = previewShowPgn,
+                    checked = preview.showPgn,
                     onCheckedChange = {
-                        previewShowPgn = it
-                        saveAllSettings()
+                        preview = preview.copy(showPgn = it)
+                        save()
                     }
                 )
             }
@@ -212,75 +135,75 @@ fun InterfaceSettingsScreen(
                     color = Color.White
                 )
 
-                VisibilityToggle(
+                SettingsToggle(
                     label = "Score Line graph",
-                    checked = analyseShowScoreLineGraph,
+                    checked = analyse.showScoreLineGraph,
                     onCheckedChange = {
-                        analyseShowScoreLineGraph = it
-                        saveAllSettings()
+                        analyse = analyse.copy(showScoreLineGraph = it)
+                        save()
                     }
                 )
 
-                VisibilityToggle(
+                SettingsToggle(
                     label = "Score Bars graph",
-                    checked = analyseShowScoreBarsGraph,
+                    checked = analyse.showScoreBarsGraph,
                     onCheckedChange = {
-                        analyseShowScoreBarsGraph = it
-                        saveAllSettings()
+                        analyse = analyse.copy(showScoreBarsGraph = it)
+                        save()
                     }
                 )
 
-                VisibilityToggle(
+                SettingsToggle(
                     label = "Board",
-                    checked = analyseShowBoard,
+                    checked = analyse.showBoard,
                     onCheckedChange = {
-                        analyseShowBoard = it
-                        saveAllSettings()
+                        analyse = analyse.copy(showBoard = it)
+                        save()
                     }
                 )
 
-                VisibilityToggle(
+                SettingsToggle(
                     label = "Stockfish Analyse",
-                    checked = analyseShowStockfishAnalyse,
+                    checked = analyse.showStockfishAnalyse,
                     onCheckedChange = {
-                        analyseShowStockfishAnalyse = it
-                        saveAllSettings()
+                        analyse = analyse.copy(showStockfishAnalyse = it)
+                        save()
                     }
                 )
 
-                VisibilityToggle(
+                SettingsToggle(
                     label = "Result bar",
-                    checked = analyseShowResultBar,
+                    checked = analyse.showResultBar,
                     onCheckedChange = {
-                        analyseShowResultBar = it
-                        saveAllSettings()
+                        analyse = analyse.copy(showResultBar = it)
+                        save()
                     }
                 )
 
-                VisibilityToggle(
+                SettingsToggle(
                     label = "Move list",
-                    checked = analyseShowMoveList,
+                    checked = analyse.showMoveList,
                     onCheckedChange = {
-                        analyseShowMoveList = it
-                        saveAllSettings()
+                        analyse = analyse.copy(showMoveList = it)
+                        save()
                     }
                 )
 
-                VisibilityToggle(
+                SettingsToggle(
                     label = "Game Information",
-                    checked = analyseShowGameInfo,
+                    checked = analyse.showGameInfo,
                     onCheckedChange = {
-                        analyseShowGameInfo = it
-                        saveAllSettings()
+                        analyse = analyse.copy(showGameInfo = it)
+                        save()
                     }
                 )
 
-                VisibilityToggle(
+                SettingsToggle(
                     label = "PGN",
-                    checked = analyseShowPgn,
+                    checked = analyse.showPgn,
                     onCheckedChange = {
-                        analyseShowPgn = it
-                        saveAllSettings()
+                        analyse = analyse.copy(showPgn = it)
+                        save()
                     }
                 )
             }
@@ -310,93 +233,93 @@ fun InterfaceSettingsScreen(
                     color = Color.Gray
                 )
 
-                VisibilityToggle(
+                SettingsToggle(
                     label = "Result bar",
-                    checked = manualShowResultBar,
+                    checked = manual.showResultBar,
                     onCheckedChange = {
-                        manualShowResultBar = it
-                        saveAllSettings()
+                        manual = manual.copy(showResultBar = it)
+                        save()
                     }
                 )
 
-                VisibilityToggle(
+                SettingsToggle(
                     label = "Score Line graph",
-                    checked = manualShowScoreLineGraph,
+                    checked = manual.showScoreLineGraph,
                     onCheckedChange = {
-                        manualShowScoreLineGraph = it
-                        saveAllSettings()
+                        manual = manual.copy(showScoreLineGraph = it)
+                        save()
                     }
                 )
 
-                VisibilityToggle(
+                SettingsToggle(
                     label = "Score Bars graph",
-                    checked = manualShowScoreBarsGraph,
+                    checked = manual.showScoreBarsGraph,
                     onCheckedChange = {
-                        manualShowScoreBarsGraph = it
-                        saveAllSettings()
+                        manual = manual.copy(showScoreBarsGraph = it)
+                        save()
                     }
                 )
 
-                VisibilityToggle(
+                SettingsToggle(
                     label = "Time Usage graph",
-                    checked = manualShowTimeGraph,
+                    checked = manual.showTimeGraph,
                     onCheckedChange = {
-                        manualShowTimeGraph = it
-                        saveAllSettings()
+                        manual = manual.copy(showTimeGraph = it)
+                        save()
                     }
                 )
 
-                VisibilityToggle(
+                SettingsToggle(
                     label = "Opening Explorer",
-                    checked = manualShowOpeningExplorer,
+                    checked = manual.showOpeningExplorer,
                     onCheckedChange = {
-                        manualShowOpeningExplorer = it
-                        saveAllSettings()
+                        manual = manual.copy(showOpeningExplorer = it)
+                        save()
                     }
                 )
 
-                VisibilityToggle(
+                SettingsToggle(
                     label = "Opening Name",
-                    checked = manualShowOpeningName,
+                    checked = manual.showOpeningName,
                     onCheckedChange = {
-                        manualShowOpeningName = it
-                        saveAllSettings()
+                        manual = manual.copy(showOpeningName = it)
+                        save()
                     }
                 )
 
-                VisibilityToggle(
+                SettingsToggle(
                     label = "Raw Stockfish score",
-                    checked = manualShowRawStockfishScore,
+                    checked = manual.showRawStockfishScore,
                     onCheckedChange = {
-                        manualShowRawStockfishScore = it
-                        saveAllSettings()
+                        manual = manual.copy(showRawStockfishScore = it)
+                        save()
                     }
                 )
 
-                VisibilityToggle(
+                SettingsToggle(
                     label = "Move list",
-                    checked = manualShowMoveList,
+                    checked = manual.showMoveList,
                     onCheckedChange = {
-                        manualShowMoveList = it
-                        saveAllSettings()
+                        manual = manual.copy(showMoveList = it)
+                        save()
                     }
                 )
 
-                VisibilityToggle(
+                SettingsToggle(
                     label = "Game Information",
-                    checked = manualShowGameInfo,
+                    checked = manual.showGameInfo,
                     onCheckedChange = {
-                        manualShowGameInfo = it
-                        saveAllSettings()
+                        manual = manual.copy(showGameInfo = it)
+                        save()
                     }
                 )
 
-                VisibilityToggle(
+                SettingsToggle(
                     label = "PGN",
-                    checked = manualShowPgn,
+                    checked = manual.showPgn,
                     onCheckedChange = {
-                        manualShowPgn = it
-                        saveAllSettings()
+                        manual = manual.copy(showPgn = it)
+                        save()
                     }
                 )
             }

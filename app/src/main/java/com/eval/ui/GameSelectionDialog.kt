@@ -37,7 +37,7 @@ fun GameSelectionScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF3A5A7C))  // Lighter blue background
+            .background(AppColors.BlueGrayAccent)  // Lighter blue background
             .padding(16.dp)
     ) {
         // Header with user and server
@@ -195,7 +195,7 @@ fun PreviousRetrievesScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF3A5A7C))  // Lighter blue background
+            .background(AppColors.BlueGrayAccent)  // Lighter blue background
             .padding(16.dp)
     ) {
         // Header
@@ -246,7 +246,7 @@ private fun RetrieveListItem(
     onClick: () -> Unit
 ) {
     val serverName = if (entry.server == ChessServer.LICHESS) "lichess.org" else "chess.com"
-    val rowBackgroundColor = Color(0xFF2A2A2A)  // Dark gray
+    val rowBackgroundColor = AppColors.CardBackground  // Dark gray
     val rowTextColor = Color.White
 
     Row(
@@ -306,7 +306,7 @@ fun SelectedRetrieveGamesScreen(
     onDismiss: () -> Unit
 ) {
     val serverName = if (entry.server == ChessServer.LICHESS) "lichess.org" else "chess.com"
-    val serverColor = if (entry.server == ChessServer.LICHESS) Color(0xFF629924) else Color(0xFF769656)
+    val serverColor = if (entry.server == ChessServer.LICHESS) AppColors.LichessGreen else Color(0xFF769656)
 
     // Handle back navigation
     BackHandler { onDismiss() }
@@ -323,7 +323,7 @@ fun SelectedRetrieveGamesScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF3A5A7C))  // Lighter blue background
+            .background(AppColors.BlueGrayAccent)  // Lighter blue background
             .padding(16.dp)
     ) {
         // Header with account and server
@@ -423,7 +423,7 @@ fun SelectedRetrieveGamesScreen(
                             } else {
                                 "Showing ${startIndex + 1}-$endIndex of ${games.size} games"
                             },
-                            color = Color(0xFFCCCCCC),
+                            color = AppColors.LightGray,
                             fontSize = 11.sp,
                             modifier = Modifier.fillMaxWidth(),
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -570,7 +570,7 @@ fun AnalysedGamesSelectionScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF3A5A7C))
+            .background(AppColors.BlueGrayAccent)
             .padding(16.dp)
     ) {
         Text(
@@ -646,7 +646,7 @@ fun AnalysedGamesSelectionScreen(
                     if (games.isNotEmpty()) {
                         Text(
                             text = "Showing ${startIndex + 1}-$endIndex of ${games.size} games",
-                            color = Color(0xFFCCCCCC),
+                            color = AppColors.LightGray,
                             fontSize = 11.sp,
                             modifier = Modifier.fillMaxWidth(),
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center

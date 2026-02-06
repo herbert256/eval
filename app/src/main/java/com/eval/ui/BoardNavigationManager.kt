@@ -37,35 +37,60 @@ internal class BoardNavigationManager(
         }
     }
 
-    fun goToStart() {
-        if (!handleNavigationInterrupt()) return
-
-        val state = getUiState()
-        val boardHistory = getBoardHistory()
+    /**
+     * Core navigation helper for exploring line mode.
+     * Gets the board at the given move index from the exploring line history,
+     * updates the UI state, and triggers analysis.
+     */
+    private fun navigateExploringLine(
+        moveIndex: Int,
+        fallbackBoard: ChessBoard = ChessBoard(),
+        useRestartAnalysis: Boolean = false
+    ) {
         val exploringLineHistory = getExploringLineHistory()
+        val newBoard = exploringLineHistory.getOrNull(moveIndex + 1)?.copy() ?: fallbackBoard
+        updateUiState {
+            copy(
+                currentBoard = newBoard,
+                exploringLineMoveIndex = moveIndex
+            )
+        }
+        if (useRestartAnalysis) {
+            analysisOrchestrator.restartAnalysisForExploringLine()
+        } else {
+            analysisOrchestrator.analyzePosition(newBoard)
+        }
+    }
 
-        if (state.isExploringLine) {
-            val newBoard = exploringLineHistory.firstOrNull()?.copy() ?: ChessBoard()
+    /**
+     * Core navigation helper for main game mode.
+     * In Manual stage, delegates to restartAnalysisAtMove.
+     * In other stages, gets the board from history, updates UI state, and analyzes.
+     */
+    private fun navigateMainGame(moveIndex: Int, fallbackBoard: ChessBoard = ChessBoard()) {
+        val state = getUiState()
+        if (state.currentStage == AnalysisStage.MANUAL) {
+            analysisOrchestrator.restartAnalysisAtMove(moveIndex)
+        } else {
+            val boardHistory = getBoardHistory()
+            val newBoard = boardHistory.getOrNull(moveIndex + 1)?.copy() ?: fallbackBoard
             updateUiState {
                 copy(
                     currentBoard = newBoard,
-                    exploringLineMoveIndex = -1
+                    currentMoveIndex = moveIndex
                 )
             }
             analysisOrchestrator.analyzePosition(newBoard)
+        }
+    }
+
+    fun goToStart() {
+        if (!handleNavigationInterrupt()) return
+
+        if (getUiState().isExploringLine) {
+            navigateExploringLine(-1)
         } else {
-            if (state.currentStage == AnalysisStage.MANUAL) {
-                analysisOrchestrator.restartAnalysisAtMove(-1)
-            } else {
-                val newBoard = boardHistory.firstOrNull()?.copy() ?: ChessBoard()
-                updateUiState {
-                    copy(
-                        currentBoard = newBoard,
-                        currentMoveIndex = -1
-                    )
-                }
-                analysisOrchestrator.analyzePosition(newBoard)
-            }
+            navigateMainGame(-1)
         }
     }
 
@@ -73,38 +98,17 @@ internal class BoardNavigationManager(
         if (!handleNavigationInterrupt()) return
 
         val state = getUiState()
-        val boardHistory = getBoardHistory()
-        val exploringLineHistory = getExploringLineHistory()
-
         if (state.isExploringLine) {
             val moves = state.exploringLineMoves
             if (moves.isEmpty()) {
                 analysisOrchestrator.analyzePosition(state.currentBoard)
                 return
             }
-            val newBoard = exploringLineHistory.lastOrNull()?.copy() ?: ChessBoard()
-            updateUiState {
-                copy(
-                    currentBoard = newBoard,
-                    exploringLineMoveIndex = moves.size - 1
-                )
-            }
-            analysisOrchestrator.analyzePosition(newBoard)
+            navigateExploringLine(moves.size - 1)
         } else {
             val moves = state.moves
             if (moves.isEmpty()) return
-            if (state.currentStage == AnalysisStage.MANUAL) {
-                analysisOrchestrator.restartAnalysisAtMove(moves.size - 1)
-            } else {
-                val newBoard = boardHistory.lastOrNull()?.copy() ?: ChessBoard()
-                updateUiState {
-                    copy(
-                        currentBoard = newBoard,
-                        currentMoveIndex = moves.size - 1
-                    )
-                }
-                analysisOrchestrator.analyzePosition(newBoard)
-            }
+            navigateMainGame(moves.size - 1)
         }
     }
 
@@ -112,25 +116,14 @@ internal class BoardNavigationManager(
         if (!handleNavigationInterrupt()) return
 
         val state = getUiState()
-        val boardHistory = getBoardHistory()
-        val exploringLineHistory = getExploringLineHistory()
-        val newBoard: ChessBoard
-
         if (state.isExploringLine) {
-            val moves = state.exploringLineMoves
-            if (index < -1 || index >= moves.size) return
-            newBoard = exploringLineHistory.getOrNull(index + 1)?.copy() ?: ChessBoard()
-            updateUiState {
-                copy(
-                    currentBoard = newBoard,
-                    exploringLineMoveIndex = index
-                )
-            }
+            if (index < -1 || index >= state.exploringLineMoves.size) return
+            navigateExploringLine(index)
             playMoveSound()
         } else {
-            val moves = state.moves
-            if (index < -1 || index >= moves.size) return
-            newBoard = boardHistory.getOrNull(index + 1)?.copy() ?: ChessBoard()
+            if (index < -1 || index >= state.moves.size) return
+            val boardHistory = getBoardHistory()
+            val newBoard = boardHistory.getOrNull(index + 1)?.copy() ?: ChessBoard()
             updateUiState {
                 copy(
                     currentBoard = newBoard,
@@ -138,49 +131,26 @@ internal class BoardNavigationManager(
                 )
             }
             playMoveSound(index)
+            analysisOrchestrator.analyzePosition(newBoard)
         }
-        analysisOrchestrator.analyzePosition(newBoard)
     }
 
     fun nextMove() {
         if (!handleNavigationInterrupt()) return
 
         val state = getUiState()
-        val boardHistory = getBoardHistory()
-        val exploringLineHistory = getExploringLineHistory()
-
         if (state.isExploringLine) {
             val currentIndex = state.exploringLineMoveIndex
-            val moves = state.exploringLineMoves
-            if (currentIndex >= moves.size - 1) return
+            if (currentIndex >= state.exploringLineMoves.size - 1) return
             val newIndex = currentIndex + 1
-            val newBoard = exploringLineHistory.getOrNull(newIndex + 1)?.copy() ?: state.currentBoard
-            updateUiState {
-                copy(
-                    currentBoard = newBoard,
-                    exploringLineMoveIndex = newIndex
-                )
-            }
+            navigateExploringLine(newIndex, fallbackBoard = state.currentBoard, useRestartAnalysis = true)
             playMoveSound()
-            analysisOrchestrator.restartAnalysisForExploringLine()
         } else {
             val currentIndex = state.currentMoveIndex
-            val moves = state.moves
-            if (currentIndex >= moves.size - 1) return
+            if (currentIndex >= state.moves.size - 1) return
             val newIndex = currentIndex + 1
             playMoveSound(newIndex)
-            if (state.currentStage == AnalysisStage.MANUAL) {
-                analysisOrchestrator.restartAnalysisAtMove(newIndex)
-            } else {
-                val newBoard = boardHistory.getOrNull(newIndex + 1)?.copy() ?: state.currentBoard
-                updateUiState {
-                    copy(
-                        currentBoard = newBoard,
-                        currentMoveIndex = newIndex
-                    )
-                }
-                analysisOrchestrator.analyzePosition(newBoard)
-            }
+            navigateMainGame(newIndex, fallbackBoard = state.currentBoard)
         }
     }
 
@@ -188,39 +158,18 @@ internal class BoardNavigationManager(
         if (!handleNavigationInterrupt()) return
 
         val state = getUiState()
-        val boardHistory = getBoardHistory()
-        val exploringLineHistory = getExploringLineHistory()
-
         if (state.isExploringLine) {
             val currentIndex = state.exploringLineMoveIndex
             if (currentIndex < 0) return
             val newIndex = currentIndex - 1
-            val newBoard = exploringLineHistory.getOrNull(newIndex + 1)?.copy() ?: ChessBoard()
-            updateUiState {
-                copy(
-                    currentBoard = newBoard,
-                    exploringLineMoveIndex = newIndex
-                )
-            }
+            navigateExploringLine(newIndex, useRestartAnalysis = true)
             playMoveSound()
-            analysisOrchestrator.restartAnalysisForExploringLine()
         } else {
             val currentIndex = state.currentMoveIndex
             if (currentIndex < 0) return
             val newIndex = currentIndex - 1
             playMoveSound(newIndex)
-            if (state.currentStage == AnalysisStage.MANUAL) {
-                analysisOrchestrator.restartAnalysisAtMove(newIndex)
-            } else {
-                val newBoard = boardHistory.getOrNull(newIndex + 1)?.copy() ?: ChessBoard()
-                updateUiState {
-                    copy(
-                        currentBoard = newBoard,
-                        currentMoveIndex = newIndex
-                    )
-                }
-                analysisOrchestrator.analyzePosition(newBoard)
-            }
+            navigateMainGame(newIndex)
         }
     }
 
@@ -307,15 +256,7 @@ internal class BoardNavigationManager(
         if (state.isExploringLine) {
             exploringLineHistory.add(newBoard.copy())
             val newMoveIndex = state.exploringLineMoveIndex + 1
-            val uciMove = from.toAlgebraic() + to.toAlgebraic() + (promotion?.let {
-                when (it) {
-                    PieceType.QUEEN -> "q"
-                    PieceType.ROOK -> "r"
-                    PieceType.BISHOP -> "b"
-                    PieceType.KNIGHT -> "n"
-                    else -> ""
-                }
-            } ?: "")
+            val uciMove = from.toAlgebraic() + to.toAlgebraic() + promotionToUciSuffix(promotion)
 
             updateUiState {
                 copy(
@@ -329,15 +270,7 @@ internal class BoardNavigationManager(
             exploringLineHistory.add(currentBoard.copy())
             exploringLineHistory.add(newBoard.copy())
 
-            val uciMove = from.toAlgebraic() + to.toAlgebraic() + (promotion?.let {
-                when (it) {
-                    PieceType.QUEEN -> "q"
-                    PieceType.ROOK -> "r"
-                    PieceType.BISHOP -> "b"
-                    PieceType.KNIGHT -> "n"
-                    else -> ""
-                }
-            } ?: "")
+            val uciMove = from.toAlgebraic() + to.toAlgebraic() + promotionToUciSuffix(promotion)
 
             updateUiState {
                 copy(
@@ -351,6 +284,21 @@ internal class BoardNavigationManager(
         }
 
         analysisOrchestrator.restartAnalysisForExploringLine()
+    }
+
+    /**
+     * Convert a promotion piece type to its UCI suffix character.
+     */
+    private fun promotionToUciSuffix(promotion: PieceType?): String {
+        return promotion?.let {
+            when (it) {
+                PieceType.QUEEN -> "q"
+                PieceType.ROOK -> "r"
+                PieceType.BISHOP -> "b"
+                PieceType.KNIGHT -> "n"
+                else -> ""
+            }
+        } ?: ""
     }
 
     /**

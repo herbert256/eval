@@ -27,7 +27,7 @@ fun OpeningExplorerPanel(
 ) {
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF1A1A2E)
+            containerColor = AppColors.DarkBlueBackground
         ),
         modifier = modifier
     ) {
@@ -51,7 +51,7 @@ fun OpeningExplorerPanel(
                     CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
                         strokeWidth = 2.dp,
-                        color = Color(0xFF6B9BFF)
+                        color = AppColors.AccentBlue
                     )
                 }
             }
@@ -65,7 +65,7 @@ fun OpeningExplorerPanel(
                         Text(
                             text = "${opening.eco}: ${opening.name}",
                             fontSize = 12.sp,
-                            color = Color(0xFFAAAAAA)
+                            color = AppColors.SubtleText
                         )
                     }
 
@@ -101,7 +101,7 @@ fun OpeningExplorerPanel(
                             modifier = Modifier
                                 .weight(blackPercent.coerceAtLeast(0.01f))
                                 .fillMaxHeight()
-                                .background(Color(0xFF404040), RoundedCornerShape(topEnd = 4.dp, bottomEnd = 4.dp))
+                                .background(AppColors.Divider, RoundedCornerShape(topEnd = 4.dp, bottomEnd = 4.dp))
                         )
                     }
 
@@ -113,22 +113,22 @@ fun OpeningExplorerPanel(
                         Text(
                             text = "White: ${(explorerData.white * 100 / total)}%",
                             fontSize = 11.sp,
-                            color = Color(0xFFCCCCCC)
+                            color = AppColors.LightGray
                         )
                         Text(
                             text = "Draw: ${(explorerData.draws * 100 / total)}%",
                             fontSize = 11.sp,
-                            color = Color(0xFF888888)
+                            color = AppColors.MediumGray
                         )
                         Text(
                             text = "Black: ${(explorerData.black * 100 / total)}%",
                             fontSize = 11.sp,
-                            color = Color(0xFF666666)
+                            color = AppColors.DimGray
                         )
                         Text(
                             text = "($total games)",
                             fontSize = 11.sp,
-                            color = Color(0xFF555555)
+                            color = AppColors.DarkGray
                         )
                     }
                 }
@@ -139,7 +139,7 @@ fun OpeningExplorerPanel(
                     Text(
                         text = "Popular moves:",
                         fontSize = 12.sp,
-                        color = Color(0xFF888888)
+                        color = AppColors.MediumGray
                     )
 
                     explorerData.moves.take(5).forEach { move ->
@@ -153,7 +153,7 @@ fun OpeningExplorerPanel(
                 Text(
                     text = "No opening data available",
                     fontSize = 12.sp,
-                    color = Color(0xFF666666)
+                    color = AppColors.DimGray
                 )
             }
         }
@@ -180,7 +180,7 @@ private fun OpeningMoveRow(
             text = move.san,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
-            color = Color(0xFF6B9BFF),
+            color = AppColors.AccentBlue,
             modifier = Modifier.width(60.dp)
         )
 
@@ -200,7 +200,7 @@ private fun OpeningMoveRow(
                     modifier = Modifier
                         .weight(whitePercent)
                         .fillMaxHeight()
-                        .background(Color(0xFFCCCCCC))
+                        .background(AppColors.LightGray)
                 )
             }
             if (drawPercent > 0.01f) {
@@ -208,7 +208,7 @@ private fun OpeningMoveRow(
                     modifier = Modifier
                         .weight(drawPercent)
                         .fillMaxHeight()
-                        .background(Color(0xFF666666))
+                        .background(AppColors.DimGray)
                 )
             }
             if (blackPercent > 0.01f) {
@@ -227,7 +227,7 @@ private fun OpeningMoveRow(
         Text(
             text = "$total",
             fontSize = 11.sp,
-            color = Color(0xFF555555),
+            color = AppColors.DarkGray,
             modifier = Modifier.width(40.dp)
         )
     }

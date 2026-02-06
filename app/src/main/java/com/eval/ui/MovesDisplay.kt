@@ -60,7 +60,7 @@ fun MovesList(
                     // Move number
                     Text(
                         text = "${pairIndex + 1}.",
-                        color = Color(0xFF666666),
+                        color = AppColors.DimGray,
                         fontFamily = FontFamily.Monospace,
                         fontSize = 15.sp,
                         modifier = Modifier.width(32.dp)
@@ -182,7 +182,7 @@ private fun MoveChip(
             Text(
                 text = moveDetails.clockTime,
                 fontSize = 11.sp,
-                color = if (isActive) Color.White.copy(alpha = 0.7f) else Color(0xFF888888)
+                color = if (isActive) Color.White.copy(alpha = 0.7f) else AppColors.MediumGray
             )
         }
 
@@ -199,10 +199,10 @@ private fun MoveChip(
             }
             val scoreColor = when {
                 isActive -> Color.White.copy(alpha = 0.9f)
-                score.isMate && playerMateIn > 0 -> Color(0xFF00E676) // Green for player winning mate
-                score.isMate && playerMateIn < 0 -> Color(0xFFFF5252) // Red for player losing mate
-                playerScore > 0.1f -> Color(0xFF00E676) // Green for player better
-                playerScore < -0.1f -> Color(0xFFFF5252) // Red for player worse
+                score.isMate && playerMateIn > 0 -> AppColors.PositiveGreen // Green for player winning mate
+                score.isMate && playerMateIn < 0 -> AppColors.NegativeRed // Red for player losing mate
+                playerScore > 0.1f -> AppColors.PositiveGreen // Green for player better
+                playerScore < -0.1f -> AppColors.NegativeRed // Red for player worse
                 else -> Color(0xFF2196F3) // Blue for equal (0)
             }
             Text(
@@ -215,7 +215,7 @@ private fun MoveChip(
             Text(
                 text = "...",
                 fontSize = 15.sp,
-                color = Color(0xFF666666)
+                color = AppColors.DimGray
             )
         }
     }

@@ -57,6 +57,40 @@ class ChessRepository(
 ) {
     private val gson = Gson()
 
+    private inline fun <reified T> parseNdjson(body: String): List<T> {
+        return body.lines()
+            .filter { it.isNotBlank() }
+            .mapNotNull { line ->
+                try {
+                    gson.fromJson(line, T::class.java)
+                } catch (e: Exception) {
+                    null
+                }
+            }
+    }
+
+    /**
+     * Process an NDJSON API response: validate the response body, parse each
+     * line as JSON of type [T], and return a [Result] wrapping the parsed list.
+     *
+     * @param body       The raw response body string (may be null or blank).
+     * @param emptyError The error message to use when the body is blank or
+     *                   parsing yields an empty list.
+     */
+    private inline fun <reified T> processNdjsonResponse(
+        body: String?,
+        emptyError: String
+    ): Result<List<T>> {
+        if (body.isNullOrBlank()) {
+            return Result.Error(emptyError)
+        }
+        val items = parseNdjson<T>(body)
+        if (items.isEmpty()) {
+            return Result.Error(emptyError)
+        }
+        return Result.Success(items)
+    }
+
     /**
      * Get recent games from Lichess.org
      */
@@ -75,26 +109,7 @@ class ChessRepository(
             }
 
             val body = response.body()
-            if (body.isNullOrBlank()) {
-                return@withContext Result.Error("No games found for this user on Lichess")
-            }
-
-            // Parse NDJSON (each line is a game)
-            val games = body.lines()
-                .filter { it.isNotBlank() }
-                .mapNotNull { line ->
-                    try {
-                        gson.fromJson(line, LichessGame::class.java)
-                    } catch (e: Exception) {
-                        null
-                    }
-                }
-
-            if (games.isEmpty()) {
-                return@withContext Result.Error("No games found for this user on Lichess")
-            }
-
-            Result.Success(games)
+            processNdjsonResponse<LichessGame>(body, "No games found for this user on Lichess")
         } catch (e: Exception) {
             Result.Error(e.message ?: "Unknown error occurred")
         }
@@ -346,26 +361,7 @@ class ChessRepository(
             }
 
             val body = response.body()
-            if (body.isNullOrBlank()) {
-                return@withContext Result.Error("No games found in this tournament")
-            }
-
-            // Parse NDJSON
-            val games = body.lines()
-                .filter { it.isNotBlank() }
-                .mapNotNull { line ->
-                    try {
-                        gson.fromJson(line, LichessGame::class.java)
-                    } catch (e: Exception) {
-                        null
-                    }
-                }
-
-            if (games.isEmpty()) {
-                return@withContext Result.Error("No games found in this tournament")
-            }
-
-            Result.Success(games)
+            processNdjsonResponse<LichessGame>(body, "No games found in this tournament")
         } catch (e: Exception) {
             Result.Error(e.message ?: "Unknown error occurred")
         }
@@ -387,42 +383,35 @@ class ChessRepository(
                 return@withContext Result.Error("No broadcast data received")
             }
 
-            // Parse NDJSON - each line is a broadcast object
-            val result = body.lines()
-                .filter { it.isNotBlank() }
-                .mapNotNull { line ->
-                    try {
-                        val broadcast = gson.fromJson(line, LichessBroadcast::class.java)
-                        val tour = broadcast.tour ?: return@mapNotNull null
+            val broadcasts = parseNdjson<LichessBroadcast>(body)
+            val result = broadcasts.mapNotNull { broadcast ->
+                val tour = broadcast.tour ?: return@mapNotNull null
 
-                        // Convert all rounds to BroadcastRoundInfo
-                        val rounds = broadcast.rounds?.mapNotNull roundLoop@{ round ->
-                            val roundId = round.id ?: return@roundLoop null
-                            BroadcastRoundInfo(
-                                id = roundId,
-                                name = round.name ?: "Round",
-                                ongoing = round.ongoing == true,
-                                finished = round.finished == true,
-                                startsAt = round.startsAt
-                            )
-                        } ?: emptyList()
+                // Convert all rounds to BroadcastRoundInfo
+                val rounds = broadcast.rounds?.mapNotNull roundLoop@{ round ->
+                    val roundId = round.id ?: return@roundLoop null
+                    BroadcastRoundInfo(
+                        id = roundId,
+                        name = round.name ?: "Round",
+                        ongoing = round.ongoing == true,
+                        finished = round.finished == true,
+                        startsAt = round.startsAt
+                    )
+                } ?: emptyList()
 
-                        val hasOngoing = rounds.any { it.ongoing }
-                        val firstRoundStart = rounds.firstOrNull()?.startsAt
+                val hasOngoing = rounds.any { it.ongoing }
+                val firstRoundStart = rounds.firstOrNull()?.startsAt
 
-                        BroadcastInfo(
-                            id = tour.id ?: return@mapNotNull null,
-                            name = tour.name ?: "Unknown",
-                            description = tour.description,
-                            rounds = rounds,
-                            ongoing = hasOngoing,
-                            startsAt = firstRoundStart,
-                            server = ChessServer.LICHESS
-                        )
-                    } catch (e: Exception) {
-                        null
-                    }
-                }
+                BroadcastInfo(
+                    id = tour.id ?: return@mapNotNull null,
+                    name = tour.name ?: "Unknown",
+                    description = tour.description,
+                    rounds = rounds,
+                    ongoing = hasOngoing,
+                    startsAt = firstRoundStart,
+                    server = ChessServer.LICHESS
+                )
+            }
 
             Result.Success(result)
         } catch (e: Exception) {

@@ -14,7 +14,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -117,7 +119,7 @@ fun ColorPickerDialog(
                                 drawRect(
                                     color = Color(rgb),
                                     topLeft = Offset(x.toFloat(), y.toFloat()),
-                                    size = androidx.compose.ui.geometry.Size(step, step)
+                                    size = Size(step, step)
                                 )
                             }
                         }
@@ -130,97 +132,52 @@ fun ColorPickerDialog(
                 }
 
                 // Brightness slider
-                Text("Brightness", style = MaterialTheme.typography.labelMedium)
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(30.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .border(1.dp, Color.Gray, RoundedCornerShape(4.dp))
-                ) {
-                    Canvas(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .pointerInput(Unit) {
-                                detectTapGestures { offset ->
-                                    brightness = (offset.x / size.width).coerceIn(0f, 1f)
-                                }
-                            }
-                            .pointerInput(Unit) {
-                                detectHorizontalDragGestures { change, _ ->
-                                    brightness = (change.position.x / size.width).coerceIn(0f, 1f)
-                                }
-                            }
-                    ) {
-                        // Draw brightness gradient
-                        for (x in 0 until size.width.toInt()) {
-                            val b = x / size.width
-                            val rgb = android.graphics.Color.HSVToColor(floatArrayOf(hue, saturation, b))
-                            drawLine(
-                                Color(rgb),
-                                Offset(x.toFloat(), 0f),
-                                Offset(x.toFloat(), size.height),
-                                strokeWidth = 1f
-                            )
-                        }
-                        // Draw indicator
-                        val indicatorX = brightness * size.width
-                        drawLine(Color.White, Offset(indicatorX, 0f), Offset(indicatorX, size.height), 3f)
-                        drawLine(Color.Black, Offset(indicatorX, 0f), Offset(indicatorX, size.height), 1f)
+                GradientSlider(
+                    label = "Brightness",
+                    value = brightness,
+                    onValueChange = { brightness = it }
+                ) { size ->
+                    for (x in 0 until size.width.toInt()) {
+                        val b = x / size.width
+                        val rgb = android.graphics.Color.HSVToColor(floatArrayOf(hue, saturation, b))
+                        drawLine(
+                            Color(rgb),
+                            Offset(x.toFloat(), 0f),
+                            Offset(x.toFloat(), size.height),
+                            strokeWidth = 1f
+                        )
                     }
                 }
 
                 // Alpha/Opacity slider
-                Text("Opacity", style = MaterialTheme.typography.labelMedium)
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(30.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .border(1.dp, Color.Gray, RoundedCornerShape(4.dp))
-                ) {
-                    Canvas(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .pointerInput(Unit) {
-                                detectTapGestures { offset ->
-                                    alpha = (offset.x / size.width).coerceIn(0f, 1f)
-                                }
-                            }
-                            .pointerInput(Unit) {
-                                detectHorizontalDragGestures { change, _ ->
-                                    alpha = (change.position.x / size.width).coerceIn(0f, 1f)
-                                }
-                            }
-                    ) {
-                        // Draw checkerboard background for transparency
-                        val checkSize = 8f
-                        for (x in 0 until (size.width / checkSize).toInt()) {
-                            for (y in 0 until (size.height / checkSize).toInt()) {
-                                val isLight = (x + y) % 2 == 0
-                                drawRect(
-                                    if (isLight) Color.White else Color.LightGray,
-                                    Offset(x * checkSize, y * checkSize),
-                                    androidx.compose.ui.geometry.Size(checkSize, checkSize)
-                                )
-                            }
-                        }
-                        // Draw alpha gradient
-                        val baseRgb = android.graphics.Color.HSVToColor(floatArrayOf(hue, saturation, brightness))
-                        val baseColor = Color(baseRgb)
-                        for (x in 0 until size.width.toInt()) {
-                            val a = x / size.width
-                            drawLine(
-                                baseColor.copy(alpha = a),
-                                Offset(x.toFloat(), 0f),
-                                Offset(x.toFloat(), size.height),
-                                strokeWidth = 1f
+                GradientSlider(
+                    label = "Opacity",
+                    value = alpha,
+                    onValueChange = { alpha = it }
+                ) { size ->
+                    // Draw checkerboard background for transparency
+                    val checkSize = 8f
+                    for (x in 0 until (size.width / checkSize).toInt()) {
+                        for (y in 0 until (size.height / checkSize).toInt()) {
+                            val isLight = (x + y) % 2 == 0
+                            drawRect(
+                                if (isLight) Color.White else Color.LightGray,
+                                Offset(x * checkSize, y * checkSize),
+                                Size(checkSize, checkSize)
                             )
                         }
-                        // Draw indicator
-                        val indicatorX = alpha * size.width
-                        drawLine(Color.White, Offset(indicatorX, 0f), Offset(indicatorX, size.height), 3f)
-                        drawLine(Color.Black, Offset(indicatorX, 0f), Offset(indicatorX, size.height), 1f)
+                    }
+                    // Draw alpha gradient
+                    val baseRgb = android.graphics.Color.HSVToColor(floatArrayOf(hue, saturation, brightness))
+                    val baseColor = Color(baseRgb)
+                    for (x in 0 until size.width.toInt()) {
+                        val a = x / size.width
+                        drawLine(
+                            baseColor.copy(alpha = a),
+                            Offset(x.toFloat(), 0f),
+                            Offset(x.toFloat(), size.height),
+                            strokeWidth = 1f
+                        )
                     }
                 }
 
@@ -250,6 +207,49 @@ fun ColorPickerDialog(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Reusable gradient slider composable for color picker controls.
+ * Handles tap and horizontal drag gestures to update a 0..1 value,
+ * draws a custom gradient via [gradientDrawer], and renders an indicator line.
+ */
+@Composable
+private fun GradientSlider(
+    label: String,
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    gradientDrawer: DrawScope.(Size) -> Unit
+) {
+    Text(label, style = MaterialTheme.typography.labelMedium)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(30.dp)
+            .clip(RoundedCornerShape(4.dp))
+            .border(1.dp, Color.Gray, RoundedCornerShape(4.dp))
+    ) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    detectTapGestures { offset ->
+                        onValueChange((offset.x / size.width).coerceIn(0f, 1f))
+                    }
+                }
+                .pointerInput(Unit) {
+                    detectHorizontalDragGestures { change, _ ->
+                        onValueChange((change.position.x / size.width).coerceIn(0f, 1f))
+                    }
+                }
+        ) {
+            gradientDrawer(size)
+            // Draw indicator
+            val indicatorX = value * size.width
+            drawLine(Color.White, Offset(indicatorX, 0f), Offset(indicatorX, size.height), 3f)
+            drawLine(Color.Black, Offset(indicatorX, 0f), Offset(indicatorX, size.height), 1f)
         }
     }
 }

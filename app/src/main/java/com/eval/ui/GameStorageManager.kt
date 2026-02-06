@@ -15,6 +15,20 @@ class GameStorageManager(
     private val gson: Gson
 ) {
 
+    /**
+     * Generic helper to load a JSON list from SharedPreferences.
+     * Returns emptyList() on missing key or parse failure.
+     */
+    private inline fun <reified T> loadJsonList(key: String): List<T> {
+        val json = prefs.getString(key, null) ?: return emptyList()
+        return try {
+            val type = object : TypeToken<List<T>>() {}.type
+            gson.fromJson(json, type) ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
     // ============================================================================
     // Current Analysed Game Storage
     // ============================================================================
@@ -77,13 +91,7 @@ class GameStorageManager(
      * Load the list of previous retrieves.
      */
     fun loadRetrievesList(): List<RetrievedGamesEntry> {
-        val json = prefs.getString(SettingsPreferences.KEY_RETRIEVES_LIST, null) ?: return emptyList()
-        return try {
-            val type = object : TypeToken<List<RetrievedGamesEntry>>() {}.type
-            gson.fromJson(json, type) ?: emptyList()
-        } catch (e: Exception) {
-            emptyList()
-        }
+        return loadJsonList(SettingsPreferences.KEY_RETRIEVES_LIST)
     }
 
     /**
@@ -91,13 +99,7 @@ class GameStorageManager(
      */
     fun loadGamesForRetrieve(entry: RetrievedGamesEntry): List<LichessGame> {
         val key = getRetrievedGamesKey(entry.accountName, entry.server)
-        val json = prefs.getString(key, null) ?: return emptyList()
-        return try {
-            val type = object : TypeToken<List<LichessGame>>() {}.type
-            gson.fromJson(json, type) ?: emptyList()
-        } catch (e: Exception) {
-            emptyList()
-        }
+        return loadJsonList(key)
     }
 
     // ============================================================================
@@ -167,13 +169,7 @@ class GameStorageManager(
      * Load the full list of previously analysed games.
      */
     fun loadManualGamesList(): List<AnalysedGame> {
-        val json = prefs.getString(SettingsPreferences.KEY_LIST_MANUAL_GAMES, null) ?: return emptyList()
-        return try {
-            val type = object : TypeToken<List<AnalysedGame>>() {}.type
-            gson.fromJson(json, type) ?: emptyList()
-        } catch (e: Exception) {
-            emptyList()
-        }
+        return loadJsonList(SettingsPreferences.KEY_LIST_MANUAL_GAMES)
     }
 
     /**

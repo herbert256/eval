@@ -220,9 +220,100 @@ class StockfishEngine(private val context: Context) {
         // Note: The analysis job will send "isready" and wait for "readyok" before starting
     }
 
+    /**
+     * Sends "isready" and reads until "readyok", discarding leftover info/bestmove lines.
+     * Returns true if readyok was received, false otherwise (null read or max attempts exceeded).
+     * Must be called from a coroutine context (checks isActive).
+     */
+    private suspend fun CoroutineScope.waitForEngineReady(caller: String, maxAttempts: Int = 50): Boolean {
+        sendCommand("isready")
+
+        var line = processReader?.readLine()
+        var readyAttempts = 0
+        while (line != null && line != "readyok" && isActive && readyAttempts < maxAttempts) {
+            // Skip info lines from previous analysis that might still be in buffer
+            if (line.startsWith("info ") || line.startsWith("bestmove")) {
+                // Discard leftover output
+            }
+            line = processReader?.readLine()
+            readyAttempts++
+        }
+
+        if (!isActive) {
+            android.util.Log.d("StockfishEngine", "$caller: cancelled before analysis")
+            return false
+        }
+        if (line == null) {
+            val isAlive = try { process?.isAlive == true } catch (e: Exception) { false }
+            android.util.Log.e("StockfishEngine", "$caller: processReader returned null (EOF?), process.isAlive=$isAlive")
+            _isReady.value = false
+            return false
+        }
+        if (readyAttempts >= maxAttempts) {
+            android.util.Log.e("StockfishEngine", "$caller: timeout waiting for readyok after $readyAttempts attempts")
+            return false
+        }
+
+        return true
+    }
+
+    /**
+     * Reads analysis output lines until bestmove, calling parseInfoLine() for info lines.
+     * Returns the number of lines read.
+     * Must be called from a coroutine context (checks isActive).
+     */
+    private suspend fun CoroutineScope.readAnalysisOutput(caller: String): Int {
+        var line = processReader?.readLine()
+        var linesRead = 0
+        while (line != null && isActive) {
+            linesRead++
+            when {
+                line.startsWith("info depth") && line.contains("score") -> {
+                    parseInfoLine(line)
+                }
+                line.startsWith("bestmove") -> {
+                    break
+                }
+            }
+            line = processReader?.readLine()
+        }
+
+        // Check if we exited due to process death
+        if (line == null && isActive) {
+            android.util.Log.e("StockfishEngine", "$caller: engine died during analysis")
+            _isReady.value = false
+        }
+
+        return linesRead
+    }
+
     fun analyze(fen: String, depth: Int = 16) {
+        startAnalysis("analyze", fen, "go depth $depth")
+    }
+
+    fun analyzeWithTime(fen: String, timeMs: Int) {
+        android.util.Log.d("StockfishEngine", "analyzeWithTime: starting analysis for ${timeMs}ms")
+        startAnalysis("analyzeWithTime", fen, "go movetime $timeMs") { linesRead ->
+            if (linesRead < 3) {
+                android.util.Log.e("StockfishEngine", "analyzeWithTime: analysis ended early, only $linesRead lines read")
+            }
+        }
+    }
+
+    /**
+     * Common analysis launcher used by both analyze() and analyzeWithTime().
+     * Handles job cancellation, mutex locking, engine readiness, position setup,
+     * output reading, and exception handling.
+     * The optional onComplete callback receives the number of lines read.
+     */
+    private fun startAnalysis(
+        caller: String,
+        fen: String,
+        goCommand: String,
+        onComplete: ((Int) -> Unit)? = null
+    ) {
         if (!_isReady.value) {
-            android.util.Log.e("StockfishEngine", "analyze: engine not ready, skipping")
+            android.util.Log.e("StockfishEngine", "$caller: engine not ready, skipping")
             return
         }
 
@@ -241,136 +332,18 @@ class StockfishEngine(private val context: Context) {
                     _analysisResult.value = null
 
                     // Ensure engine is ready (waits for any pending commands to complete)
-                    sendCommand("isready")
+                    if (!waitForEngineReady(caller)) return@withLock
 
-                    // Read until we get readyok to ensure engine is ready
-                    var line = processReader?.readLine()
-                    while (line != null && line != "readyok" && isActive) {
-                        line = processReader?.readLine()
-                    }
-
-                    if (!isActive) return@withLock
-
-                    // Check if process is still alive
-                    if (line == null) {
-                        android.util.Log.e("StockfishEngine", "analyze: processReader returned null (engine crashed?)")
-                        _isReady.value = false
-                        return@withLock
-                    }
-
-                    // Set position and start depth-based analysis (runs until depth reached)
+                    // Set position and start analysis
                     sendCommand("position fen $fen")
-                    sendCommand("go depth $depth")
+                    sendCommand(goCommand)
 
                     // Read analysis output
-                    line = processReader?.readLine()
-                    while (line != null && isActive) {
-                        when {
-                            line.startsWith("info depth") && line.contains("score") -> {
-                                parseInfoLine(line)
-                            }
-                            line.startsWith("bestmove") -> {
-                                break
-                            }
-                        }
-                        line = processReader?.readLine()
-                    }
-
-                    // Check if we exited due to process death
-                    if (line == null && isActive) {
-                        android.util.Log.e("StockfishEngine", "analyze: engine died during analysis")
-                        _isReady.value = false
-                    }
+                    val linesRead = readAnalysisOutput(caller)
+                    onComplete?.invoke(linesRead)
                 } catch (e: Exception) {
                     if (e !is CancellationException) {
-                        android.util.Log.e("StockfishEngine", "analyze: exception: ${e.message}")
-                        e.printStackTrace()
-                    }
-                }
-            }
-        }
-    }
-
-    fun analyzeWithTime(fen: String, timeMs: Int) {
-        if (!_isReady.value) {
-            android.util.Log.e("StockfishEngine", "analyzeWithTime: engine not ready, skipping analysis")
-            return
-        }
-
-        android.util.Log.d("StockfishEngine", "analyzeWithTime: starting analysis for ${timeMs}ms")
-
-        // Cancel previous job
-        analysisJob?.cancel()
-        analysisJob = scope.launch {
-            analysisMutex.withLock {
-                try {
-                    // Stop any ongoing analysis in the engine
-                    sendCommand("stop")
-
-                    // Clear previous lines and reset result (synchronized for thread safety)
-                    synchronized(pvLinesLock) {
-                        pvLines.clear()
-                    }
-                    currentNodes = 0
-                    _analysisResult.value = null
-
-                    // Ensure engine is ready (waits for any pending commands to complete)
-                    sendCommand("isready")
-
-                    // Read until we get readyok to ensure engine is ready
-                    var line = processReader?.readLine()
-                    var readyAttempts = 0
-                    val maxReadyAttempts = 50  // Limit attempts to avoid infinite loop
-                    while (line != null && line != "readyok" && isActive && readyAttempts < maxReadyAttempts) {
-                        // Skip info lines from previous analysis that might still be in buffer
-                        if (line.startsWith("info ") || line.startsWith("bestmove")) {
-                            // Discard leftover output
-                        }
-                        line = processReader?.readLine()
-                        readyAttempts++
-                    }
-
-                    if (!isActive) {
-                        android.util.Log.d("StockfishEngine", "analyzeWithTime: cancelled before analysis")
-                        return@withLock
-                    }
-                    if (line == null) {
-                        // Check if process is still alive
-                        val isAlive = try { process?.isAlive == true } catch (e: Exception) { false }
-                        android.util.Log.e("StockfishEngine", "analyzeWithTime: processReader returned null (EOF?), process.isAlive=$isAlive")
-                        _isReady.value = false
-                        return@withLock
-                    }
-                    if (readyAttempts >= maxReadyAttempts) {
-                        android.util.Log.e("StockfishEngine", "analyzeWithTime: timeout waiting for readyok after $readyAttempts attempts")
-                        return@withLock
-                    }
-
-                    // Set position and start analysis with time limit
-                    sendCommand("position fen $fen")
-                    sendCommand("go movetime $timeMs")
-
-                    // Read analysis output
-                    line = processReader?.readLine()
-                    var linesRead = 0
-                    while (line != null && isActive) {
-                        linesRead++
-                        when {
-                            line.startsWith("info depth") && line.contains("score") -> {
-                                parseInfoLine(line)
-                            }
-                            line.startsWith("bestmove") -> {
-                                break
-                            }
-                        }
-                        line = processReader?.readLine()
-                    }
-                    if (line == null && linesRead < 3) {
-                        android.util.Log.e("StockfishEngine", "analyzeWithTime: analysis ended early, only $linesRead lines read")
-                    }
-                } catch (e: Exception) {
-                    if (e !is CancellationException) {
-                        android.util.Log.e("StockfishEngine", "analyzeWithTime: exception: ${e.message}")
+                        android.util.Log.e("StockfishEngine", "$caller: exception: ${e.message}")
                         e.printStackTrace()
                     }
                 }
@@ -466,6 +439,34 @@ class StockfishEngine(private val context: Context) {
     }
 
     /**
+     * Cleans up the Stockfish process by sending quit, closing streams, and terminating.
+     * In forceful mode (used by restart), waits for termination with timeout and
+     * destroys forcibly if not terminated. In non-forceful mode (used by shutdown),
+     * simply calls destroy().
+     */
+    private fun cleanupProcess(forceful: Boolean) {
+        try {
+            sendCommand("quit")
+            processWriter?.close()
+            processReader?.close()
+            if (forceful) {
+                val terminated = process?.waitFor(500, java.util.concurrent.TimeUnit.MILLISECONDS) ?: true
+                if (!terminated) {
+                    process?.destroyForcibly()
+                    process?.waitFor(500, java.util.concurrent.TimeUnit.MILLISECONDS)
+                }
+            } else {
+                process?.destroy()
+            }
+        } catch (e: Exception) {
+            if (!forceful) {
+                e.printStackTrace()
+            }
+            // In forceful mode, ignore errors during cleanup
+        }
+    }
+
+    /**
      * Restart the Stockfish engine. Kills the current process and starts a new one.
      * Returns true if the restart was successful.
      */
@@ -477,18 +478,7 @@ class StockfishEngine(private val context: Context) {
             _analysisResult.value = null
 
             // Kill the current process
-            try {
-                sendCommand("quit")
-                processWriter?.close()
-                processReader?.close()
-                val terminated = process?.waitFor(500, java.util.concurrent.TimeUnit.MILLISECONDS) ?: true
-                if (!terminated) {
-                    process?.destroyForcibly()
-                    process?.waitFor(500, java.util.concurrent.TimeUnit.MILLISECONDS)
-                }
-            } catch (e: Exception) {
-                // Ignore errors during cleanup
-            }
+            cleanupProcess(forceful = true)
 
             // Clear state
             process = null
@@ -516,13 +506,6 @@ class StockfishEngine(private val context: Context) {
         analysisJob?.cancel()
         _scope?.cancel()
         _scope = null  // Allow scope to be recreated if engine is restarted
-        try {
-            sendCommand("quit")
-            processWriter?.close()
-            processReader?.close()
-            process?.destroy()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        cleanupProcess(forceful = false)
     }
 }

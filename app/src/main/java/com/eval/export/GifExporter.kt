@@ -66,6 +66,47 @@ object GifExporter {
     }
 
     /**
+     * Encode a sequence of frames into an animated GIF file.
+     *
+     * @param context Android context
+     * @param frameCount Number of frames to encode
+     * @param filePrefix Prefix for the generated filename
+     * @param frameDelay Delay between frames in milliseconds
+     * @param renderFrame Lambda that renders frame at given index to a Bitmap
+     * @param callback Progress callback
+     * @return File containing the exported GIF
+     */
+    private suspend fun encodeGif(
+        context: Context,
+        frameCount: Int,
+        filePrefix: String,
+        frameDelay: Int,
+        renderFrame: (Int) -> Bitmap,
+        callback: ProgressCallback?
+    ): File = withContext(Dispatchers.IO) {
+        val file = File(context.cacheDir, "${filePrefix}_${System.currentTimeMillis()}.gif")
+        val encoder = AnimatedGifEncoder()
+
+        FileOutputStream(file).use { fos ->
+            encoder.start(fos)
+            encoder.setDelay(frameDelay)
+            encoder.setRepeat(0) // Loop forever
+            encoder.setQuality(10)
+
+            for (index in 0 until frameCount) {
+                val bitmap = renderFrame(index)
+                encoder.addFrame(bitmap)
+                bitmap.recycle()
+                callback?.onProgress(index + 1, frameCount)
+            }
+
+            encoder.finish()
+        }
+
+        file
+    }
+
+    /**
      * Export a game as an animated GIF.
      *
      * @param context Android context
@@ -81,48 +122,25 @@ object GifExporter {
         scores: Map<Int, MoveScore> = emptyMap(),
         frameDelay: Int = 800,
         callback: ProgressCallback? = null
-    ): File = withContext(Dispatchers.IO) {
-        val file = File(context.cacheDir, "game_${System.currentTimeMillis()}.gif")
-        val encoder = AnimatedGifEncoder()
-
-        FileOutputStream(file).use { fos ->
-            encoder.start(fos)
-            encoder.setDelay(frameDelay)
-            encoder.setRepeat(0) // Loop forever
-            encoder.setQuality(10)
-
-            boards.forEachIndexed { index, board ->
-                val score = scores[index]
-                val bitmap = renderBoard(board, score)
-                encoder.addFrame(bitmap)
-                bitmap.recycle()
-                callback?.onProgress(index + 1, boards.size)
-            }
-
-            encoder.finish()
-        }
-
-        file
-    }
+    ): File = encodeGif(context, boards.size, "game", frameDelay, { index ->
+        renderFrame(boards[index], scores[index])
+    }, callback)
 
     /**
-     * Render a chess position to a bitmap.
+     * Draw board squares and pieces onto the canvas.
      */
-    private fun renderBoard(board: ChessBoard, score: MoveScore?): Bitmap {
-        val bitmap = Bitmap.createBitmap(TOTAL_WIDTH, BOARD_SIZE, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-
+    private fun drawBoardContent(canvas: Canvas, board: ChessBoard, squareSize: Int, lightColor: Int, darkColor: Int) {
         // Draw board squares
         val squarePaint = Paint()
         for (row in 0 until 8) {
             for (col in 0 until 8) {
                 val isLight = (row + col) % 2 == 0
-                squarePaint.color = if (isLight) WHITE_SQUARE else BLACK_SQUARE
+                squarePaint.color = if (isLight) lightColor else darkColor
                 canvas.drawRect(
-                    (col * SQUARE_SIZE).toFloat(),
-                    (row * SQUARE_SIZE).toFloat(),
-                    ((col + 1) * SQUARE_SIZE).toFloat(),
-                    ((row + 1) * SQUARE_SIZE).toFloat(),
+                    (col * squareSize).toFloat(),
+                    (row * squareSize).toFloat(),
+                    ((col + 1) * squareSize).toFloat(),
+                    ((row + 1) * squareSize).toFloat(),
                     squarePaint
                 )
             }
@@ -130,7 +148,7 @@ object GifExporter {
 
         // Draw pieces
         val piecePaint = Paint().apply {
-            textSize = SQUARE_SIZE * 0.85f
+            textSize = squareSize * 0.85f
             textAlign = Paint.Align.CENTER
             isAntiAlias = true
             typeface = Typeface.DEFAULT
@@ -145,8 +163,8 @@ object GifExporter {
                     val isWhite = piece.color == PieceColor.WHITE
 
                     // Draw piece with outline for visibility
-                    val x = col * SQUARE_SIZE + SQUARE_SIZE / 2f
-                    val y = row * SQUARE_SIZE + SQUARE_SIZE * 0.75f
+                    val x = col * squareSize + squareSize / 2f
+                    val y = row * squareSize + squareSize * 0.75f
 
                     // Draw outline
                     piecePaint.style = Paint.Style.STROKE
@@ -161,11 +179,53 @@ object GifExporter {
                 }
             }
         }
+    }
 
-        // Draw evaluation bar
+    /**
+     * Render a chess position to a bitmap, with optional annotation text at the top.
+     *
+     * @param board Chess board state to render
+     * @param score Evaluation score for the eval bar (null shows 50%)
+     * @param annotationText Optional move annotation text shown above the board
+     * @return Bitmap of the rendered frame
+     */
+    private fun renderFrame(board: ChessBoard, score: MoveScore?, annotationText: String? = null): Bitmap {
+        val annotationHeight = if (annotationText != null) 30 else 0
+        val totalHeight = BOARD_SIZE + annotationHeight
+
+        val bitmap = Bitmap.createBitmap(TOTAL_WIDTH, totalHeight, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+
+        // Draw annotation bar if needed
+        if (annotationText != null) {
+            drawAnnotationBar(canvas, annotationText, annotationHeight)
+        }
+
+        // Translate canvas down for board content
+        canvas.save()
+        canvas.translate(0f, annotationHeight.toFloat())
+        drawBoardContent(canvas, board, SQUARE_SIZE, WHITE_SQUARE, BLACK_SQUARE)
         drawEvalBar(canvas, score)
+        canvas.restore()
 
         return bitmap
+    }
+
+    /**
+     * Draw the move annotation bar at the top of the frame.
+     */
+    private fun drawAnnotationBar(canvas: Canvas, text: String, height: Int) {
+        val bgPaint = Paint().apply { color = 0xFF2D2D2D.toInt() }
+        canvas.drawRect(0f, 0f, TOTAL_WIDTH.toFloat(), height.toFloat(), bgPaint)
+
+        val textPaint = Paint().apply {
+            color = Color.WHITE
+            textSize = 18f
+            textAlign = Paint.Align.CENTER
+            isAntiAlias = true
+            typeface = Typeface.DEFAULT_BOLD
+        }
+        canvas.drawText(text, TOTAL_WIDTH / 2f, 22f, textPaint)
     }
 
     /**
@@ -203,32 +263,39 @@ object GifExporter {
 
         // Draw score text
         if (score != null) {
-            val textPaint = Paint().apply {
-                textSize = 12f
-                textAlign = Paint.Align.CENTER
-                isAntiAlias = true
-                typeface = Typeface.DEFAULT_BOLD
-            }
-
-            val scoreText = if (score.isMate) {
-                if (score.mateIn > 0) "M${score.mateIn}" else "M${abs(score.mateIn)}"
-            } else {
-                val s = score.score
-                if (s >= 0) "+%.1f".format(s) else "%.1f".format(s)
-            }
-
-            // Draw at center of bar
-            val textX = barX + EVAL_BAR_WIDTH / 2
-            val textY = BOARD_SIZE / 2f + 4f
-
-            // Background for readability
-            textPaint.color = Color.WHITE
-            canvas.drawText(scoreText, textX, textY, textPaint)
-            textPaint.color = Color.BLACK
-            textPaint.style = Paint.Style.STROKE
-            textPaint.strokeWidth = 0.5f
-            canvas.drawText(scoreText, textX, textY, textPaint)
+            drawEvalBarText(canvas, score, barX)
         }
+    }
+
+    /**
+     * Draw the score text on the evaluation bar.
+     */
+    private fun drawEvalBarText(canvas: Canvas, score: MoveScore, barX: Float) {
+        val textPaint = Paint().apply {
+            textSize = 12f
+            textAlign = Paint.Align.CENTER
+            isAntiAlias = true
+            typeface = Typeface.DEFAULT_BOLD
+        }
+
+        val scoreText = if (score.isMate) {
+            if (score.mateIn > 0) "M${score.mateIn}" else "M${abs(score.mateIn)}"
+        } else {
+            val s = score.score
+            if (s >= 0) "+%.1f".format(s) else "%.1f".format(s)
+        }
+
+        // Draw at center of bar
+        val textX = barX + EVAL_BAR_WIDTH / 2
+        val textY = BOARD_SIZE / 2f + 4f
+
+        // Background for readability
+        textPaint.color = Color.WHITE
+        canvas.drawText(scoreText, textX, textY, textPaint)
+        textPaint.color = Color.BLACK
+        textPaint.style = Paint.Style.STROKE
+        textPaint.strokeWidth = 0.5f
+        canvas.drawText(scoreText, textX, textY, textPaint)
     }
 
     /**
@@ -241,116 +308,12 @@ object GifExporter {
         scores: Map<Int, MoveScore> = emptyMap(),
         frameDelay: Int = 800,
         callback: ProgressCallback? = null
-    ): File = withContext(Dispatchers.IO) {
-        val file = File(context.cacheDir, "game_annotated_${System.currentTimeMillis()}.gif")
-        val encoder = AnimatedGifEncoder()
-
-        FileOutputStream(file).use { fos ->
-            encoder.start(fos)
-            encoder.setDelay(frameDelay)
-            encoder.setRepeat(0)
-            encoder.setQuality(10)
-
-            boards.forEachIndexed { index, board ->
-                val score = scores[index]
-                val moveText = if (index > 0 && index <= moves.size) {
-                    val moveNum = (index + 1) / 2
-                    val isWhite = index % 2 == 1
-                    if (isWhite) "$moveNum. ${moves[index - 1]}" else "${moves[index - 1]}"
-                } else null
-
-                val bitmap = renderBoardWithAnnotation(board, score, moveText)
-                encoder.addFrame(bitmap)
-                bitmap.recycle()
-                callback?.onProgress(index + 1, boards.size)
-            }
-
-            encoder.finish()
-        }
-
-        file
-    }
-
-    /**
-     * Render board with move annotation at the top.
-     */
-    private fun renderBoardWithAnnotation(
-        board: ChessBoard,
-        score: MoveScore?,
-        moveText: String?
-    ): Bitmap {
-        val annotationHeight = if (moveText != null) 30 else 0
-        val totalHeight = BOARD_SIZE + annotationHeight
-
-        val bitmap = Bitmap.createBitmap(TOTAL_WIDTH, totalHeight, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-
-        // Draw annotation bar if needed
-        if (moveText != null) {
-            val bgPaint = Paint().apply { color = 0xFF2D2D2D.toInt() }
-            canvas.drawRect(0f, 0f, TOTAL_WIDTH.toFloat(), annotationHeight.toFloat(), bgPaint)
-
-            val textPaint = Paint().apply {
-                color = Color.WHITE
-                textSize = 18f
-                textAlign = Paint.Align.CENTER
-                isAntiAlias = true
-                typeface = Typeface.DEFAULT_BOLD
-            }
-            canvas.drawText(moveText, TOTAL_WIDTH / 2f, 22f, textPaint)
-        }
-
-        // Translate canvas down for board
-        canvas.save()
-        canvas.translate(0f, annotationHeight.toFloat())
-
-        // Draw board (same as renderBoard but inline)
-        val squarePaint = Paint()
-        for (row in 0 until 8) {
-            for (col in 0 until 8) {
-                val isLight = (row + col) % 2 == 0
-                squarePaint.color = if (isLight) WHITE_SQUARE else BLACK_SQUARE
-                canvas.drawRect(
-                    (col * SQUARE_SIZE).toFloat(),
-                    (row * SQUARE_SIZE).toFloat(),
-                    ((col + 1) * SQUARE_SIZE).toFloat(),
-                    ((row + 1) * SQUARE_SIZE).toFloat(),
-                    squarePaint
-                )
-            }
-        }
-
-        val piecePaint = Paint().apply {
-            textSize = SQUARE_SIZE * 0.85f
-            textAlign = Paint.Align.CENTER
-            isAntiAlias = true
-        }
-
-        for (row in 0 until 8) {
-            for (col in 0 until 8) {
-                val piece = board.getPiece(col, 7 - row) // file, rank (rank 7 is top row)
-                if (piece != null) {
-                    val pieceChar = pieceToChar(piece)
-                    val symbol = PIECE_SYMBOLS[pieceChar] ?: continue
-                    val isWhite = piece.color == PieceColor.WHITE
-                    val x = col * SQUARE_SIZE + SQUARE_SIZE / 2f
-                    val y = row * SQUARE_SIZE + SQUARE_SIZE * 0.75f
-
-                    piecePaint.style = Paint.Style.STROKE
-                    piecePaint.strokeWidth = 2f
-                    piecePaint.color = if (isWhite) BLACK_PIECE else WHITE_PIECE
-                    canvas.drawText(symbol, x, y, piecePaint)
-
-                    piecePaint.style = Paint.Style.FILL
-                    piecePaint.color = if (isWhite) WHITE_PIECE else BLACK_PIECE
-                    canvas.drawText(symbol, x, y, piecePaint)
-                }
-            }
-        }
-
-        drawEvalBar(canvas, score)
-        canvas.restore()
-
-        return bitmap
-    }
+    ): File = encodeGif(context, boards.size, "game_annotated", frameDelay, { index ->
+        val moveText = if (index > 0 && index <= moves.size) {
+            val moveNum = (index + 1) / 2
+            val isWhite = index % 2 == 1
+            if (isWhite) "$moveNum. ${moves[index - 1]}" else "${moves[index - 1]}"
+        } else null
+        renderFrame(boards[index], scores[index], moveText)
+    }, callback)
 }

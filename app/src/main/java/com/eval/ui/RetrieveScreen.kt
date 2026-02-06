@@ -333,7 +333,7 @@ private fun RetrieveMainScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF1A1A2E))
+            .background(AppColors.DarkBlueBackground)
             .padding(16.dp)
     ) {
         // Header
@@ -358,7 +358,7 @@ private fun RetrieveMainScreen(
                     .fillMaxWidth()
                     .clickable { onLichessClick() },
                 colors = CardDefaults.cardColors(
-                    containerColor = Color(0xFF629924) // Lichess green
+                    containerColor = AppColors.LichessGreen // Lichess green
                 ),
                 shape = RoundedCornerShape(12.dp)
             ) {
@@ -383,7 +383,7 @@ private fun RetrieveMainScreen(
                 }
             }
 
-            HorizontalDivider(color = Color(0xFF404040), modifier = Modifier.padding(vertical = 8.dp))
+            HorizontalDivider(color = AppColors.Divider, modifier = Modifier.padding(vertical = 8.dp))
 
             // Error message
             if (uiState.errorMessage != null) {
@@ -408,7 +408,7 @@ private fun RetrieveMainScreen(
                     onClick = { viewModel.showPreviousRetrieves() },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF3A5A7C)
+                        containerColor = AppColors.BlueGrayAccent
                     )
                 ) {
                     Text("Select from a previous retrieve")
@@ -421,7 +421,7 @@ private fun RetrieveMainScreen(
                     onClick = { viewModel.showAnalysedGames() },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF3A5A7C)
+                        containerColor = AppColors.BlueGrayAccent
                     )
                 ) {
                     Text("Select from previous analysed games")
@@ -435,7 +435,7 @@ private fun RetrieveMainScreen(
                 },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF3A5A7C)
+                    containerColor = AppColors.BlueGrayAccent
                 )
             ) {
                 Text("Select from a PGN file")
@@ -446,7 +446,7 @@ private fun RetrieveMainScreen(
                 onClick = onOpeningClick,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF3A5A7C)
+                    containerColor = AppColors.BlueGrayAccent
                 )
             ) {
                 Text("Start with opening")
@@ -470,7 +470,7 @@ private fun RetrieveMainScreen(
                 },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF3A5A7C)
+                    containerColor = AppColors.BlueGrayAccent
                 )
             ) {
                 Text("Start from FEN position")
@@ -523,13 +523,13 @@ private fun RetrieveMainScreen(
                                                 .fillMaxWidth()
                                                 .clickable { fenInput = fen },
                                             colors = CardDefaults.cardColors(
-                                                containerColor = Color(0xFF2A2A2A)
+                                                containerColor = AppColors.CardBackground
                                             )
                                         ) {
                                             Text(
                                                 text = fen,
                                                 fontSize = 11.sp,
-                                                color = Color(0xFFCCCCCC),
+                                                color = AppColors.LightGray,
                                                 maxLines = 1,
                                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
@@ -572,11 +572,11 @@ private fun RetrieveMainScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(color = Color(0xFF6B9BFF))
+                        CircularProgressIndicator(color = AppColors.AccentBlue)
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = "Fetching games...",
-                            color = Color(0xFFAAAAAA)
+                            color = AppColors.SubtleText
                         )
                     }
                 }
@@ -608,7 +608,7 @@ private fun LichessRetrieveScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF1A1A2E))
+            .background(AppColors.DarkBlueBackground)
             .padding(16.dp)
     ) {
         // Header
@@ -655,10 +655,10 @@ private fun LichessRetrieveScreen(
                 keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                 modifier = Modifier.fillMaxWidth(),
                 colors = OutlinedTextFieldDefaults.colors(
-                    unfocusedBorderColor = Color(0xFF555555),
-                    focusedBorderColor = Color(0xFF629924),
-                    unfocusedLabelColor = Color(0xFFAAAAAA),
-                    focusedLabelColor = Color(0xFF629924)
+                    unfocusedBorderColor = AppColors.DarkGray,
+                    focusedBorderColor = AppColors.LichessGreen,
+                    unfocusedLabelColor = AppColors.SubtleText,
+                    focusedLabelColor = AppColors.LichessGreen
                 )
             )
 
@@ -675,7 +675,7 @@ private fun LichessRetrieveScreen(
                 enabled = !uiState.isLoading && username.isNotBlank(),
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF629924)
+                    containerColor = AppColors.LichessGreen
                 )
             ) {
                 Text(
@@ -691,7 +691,7 @@ private fun LichessRetrieveScreen(
                 onClick = onTopRankingsClick,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = Color(0xFF629924)
+                    contentColor = AppColors.LichessGreen
                 )
             ) {
                 Text(
@@ -705,7 +705,7 @@ private fun LichessRetrieveScreen(
                 onClick = onTournamentsClick,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = Color(0xFF629924)
+                    contentColor = AppColors.LichessGreen
                 )
             ) {
                 Text(
@@ -719,7 +719,7 @@ private fun LichessRetrieveScreen(
                 onClick = onBroadcastsClick,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = Color(0xFF629924)
+                    contentColor = AppColors.LichessGreen
                 )
             ) {
                 Text(
@@ -733,7 +733,7 @@ private fun LichessRetrieveScreen(
                 onClick = onTvClick,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = Color(0xFF629924)
+                    contentColor = AppColors.LichessGreen
                 )
             ) {
                 Text(
@@ -747,7 +747,7 @@ private fun LichessRetrieveScreen(
                 onClick = onStreamersClick,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = Color(0xFF629924)
+                    contentColor = AppColors.LichessGreen
                 )
             ) {
                 Text(
@@ -765,11 +765,11 @@ private fun LichessRetrieveScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(color = Color(0xFF629924))
+                        CircularProgressIndicator(color = AppColors.LichessGreen)
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = "Fetching games from Lichess...",
-                            color = Color(0xFFAAAAAA)
+                            color = AppColors.SubtleText
                         )
                     }
                 }
@@ -788,7 +788,7 @@ private fun TopRankingsScreen(
     onPlayerClick: (LeaderboardPlayer) -> Unit
 ) {
     val serverName = "lichess.org"
-    val serverColor = Color(0xFF629924)
+    val serverColor = AppColors.LichessGreen
 
     // Handle back navigation
     BackHandler { onBack() }
@@ -796,7 +796,7 @@ private fun TopRankingsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF1A1A2E))
+            .background(AppColors.DarkBlueBackground)
             .padding(16.dp)
     ) {
         // Header
@@ -809,7 +809,7 @@ private fun TopRankingsScreen(
         Text(
             text = serverName,
             style = MaterialTheme.typography.bodyMedium,
-            color = Color(0xFFAAAAAA),
+            color = AppColors.SubtleText,
             modifier = Modifier.padding(start = 8.dp, bottom = 16.dp)
         )
 
@@ -827,7 +827,7 @@ private fun TopRankingsScreen(
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = "Loading top rankings...",
-                            color = Color(0xFFAAAAAA)
+                            color = AppColors.SubtleText
                         )
                     }
                 }
@@ -892,7 +892,7 @@ private fun FormatSection(
         // Players table
         Card(
             colors = CardDefaults.cardColors(
-                containerColor = Color(0xFF2A2A2A)
+                containerColor = AppColors.CardBackground
             ),
             shape = RoundedCornerShape(8.dp),
             modifier = Modifier.fillMaxWidth()
@@ -943,7 +943,7 @@ private fun FormatSection(
                         Text(
                             text = "${index + 1}",
                             fontSize = 14.sp,
-                            color = Color(0xFFAAAAAA),
+                            color = AppColors.SubtleText,
                             modifier = Modifier.width(30.dp)
                         )
                         Row(
@@ -989,7 +989,7 @@ private fun TournamentsScreen(
     uiState: GameUiState,
     onBack: () -> Unit
 ) {
-    val serverColor = Color(0xFF629924)
+    val serverColor = AppColors.LichessGreen
 
     BackHandler {
         if (uiState.selectedTournament != null) {
@@ -1002,7 +1002,7 @@ private fun TournamentsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF1A1A2E))
+            .background(AppColors.DarkBlueBackground)
             .padding(16.dp)
     ) {
         // Header
@@ -1022,14 +1022,14 @@ private fun TournamentsScreen(
             Text(
                 text = uiState.selectedTournament.name,
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFFAAAAAA),
+                color = AppColors.SubtleText,
                 modifier = Modifier.padding(start = 8.dp, bottom = 16.dp)
             )
         } else {
             Text(
                 text = "lichess.org",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFFAAAAAA),
+                color = AppColors.SubtleText,
                 modifier = Modifier.padding(start = 8.dp, bottom = 16.dp)
             )
         }
@@ -1046,7 +1046,7 @@ private fun TournamentsScreen(
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = if (uiState.tournamentGamesLoading) "Loading games..." else "Loading tournaments...",
-                            color = Color(0xFFAAAAAA)
+                            color = AppColors.SubtleText
                         )
                     }
                 }
@@ -1054,7 +1054,7 @@ private fun TournamentsScreen(
             uiState.tournamentsError != null -> {
                 Text(
                     text = uiState.tournamentsError,
-                    color = Color(0xFFFF5252),
+                    color = AppColors.NegativeRed,
                     modifier = Modifier.padding(16.dp)
                 )
             }
@@ -1063,7 +1063,7 @@ private fun TournamentsScreen(
                 if (uiState.tournamentGames.isEmpty()) {
                     Text(
                         text = "No games found in this tournament",
-                        color = Color(0xFFAAAAAA),
+                        color = AppColors.SubtleText,
                         modifier = Modifier.padding(16.dp)
                     )
                 } else {
@@ -1107,7 +1107,7 @@ private fun TournamentRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2A2A))
+        colors = CardDefaults.cardColors(containerColor = AppColors.CardBackground)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(
@@ -1123,9 +1123,9 @@ private fun TournamentRow(
                 Text(
                     text = tournament.status,
                     color = when (tournament.status) {
-                        "In Progress" -> Color(0xFF00E676)
+                        "In Progress" -> AppColors.PositiveGreen
                         "Starting Soon" -> Color(0xFFFFD700)
-                        else -> Color(0xFFAAAAAA)
+                        else -> AppColors.SubtleText
                     },
                     fontSize = 12.sp
                 )
@@ -1141,7 +1141,7 @@ private fun TournamentRow(
                 )
                 Text(
                     text = "${tournament.playerCount} players",
-                    color = Color(0xFFAAAAAA),
+                    color = AppColors.SubtleText,
                     fontSize = 12.sp
                 )
             }
@@ -1167,7 +1167,7 @@ private fun TournamentGameRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .background(Color(0xFF2A2A2A))
+            .background(AppColors.CardBackground)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -1180,7 +1180,7 @@ private fun TournamentGameRow(
         )
         Text(
             text = result,
-            color = Color(0xFFAAAAAA),
+            color = AppColors.SubtleText,
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 8.dp)
@@ -1206,7 +1206,7 @@ private fun BroadcastsScreen(
     uiState: GameUiState,
     onBack: () -> Unit
 ) {
-    val serverColor = Color(0xFF629924)
+    val serverColor = AppColors.LichessGreen
 
     // Determine current level: broadcasts -> rounds -> games
     val showingRounds = uiState.selectedBroadcast != null &&
@@ -1225,7 +1225,7 @@ private fun BroadcastsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF1A1A2E))
+            .background(AppColors.DarkBlueBackground)
             .padding(16.dp)
     ) {
         // Header
@@ -1252,7 +1252,7 @@ private fun BroadcastsScreen(
                     Text(
                         text = uiState.selectedBroadcast.name,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFFAAAAAA)
+                        color = AppColors.SubtleText
                     )
                     uiState.selectedBroadcastRound?.let { round ->
                         Text(
@@ -1267,7 +1267,7 @@ private fun BroadcastsScreen(
                 Text(
                     text = uiState.selectedBroadcast.name,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFFAAAAAA),
+                    color = AppColors.SubtleText,
                     modifier = Modifier.padding(start = 8.dp, bottom = 16.dp)
                 )
             }
@@ -1275,7 +1275,7 @@ private fun BroadcastsScreen(
                 Text(
                     text = "Official events from lichess.org",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFFAAAAAA),
+                    color = AppColors.SubtleText,
                     modifier = Modifier.padding(start = 8.dp, bottom = 16.dp)
                 )
             }
@@ -1293,7 +1293,7 @@ private fun BroadcastsScreen(
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = if (uiState.broadcastGamesLoading) "Loading games..." else "Loading broadcasts...",
-                            color = Color(0xFFAAAAAA)
+                            color = AppColors.SubtleText
                         )
                     }
                 }
@@ -1301,7 +1301,7 @@ private fun BroadcastsScreen(
             uiState.broadcastsError != null -> {
                 Text(
                     text = uiState.broadcastsError,
-                    color = Color(0xFFFF5252),
+                    color = AppColors.NegativeRed,
                     modifier = Modifier.padding(16.dp)
                 )
             }
@@ -1310,7 +1310,7 @@ private fun BroadcastsScreen(
                 if (uiState.broadcastGames.isEmpty()) {
                     Text(
                         text = "No games found in this round",
-                        color = Color(0xFFAAAAAA),
+                        color = AppColors.SubtleText,
                         modifier = Modifier.padding(16.dp)
                     )
                 } else {
@@ -1368,7 +1368,7 @@ private fun BroadcastRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2A2A))
+        colors = CardDefaults.cardColors(containerColor = AppColors.CardBackground)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(
@@ -1384,7 +1384,7 @@ private fun BroadcastRow(
                 if (broadcast.ongoing) {
                     Text(
                         text = "LIVE",
-                        color = Color(0xFFFF5252),
+                        color = AppColors.NegativeRed,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -1406,7 +1406,7 @@ private fun BroadcastRow(
                 if (desc.isNotBlank()) {
                     Text(
                         text = desc.take(100) + if (desc.length > 100) "..." else "",
-                        color = Color(0xFFAAAAAA),
+                        color = AppColors.SubtleText,
                         fontSize = 12.sp,
                         maxLines = 2
                     )
@@ -1426,7 +1426,7 @@ private fun BroadcastRoundRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2A2A))
+        colors = CardDefaults.cardColors(containerColor = AppColors.CardBackground)
     ) {
         Row(
             modifier = Modifier
@@ -1445,14 +1445,14 @@ private fun BroadcastRoundRow(
                 if (round.ongoing) {
                     Text(
                         text = "LIVE",
-                        color = Color(0xFFFF5252),
+                        color = AppColors.NegativeRed,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
                     )
                 } else if (round.finished) {
                     Text(
                         text = "Finished",
-                        color = Color(0xFFAAAAAA),
+                        color = AppColors.SubtleText,
                         fontSize = 12.sp
                     )
                 }
@@ -1478,7 +1478,7 @@ private fun PgnFileScreen(
     uiState: GameUiState,
     onBack: () -> Unit
 ) {
-    val accentColor = Color(0xFF3A5A7C)
+    val accentColor = AppColors.BlueGrayAccent
 
     // Determine current level: events -> games
     val showingGames = uiState.selectedPgnEvent != null
@@ -1495,7 +1495,7 @@ private fun PgnFileScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF1A1A2E))
+            .background(AppColors.DarkBlueBackground)
             .padding(16.dp)
     ) {
         // Header
@@ -1516,14 +1516,14 @@ private fun PgnFileScreen(
             Text(
                 text = uiState.selectedPgnEvent ?: "",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFFAAAAAA),
+                color = AppColors.SubtleText,
                 modifier = Modifier.padding(start = 8.dp, bottom = 16.dp)
             )
         } else {
             Text(
                 text = "Select an event from PGN file",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFFAAAAAA),
+                color = AppColors.SubtleText,
                 modifier = Modifier.padding(start = 8.dp, bottom = 16.dp)
             )
         }
@@ -1535,7 +1535,7 @@ private fun PgnFileScreen(
                 if (uiState.pgnGamesForSelectedEvent.isEmpty()) {
                     Text(
                         text = "No games found",
-                        color = Color(0xFFAAAAAA),
+                        color = AppColors.SubtleText,
                         modifier = Modifier.padding(16.dp)
                     )
                 } else {
@@ -1582,7 +1582,7 @@ private fun PgnEventRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2A2A))
+        colors = CardDefaults.cardColors(containerColor = AppColors.CardBackground)
     ) {
         Row(
             modifier = Modifier
@@ -1625,7 +1625,7 @@ private fun PgnGameRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .background(Color(0xFF2A2A2A))
+            .background(AppColors.CardBackground)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -1638,7 +1638,7 @@ private fun PgnGameRow(
         )
         Text(
             text = result,
-            color = Color(0xFFAAAAAA),
+            color = AppColors.SubtleText,
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 12.dp)
@@ -1664,14 +1664,14 @@ private fun LichessTvScreen(
     uiState: GameUiState,
     onBack: () -> Unit
 ) {
-    val serverColor = Color(0xFF629924)
+    val serverColor = AppColors.LichessGreen
 
     BackHandler { onBack() }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF1A1A2E))
+            .background(AppColors.DarkBlueBackground)
             .padding(16.dp)
     ) {
         // Header
@@ -1684,7 +1684,7 @@ private fun LichessTvScreen(
         Text(
             text = "Current top games",
             style = MaterialTheme.typography.bodyMedium,
-            color = Color(0xFFAAAAAA),
+            color = AppColors.SubtleText,
             modifier = Modifier.padding(start = 8.dp, bottom = 16.dp)
         )
 
@@ -1700,7 +1700,7 @@ private fun LichessTvScreen(
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = "Loading TV channels...",
-                            color = Color(0xFFAAAAAA)
+                            color = AppColors.SubtleText
                         )
                     }
                 }
@@ -1708,7 +1708,7 @@ private fun LichessTvScreen(
             uiState.tvError != null -> {
                 Text(
                     text = uiState.tvError,
-                    color = Color(0xFFFF5252),
+                    color = AppColors.NegativeRed,
                     modifier = Modifier.padding(16.dp)
                 )
             }
@@ -1739,7 +1739,7 @@ private fun TvChannelRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2A2A))
+        colors = CardDefaults.cardColors(containerColor = AppColors.CardBackground)
     ) {
         Row(
             modifier = Modifier
@@ -1777,7 +1777,7 @@ private fun TvChannelRow(
             channel.rating?.let { rating ->
                 Text(
                     text = rating.toString(),
-                    color = Color(0xFFAAAAAA),
+                    color = AppColors.SubtleText,
                     fontSize = 14.sp
                 )
             }
@@ -1796,14 +1796,14 @@ private fun StreamersScreen(
     uiState: GameUiState,
     onBack: () -> Unit
 ) {
-    val serverColor = Color(0xFF629924)
+    val serverColor = AppColors.LichessGreen
 
     BackHandler { onBack() }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF1A1A2E))
+            .background(AppColors.DarkBlueBackground)
             .padding(16.dp)
     ) {
         // Header
@@ -1816,7 +1816,7 @@ private fun StreamersScreen(
         Text(
             text = "lichess.org streamers",
             style = MaterialTheme.typography.bodyMedium,
-            color = Color(0xFFAAAAAA),
+            color = AppColors.SubtleText,
             modifier = Modifier.padding(start = 8.dp, bottom = 16.dp)
         )
 
@@ -1832,7 +1832,7 @@ private fun StreamersScreen(
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = "Loading streamers...",
-                            color = Color(0xFFAAAAAA)
+                            color = AppColors.SubtleText
                         )
                     }
                 }
@@ -1840,7 +1840,7 @@ private fun StreamersScreen(
             uiState.streamersList.isEmpty() -> {
                 Text(
                     text = "No streamers found",
-                    color = Color(0xFFAAAAAA),
+                    color = AppColors.SubtleText,
                     modifier = Modifier.padding(16.dp)
                 )
             }
@@ -1869,7 +1869,7 @@ private fun StreamerRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2A2A))
+        colors = CardDefaults.cardColors(containerColor = AppColors.CardBackground)
     ) {
         Row(
             modifier = Modifier
@@ -1896,7 +1896,7 @@ private fun StreamerRow(
             if (streamer.isLive) {
                 Text(
                     text = "LIVE",
-                    color = Color(0xFFFF5252),
+                    color = AppColors.NegativeRed,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -1963,7 +1963,7 @@ private fun OpeningSelectionScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF1A1A2E))
+            .background(AppColors.DarkBlueBackground)
             .padding(16.dp)
     ) {
         // Header
@@ -1985,8 +1985,8 @@ private fun OpeningSelectionScreen(
             colors = OutlinedTextFieldDefaults.colors(
                 focusedTextColor = Color.White,
                 unfocusedTextColor = Color.White,
-                focusedBorderColor = Color(0xFF6B8E23),
-                unfocusedBorderColor = Color(0xFF404040),
+                focusedBorderColor = AppColors.ButtonGreen,
+                unfocusedBorderColor = AppColors.Divider,
                 cursorColor = Color.White
             )
         )
@@ -2008,7 +2008,7 @@ private fun OpeningSelectionScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator(color = Color(0xFF6B8E23))
+                CircularProgressIndicator(color = AppColors.ButtonGreen)
             }
         } else {
             // Opening list
@@ -2040,7 +2040,7 @@ private fun OpeningSelectionScreen(
                                 Text(
                                     text = opening.eco,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF6B8E23),
+                                    color = AppColors.ButtonGreen,
                                     fontSize = 14.sp
                                 )
                                 Text(

@@ -32,13 +32,13 @@ private fun SettingStepper(
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium,
-            color = Color(0xFFAAAAAA),
+            color = AppColors.SubtleText,
             modifier = Modifier.padding(bottom = 4.dp)
         )
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.dp, Color(0xFF555555), RoundedCornerShape(8.dp))
+                .border(1.dp, AppColors.DarkGray, RoundedCornerShape(8.dp))
                 .padding(4.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically

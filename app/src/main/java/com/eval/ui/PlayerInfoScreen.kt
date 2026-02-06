@@ -96,7 +96,7 @@ fun PlayerInfoScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF1A1A2E))  // Dark blue background
+            .background(AppColors.DarkBlueBackground)  // Dark blue background
             .padding(16.dp)
     ) {
         // Header with username and title
@@ -143,13 +143,13 @@ fun PlayerInfoScreen(
                         verticalArrangement = Arrangement.Center
                     ) {
                         CircularProgressIndicator(
-                            color = Color(0xFF6B9BFF),
+                            color = AppColors.AccentBlue,
                             modifier = Modifier.size(48.dp)
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = "Loading player info...",
-                            color = Color(0xFFAAAAAA),
+                            color = AppColors.SubtleText,
                             fontSize = 16.sp
                         )
                     }
@@ -164,12 +164,12 @@ fun PlayerInfoScreen(
                             text = "Error",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFFFF5252)
+                            color = AppColors.NegativeRed
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = error,
-                            color = Color(0xFFAAAAAA),
+                            color = AppColors.SubtleText,
                             fontSize = 16.sp,
                             textAlign = TextAlign.Center
                         )
@@ -219,7 +219,7 @@ fun PlayerInfoScreen(
                                 text = "Bio",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp,
-                                color = Color(0xFFAAAAAA)
+                                color = AppColors.SubtleText
                             )
                             TextWithClickableUrls(
                                 text = playerInfo.bio,
@@ -237,7 +237,7 @@ fun PlayerInfoScreen(
                         ).isNotEmpty()
 
                         if (hasRatings) {
-                            HorizontalDivider(color = Color(0xFF404040))
+                            HorizontalDivider(color = AppColors.Divider)
                             Text(
                                 text = "Ratings",
                                 fontWeight = FontWeight.Bold,
@@ -278,7 +278,7 @@ fun PlayerInfoScreen(
                                 playerInfo.draws != null
 
                         if (hasStats) {
-                            HorizontalDivider(color = Color(0xFF404040))
+                            HorizontalDivider(color = AppColors.Divider)
                             Text(
                                 text = "Game Statistics",
                                 fontWeight = FontWeight.Bold,
@@ -293,10 +293,10 @@ fun PlayerInfoScreen(
                                     StatBadge("Total", playerInfo.totalGames.toString(), Color(0xFF64B5F6))
                                 }
                                 if (playerInfo.wins != null) {
-                                    StatBadge("Wins", playerInfo.wins.toString(), Color(0xFF00E676))
+                                    StatBadge("Wins", playerInfo.wins.toString(), AppColors.PositiveGreen)
                                 }
                                 if (playerInfo.losses != null) {
-                                    StatBadge("Losses", playerInfo.losses.toString(), Color(0xFFFF5252))
+                                    StatBadge("Losses", playerInfo.losses.toString(), AppColors.NegativeRed)
                                 }
                                 if (playerInfo.draws != null) {
                                     StatBadge("Draws", playerInfo.draws.toString(), Color(0xFF90A4AE))
@@ -318,7 +318,7 @@ fun PlayerInfoScreen(
                         }
 
                         // Account info
-                        HorizontalDivider(color = Color(0xFF404040))
+                        HorizontalDivider(color = AppColors.Divider)
                         Text(
                             text = "Account",
                             fontWeight = FontWeight.Bold,
@@ -334,7 +334,7 @@ fun PlayerInfoScreen(
                                     modifier = Modifier
                                         .size(12.dp)
                                         .background(
-                                            if (online) Color(0xFF00E676) else Color(0xFF757575),
+                                            if (online) AppColors.PositiveGreen else Color(0xFF757575),
                                             shape = RoundedCornerShape(6.dp)
                                         )
                                 )
@@ -342,7 +342,7 @@ fun PlayerInfoScreen(
                                 Text(
                                     text = if (online) "Online" else "Offline",
                                     fontSize = 16.sp,
-                                    color = if (online) Color(0xFF00E676) else Color(0xFF757575)
+                                    color = if (online) AppColors.PositiveGreen else Color(0xFF757575)
                                 )
                             }
                         }
@@ -383,7 +383,7 @@ fun PlayerInfoScreen(
                         }
 
                         // Games section
-                        HorizontalDivider(color = Color(0xFF404040))
+                        HorizontalDivider(color = AppColors.Divider)
                         Text(
                             text = "Recent Games",
                             fontWeight = FontWeight.Bold,
@@ -401,20 +401,20 @@ fun PlayerInfoScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 CircularProgressIndicator(
-                                    color = Color(0xFF6B9BFF),
+                                    color = AppColors.AccentBlue,
                                     modifier = Modifier.size(24.dp)
                                 )
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Text(
                                     text = "Loading games...",
-                                    color = Color(0xFFAAAAAA),
+                                    color = AppColors.SubtleText,
                                     fontSize = 14.sp
                                 )
                             }
                         } else if (games.isEmpty() && !gamesLoading) {
                             Text(
                                 text = "No games found",
-                                color = Color(0xFFAAAAAA),
+                                color = AppColors.SubtleText,
                                 fontSize = 14.sp,
                                 modifier = Modifier.padding(vertical = 8.dp)
                             )
@@ -474,12 +474,12 @@ fun PlayerInfoScreen(
                                     }
                                 }
                                 val (resultText, resultColor) = when {
-                                    game.winner == "white" && isUserWhite -> "Won" to Color(0xFF00E676)
-                                    game.winner == "black" && !isUserWhite -> "Won" to Color(0xFF00E676)
-                                    game.winner == "white" && !isUserWhite -> "Lost" to Color(0xFFFF5252)
-                                    game.winner == "black" && isUserWhite -> "Lost" to Color(0xFFFF5252)
+                                    game.winner == "white" && isUserWhite -> "Won" to AppColors.PositiveGreen
+                                    game.winner == "black" && !isUserWhite -> "Won" to AppColors.PositiveGreen
+                                    game.winner == "white" && !isUserWhite -> "Lost" to AppColors.NegativeRed
+                                    game.winner == "black" && isUserWhite -> "Lost" to AppColors.NegativeRed
                                     game.winner == null -> "Draw" to Color(0xFF90A4AE)
-                                    else -> "?" to Color(0xFFAAAAAA)
+                                    else -> "?" to AppColors.SubtleText
                                 }
 
                                 Row(
@@ -501,7 +501,7 @@ fun PlayerInfoScreen(
                                     Text(
                                         text = format,
                                         fontSize = 12.sp,
-                                        color = Color(0xFFAAAAAA),
+                                        color = AppColors.SubtleText,
                                         modifier = Modifier.weight(1f),
                                         textAlign = TextAlign.Center,
                                         maxLines = 1
@@ -545,7 +545,7 @@ fun PlayerInfoScreen(
                                     // Page indicator
                                     Text(
                                         text = if (hasMoreGames) "Page ${currentPage + 1}" else "Page ${currentPage + 1} of $totalPages",
-                                        color = Color(0xFFAAAAAA),
+                                        color = AppColors.SubtleText,
                                         fontSize = 12.sp
                                     )
 
@@ -601,7 +601,7 @@ fun PlayerInfoScreen(
                     ) {
                         Text(
                             text = "No player information available",
-                            color = Color(0xFFAAAAAA),
+                            color = AppColors.SubtleText,
                             fontSize = 16.sp
                         )
                     }
@@ -633,7 +633,7 @@ fun PlayerInfoScreen(
             onClick = onDismiss,
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF3A5A7C)
+                containerColor = AppColors.BlueGrayAccent
             )
         ) {
             Text(
@@ -752,7 +752,7 @@ private fun PlayerInfoRow(label: String, value: String) {
             text = label,
             fontWeight = FontWeight.Medium,
             fontSize = 14.sp,
-            color = Color(0xFFAAAAAA)
+            color = AppColors.SubtleText
         )
         Text(
             text = value,
@@ -779,7 +779,7 @@ private fun RatingBadge(category: String, rating: Int) {
         Text(
             text = category,
             fontSize = 11.sp,
-            color = Color(0xFFAAAAAA)
+            color = AppColors.SubtleText
         )
     }
 }
@@ -801,7 +801,7 @@ private fun StatBadge(label: String, value: String, color: Color) {
         Text(
             text = label,
             fontSize = 11.sp,
-            color = Color(0xFFAAAAAA)
+            color = AppColors.SubtleText
         )
     }
 }

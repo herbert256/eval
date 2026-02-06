@@ -246,7 +246,7 @@ private fun SettingsMainScreen(
                 onClick = onExportSettings,
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF6B8E23)
+                    containerColor = AppColors.ButtonGreen
                 )
             ) {
                 Text("Export")
@@ -255,7 +255,7 @@ private fun SettingsMainScreen(
                 onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) },
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF6B8E23)
+                    containerColor = AppColors.ButtonGreen
                 )
             ) {
                 Text("Import")
@@ -297,13 +297,13 @@ private fun SettingsNavigationCard(
                 Text(
                     text = description,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFFAAAAAA)
+                    color = AppColors.SubtleText
                 )
             }
             Text(
                 text = ">",
                 style = MaterialTheme.typography.headlineMedium,
-                color = Color(0xFF888888)
+                color = AppColors.MediumGray
             )
         }
     }
@@ -335,7 +335,7 @@ fun AiPromptsListScreen(
                     onDeletePrompt(prompt.id)
                     promptToDelete = null
                 }) {
-                    Text("Delete", color = Color(0xFFFF5252))
+                    Text("Delete", color = AppColors.NegativeRed)
                 }
             },
             dismissButton = {
@@ -364,7 +364,7 @@ fun AiPromptsListScreen(
         Text(
             text = "Prompts are sent to the external AI app. Use placeholders: @FEN@, @BOARD@, @PLAYER@, @SERVER@, @DATE@",
             style = MaterialTheme.typography.bodySmall,
-            color = Color(0xFF888888)
+            color = AppColors.MediumGray
         )
 
         // Prompt list (sorted by name)
@@ -393,12 +393,12 @@ fun AiPromptsListScreen(
                         Text(
                             text = prompt.safeCategory.displayName,
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFF6B8E23)
+                            color = AppColors.ButtonGreen
                         )
                         Text(
                             text = prompt.prompt.take(80).replace("\n", " ") + if (prompt.prompt.length > 80) "..." else "",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFFAAAAAA),
+                            color = AppColors.SubtleText,
                             maxLines = 2
                         )
                     }
@@ -406,15 +406,15 @@ fun AiPromptsListScreen(
                         TextButton(onClick = {
                             onCopyPrompt(prompt)
                         }) {
-                            Text("\u2398", color = Color(0xFF6B8E23))
+                            Text("\u2398", color = AppColors.ButtonGreen)
                         }
                         TextButton(onClick = { promptToDelete = prompt }) {
-                            Text("X", color = Color(0xFFFF5252))
+                            Text("X", color = AppColors.NegativeRed)
                         }
                         Text(
                             text = ">",
                             style = MaterialTheme.typography.headlineMedium,
-                            color = Color(0xFF888888)
+                            color = AppColors.MediumGray
                         )
                     }
                 }
@@ -426,7 +426,7 @@ fun AiPromptsListScreen(
             onClick = onAddPrompt,
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF6B8E23)
+                containerColor = AppColors.ButtonGreen
             )
         ) {
             Text("+ Add Prompt")
@@ -509,7 +509,7 @@ fun AiPromptEditScreen(
         Text(
             text = "Placeholders: @FEN@, @BOARD@, @PLAYER@, @SERVER@, @DATE@",
             style = MaterialTheme.typography.bodySmall,
-            color = Color(0xFF888888)
+            color = AppColors.MediumGray
         )
         OutlinedTextField(
             value = prompt,
@@ -529,7 +529,7 @@ fun AiPromptEditScreen(
         Text(
             text = "Appended after the prompt, separated by \"-- end prompt --\"",
             style = MaterialTheme.typography.bodySmall,
-            color = Color(0xFF888888)
+            color = AppColors.MediumGray
         )
         OutlinedTextField(
             value = instructions,
@@ -573,7 +573,7 @@ fun AiPromptEditScreen(
             modifier = Modifier.fillMaxWidth(),
             enabled = name.isNotBlank() && prompt.isNotBlank(),
             colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF6B8E23)
+                containerColor = AppColors.ButtonGreen
             )
         ) {
             Text("Save")

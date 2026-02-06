@@ -82,7 +82,7 @@ fun GeneralSettingsScreen(
                         Text(
                             text = "Long tap anywhere to toggle (not saved)",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFFAAAAAA)
+                            color = AppColors.SubtleText
                         )
                     }
                     Switch(
@@ -94,7 +94,7 @@ fun GeneralSettingsScreen(
                     )
                 }
 
-                HorizontalDivider(color = Color(0xFF404040))
+                HorizontalDivider(color = AppColors.Divider)
 
                 // Pagination page size
                 Column {
@@ -106,14 +106,14 @@ fun GeneralSettingsScreen(
                         Text("Rows per page when pagination", color = Color.White)
                         Text(
                             text = "${paginationPageSize.roundToInt()}",
-                            color = Color(0xFF6B9BFF),
+                            color = AppColors.AccentBlue,
                             fontWeight = FontWeight.Bold
                         )
                     }
                     Text(
                         text = "Number of items shown per page (5-50)",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFFAAAAAA)
+                        color = AppColors.SubtleText
                     )
                     Slider(
                         value = paginationPageSize,
@@ -125,7 +125,7 @@ fun GeneralSettingsScreen(
                     )
                 }
 
-                HorizontalDivider(color = Color(0xFF404040))
+                HorizontalDivider(color = AppColors.Divider)
 
                 // Move sounds toggle
                 Row(
@@ -138,7 +138,7 @@ fun GeneralSettingsScreen(
                         Text(
                             text = "Play sound when navigating moves",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFFAAAAAA)
+                            color = AppColors.SubtleText
                         )
                     }
                     Switch(
@@ -176,7 +176,7 @@ fun GeneralSettingsScreen(
                     Text(
                         text = "Your Lichess username for score perspective",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFFAAAAAA)
+                        color = AppColors.SubtleText
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
@@ -189,10 +189,10 @@ fun GeneralSettingsScreen(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedBorderColor = Color(0xFF555555),
-                            focusedBorderColor = Color(0xFF629924),
-                            unfocusedPlaceholderColor = Color(0xFF666666),
-                            focusedPlaceholderColor = Color(0xFF666666)
+                            unfocusedBorderColor = AppColors.DarkGray,
+                            focusedBorderColor = AppColors.LichessGreen,
+                            unfocusedPlaceholderColor = AppColors.DimGray,
+                            focusedPlaceholderColor = AppColors.DimGray
                         )
                     )
                 }

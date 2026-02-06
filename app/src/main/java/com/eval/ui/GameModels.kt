@@ -9,6 +9,7 @@ import com.eval.data.PuzzleInfo
 import com.eval.data.StreamerInfo
 import com.eval.data.LichessGame
 import com.eval.data.PlayerInfo
+import androidx.compose.ui.graphics.Color
 import com.eval.stockfish.AnalysisResult
 
 // ECO Opening entry from eco_codes.json
@@ -94,6 +95,25 @@ const val DEFAULT_GRAPH_NEGATIVE_SCORE_COLOR = 0xFFFF5252L // Bright red
 const val DEFAULT_GRAPH_BACKGROUND_COLOR = 0xFF1A1A1AL    // Dark gray
 const val DEFAULT_GRAPH_ANALYSE_LINE_COLOR = 0xFFFFFFFFL  // White
 const val DEFAULT_GRAPH_VERTICAL_LINE_COLOR = 0xFF2196F3L // Blue
+
+// Centralized UI color constants used across multiple screens
+object AppColors {
+    val DarkBackground = Color(0xFF1A1A1A)
+    val DarkBlueBackground = Color(0xFF1A1A2E)
+    val CardBackground = Color(0xFF2A2A2A)
+    val Divider = Color(0xFF404040)
+    val DarkGray = Color(0xFF555555)
+    val DimGray = Color(0xFF666666)
+    val MediumGray = Color(0xFF888888)
+    val SubtleText = Color(0xFFAAAAAA)
+    val LightGray = Color(0xFFCCCCCC)
+    val AccentBlue = Color(0xFF6B9BFF)
+    val BlueGrayAccent = Color(0xFF3A5A7C)
+    val LichessGreen = Color(0xFF629924)
+    val ButtonGreen = Color(0xFF6B8E23)
+    val PositiveGreen = Color(0xFF00E676)
+    val NegativeRed = Color(0xFFFF5252)
+}
 
 // Graph settings
 data class GraphSettings(
