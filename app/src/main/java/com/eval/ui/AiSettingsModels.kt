@@ -63,6 +63,7 @@ enum class AiPromptCategory(val displayName: String) {
 data class AiPromptEntry(
     val id: String = UUID.randomUUID().toString(),
     val name: String = "",
+    val system: String = "",
     val prompt: String = "",
     val instructions: String = "",
     val email: String = "",

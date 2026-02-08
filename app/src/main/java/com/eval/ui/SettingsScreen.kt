@@ -448,6 +448,7 @@ fun AiPromptEditScreen(
 ) {
     var name by remember { mutableStateOf(existingPrompt?.name ?: "") }
     var category by remember { mutableStateOf(existingPrompt?.safeCategory ?: AiPromptCategory.GAME) }
+    var system by remember { mutableStateOf(existingPrompt?.system ?: "") }
     var prompt by remember { mutableStateOf(existingPrompt?.prompt ?: "") }
     var instructions by remember { mutableStateOf(existingPrompt?.instructions ?: "") }
     var email by remember { mutableStateOf(existingPrompt?.email ?: "") }
@@ -500,6 +501,27 @@ fun AiPromptEditScreen(
             }
         }
 
+        // System prompt field
+        Text(
+            text = "System Prompt",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            text = "Sent as system prompt to AI models (fallback when agent has none configured)",
+            style = MaterialTheme.typography.bodySmall,
+            color = AppColors.MediumGray
+        )
+        OutlinedTextField(
+            value = system,
+            onValueChange = { system = it },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(120.dp),
+            placeholder = { Text("e.g. You are an expert chess analyst.") },
+            textStyle = MaterialTheme.typography.bodySmall
+        )
+
         // Prompt field
         Text(
             text = "Prompt",
@@ -527,7 +549,7 @@ fun AiPromptEditScreen(
             fontWeight = FontWeight.SemiBold
         )
         Text(
-            text = "Appended after the prompt, separated by \"-- end prompt --\"",
+            text = "Control tags sent to AI app: <agent>, <flock>, <swarm>, <model>, <type>, <next>, <email>, etc.",
             style = MaterialTheme.typography.bodySmall,
             color = AppColors.MediumGray
         )
@@ -562,6 +584,7 @@ fun AiPromptEditScreen(
                     val entry = AiPromptEntry(
                         id = existingPrompt?.id ?: java.util.UUID.randomUUID().toString(),
                         name = name.trim(),
+                        system = system,
                         prompt = prompt,
                         instructions = instructions,
                         email = email.trim(),

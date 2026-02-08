@@ -100,7 +100,7 @@ private val helpSections = listOf(
         icon = "⚙",
         content = "Configure AI analysis with the three-tier architecture:\n\n" +
             "• Providers - AI services with model settings\n" +
-            "• Prompts - Reusable prompt templates with placeholders (@FEN@, @PLAYER@, @SERVER@)\n" +
+            "• Prompts - Reusable prompt templates with placeholders (@FEN@, @BOARD@, @PLAYER@, @SERVER@, @DATE@)\n" +
             "• Agents - Combine provider + model + API key + prompts\n\n" +
             "Create multiple agents for different analysis purposes."
     ),

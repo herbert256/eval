@@ -1068,7 +1068,7 @@ ${opening.moves} *
             _uiState.value.moveDetails[currentMoveIndex]
         } else null
         return AiAppLauncher.launchGameAnalysis(
-            context, fen, promptEntry.prompt, whiteName, blackName,
+            context, fen, promptEntry.prompt, promptEntry.system, whiteName, blackName,
             currentMoveIndex, lastMoveDetails, promptEntry.instructions
         )
     }
@@ -1086,8 +1086,9 @@ ${opening.moves} *
         val prompt = prompts.firstOrNull { it.safeCategory == AiPromptCategory.CHESS_SERVER_PLAYER }
             ?: prompts.firstOrNull()
         val promptTemplate = prompt?.prompt ?: DEFAULT_SERVER_PLAYER_PROMPT
+        val systemPrompt = prompt?.system ?: ""
         val instructions = prompt?.instructions ?: ""
-        return AiAppLauncher.launchServerPlayerAnalysis(context, playerName, server, promptTemplate, instructions)
+        return AiAppLauncher.launchServerPlayerAnalysis(context, playerName, server, promptTemplate, systemPrompt, instructions)
     }
 
     /**
@@ -1103,8 +1104,9 @@ ${opening.moves} *
         val prompt = prompts.firstOrNull { it.safeCategory == AiPromptCategory.PLAYER }
             ?: prompts.firstOrNull()
         val promptTemplate = prompt?.prompt ?: DEFAULT_OTHER_PLAYER_PROMPT
+        val systemPrompt = prompt?.system ?: ""
         val instructions = prompt?.instructions ?: ""
-        return AiAppLauncher.launchOtherPlayerAnalysis(context, playerName, promptTemplate, instructions)
+        return AiAppLauncher.launchOtherPlayerAnalysis(context, playerName, promptTemplate, systemPrompt, instructions)
     }
 
     /**

@@ -32,19 +32,28 @@ object AiAppLauncher {
      *
      * @param context Android context
      * @param title Report title (optional, appears in report header)
+     * @param system System prompt for AI models (optional)
      * @param prompt The prompt to send to AI agents
+     * @param instructions Control tags for report behavior (optional)
      * @return true if launched successfully, false if AI app not installed
      */
-    fun launchAiReport(context: Context, title: String, prompt: String): Boolean {
+    fun launchAiReport(
+        context: Context,
+        title: String,
+        prompt: String,
+        system: String = "",
+        instructions: String = ""
+    ): Boolean {
         Log.d("AiAppLauncher", "Launching AI report with title: $title")
         Log.d("AiAppLauncher", "Prompt (first 200 chars): ${prompt.take(200)}")
 
-        // Match exact pattern from CALL_AI.md spec
         val intent = Intent().apply {
             action = AI_APP_ACTION
             setPackage(AI_APP_PACKAGE)
             putExtra("title", title)
             putExtra("prompt", prompt)
+            if (system.isNotBlank()) putExtra("system", system)
+            if (instructions.isNotBlank()) putExtra("instructions", instructions)
         }
 
         return if (intent.resolveActivity(context.packageManager) != null) {
@@ -71,6 +80,7 @@ object AiAppLauncher {
         context: Context,
         fen: String,
         promptTemplate: String,
+        systemPrompt: String = "",
         whiteName: String = "",
         blackName: String = "",
         currentMoveIndex: Int = -1,
@@ -83,19 +93,23 @@ object AiAppLauncher {
             "Chess Position Analysis"
         }
 
-        var combined = promptTemplate
-        if (instructions.isNotBlank()) {
-            combined += "\n-- end prompt --\n" + instructions
-        }
         val prompt = processPrompt(
-            template = combined,
+            template = promptTemplate,
             fen = fen,
             whiteName = whiteName,
             blackName = blackName,
             currentMoveIndex = currentMoveIndex,
             lastMoveDetails = lastMoveDetails
         )
-        return launchAiReport(context, title, prompt)
+        val system = processPrompt(
+            template = systemPrompt,
+            fen = fen,
+            whiteName = whiteName,
+            blackName = blackName,
+            currentMoveIndex = currentMoveIndex,
+            lastMoveDetails = lastMoveDetails
+        )
+        return launchAiReport(context, title, prompt, system, instructions)
     }
 
     /**
@@ -111,15 +125,13 @@ object AiAppLauncher {
         playerName: String,
         server: String,
         promptTemplate: String,
+        systemPrompt: String = "",
         instructions: String = ""
     ): Boolean {
         val title = "Player Analysis: $playerName"
-        var combined = promptTemplate
-        if (instructions.isNotBlank()) {
-            combined += "\n-- end prompt --\n" + instructions
-        }
-        val prompt = processPrompt(combined, player = playerName, server = server)
-        return launchAiReport(context, title, prompt)
+        val prompt = processPrompt(promptTemplate, player = playerName, server = server)
+        val system = processPrompt(systemPrompt, player = playerName, server = server)
+        return launchAiReport(context, title, prompt, system, instructions)
     }
 
     /**
@@ -133,15 +145,13 @@ object AiAppLauncher {
         context: Context,
         playerName: String,
         promptTemplate: String,
+        systemPrompt: String = "",
         instructions: String = ""
     ): Boolean {
         val title = "Player Profile: $playerName"
-        var combined = promptTemplate
-        if (instructions.isNotBlank()) {
-            combined += "\n-- end prompt --\n" + instructions
-        }
-        val prompt = processPrompt(combined, player = playerName)
-        return launchAiReport(context, title, prompt)
+        val prompt = processPrompt(promptTemplate, player = playerName)
+        val system = processPrompt(systemPrompt, player = playerName)
+        return launchAiReport(context, title, prompt, system, instructions)
     }
 
     /**
