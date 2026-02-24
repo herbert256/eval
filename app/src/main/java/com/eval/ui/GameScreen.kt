@@ -181,9 +181,8 @@ fun GameScreenContent(
             games = uiState.playerGames,
             gamesLoading = uiState.playerGamesLoading,
             currentPage = uiState.playerGamesPage,
-            pageSize = uiState.playerGamesPageSize,
             hasMoreGames = uiState.playerGamesHasMore,
-            onNextPage = { viewModel.nextPlayerGamesPage() },
+            onNextPage = { pageSize -> viewModel.nextPlayerGamesPage(pageSize) },
             onPreviousPage = { viewModel.previousPlayerGamesPage() },
             onGameSelected = { game -> viewModel.selectGameFromPlayerInfo(game) },
             onAiReportsClick = {

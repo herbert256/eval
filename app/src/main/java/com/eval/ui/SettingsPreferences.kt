@@ -46,6 +46,9 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
     val savedLichessUsername: String
         get() = prefs.getString(KEY_LICHESS_USERNAME, "DrNykterstein") ?: "DrNykterstein"
 
+    val savedChessComUsername: String
+        get() = prefs.getString(KEY_CHESSCOM_USERNAME, "MagnusCarlsen") ?: "MagnusCarlsen"
+
     val lichessMaxGames: Int
         get() = prefs.getInt(KEY_LICHESS_MAX_GAMES, 10)
 
@@ -55,6 +58,10 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
 
     fun saveLichessUsername(username: String) {
         prefs.edit().putString(KEY_LICHESS_USERNAME, username).apply()
+    }
+
+    fun saveChessComUsername(username: String) {
+        prefs.edit().putString(KEY_CHESSCOM_USERNAME, username).apply()
     }
 
     fun saveLichessMaxGames(max: Int) {
@@ -271,16 +278,13 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
 
     fun loadGeneralSettings(): GeneralSettings {
         return GeneralSettings(
-            paginationPageSize = prefs.getInt(KEY_PAGINATION_PAGE_SIZE, 25).coerceIn(5, 50),
             moveSoundsEnabled = prefs.getBoolean(KEY_MOVE_SOUNDS_ENABLED, true),
             lichessUsername = prefs.getString(KEY_LICHESS_USERNAME, "DrNykterstein") ?: ""
         )
     }
 
     fun saveGeneralSettings(settings: GeneralSettings) {
-        // Full screen mode is not persistent - do not save
         prefs.edit()
-            .putInt(KEY_PAGINATION_PAGE_SIZE, settings.paginationPageSize.coerceIn(5, 50))
             .putBoolean(KEY_MOVE_SOUNDS_ENABLED, settings.moveSoundsEnabled)
             .putString(KEY_LICHESS_USERNAME, settings.lichessUsername)
             .apply()
@@ -418,6 +422,9 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         private const val KEY_LICHESS_USERNAME = "lichess_username"
         private const val KEY_LICHESS_MAX_GAMES = "lichess_max_games"
 
+        // Chess.com settings
+        private const val KEY_CHESSCOM_USERNAME = "chesscom_username"
+
         // Retrieved games storage - list of lists
         const val KEY_RETRIEVES_LIST = "retrieves_list"
         const val KEY_RETRIEVED_GAMES_PREFIX = "retrieved_games_"
@@ -508,7 +515,6 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         private const val KEY_FIRST_GAME_RETRIEVED_VERSION = "first_game_retrieved_version"
 
         // General settings
-        private const val KEY_PAGINATION_PAGE_SIZE = "pagination_page_size"
         private const val KEY_MOVE_SOUNDS_ENABLED = "move_sounds_enabled"
 
         // AI prompts list (CRUD)

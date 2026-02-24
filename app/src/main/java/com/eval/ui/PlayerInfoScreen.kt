@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -44,9 +45,8 @@ fun PlayerInfoScreenNav(
         games = uiState.playerGames,
         gamesLoading = uiState.playerGamesLoading,
         currentPage = uiState.playerGamesPage,
-        pageSize = uiState.playerGamesPageSize,
         hasMoreGames = uiState.playerGamesHasMore,
-        onNextPage = { viewModel.nextPlayerGamesPage() },
+        onNextPage = { pageSize -> viewModel.nextPlayerGamesPage(pageSize) },
         onPreviousPage = { viewModel.previousPlayerGamesPage() },
         onGameSelected = { game -> viewModel.selectGameFromPlayerInfo(game) },
         onAiReportsClick = {
@@ -79,9 +79,8 @@ fun PlayerInfoScreen(
     games: List<com.eval.data.LichessGame>,
     gamesLoading: Boolean,
     currentPage: Int,
-    pageSize: Int,
     hasMoreGames: Boolean,
-    onNextPage: () -> Unit,
+    onNextPage: (Int) -> Unit,
     onPreviousPage: () -> Unit,
     onGameSelected: (com.eval.data.LichessGame) -> Unit,
     onAiReportsClick: () -> Unit,
@@ -419,7 +418,9 @@ fun PlayerInfoScreen(
                                 modifier = Modifier.padding(vertical = 8.dp)
                             )
                         } else {
-                            // Games table
+                            // Games table - compute page size from screen height
+                            val screenHeightDp = LocalConfiguration.current.screenHeightDp
+                            val pageSize = (screenHeightDp / 40).coerceAtLeast(5)
                             val startIndex = currentPage * pageSize
                             val endIndex = minOf(startIndex + pageSize, games.size)
                             val currentGames = games.subList(startIndex, endIndex)
@@ -533,7 +534,7 @@ fun PlayerInfoScreen(
                                     if (currentPage > 0) {
                                         TextButton(onClick = onPreviousPage) {
                                             Text(
-                                                text = "← Previous $pageSize",
+                                                text = "← Previous",
                                                 color = Color(0xFF64B5F6),
                                                 fontSize = 14.sp
                                             )
@@ -552,7 +553,7 @@ fun PlayerInfoScreen(
                                     // Next button - show if there are more games in cache or more to fetch
                                     if (canGoNext) {
                                         TextButton(
-                                            onClick = onNextPage,
+                                            onClick = { onNextPage(pageSize) },
                                             enabled = !gamesLoading
                                         ) {
                                             if (gamesLoading) {
@@ -563,7 +564,7 @@ fun PlayerInfoScreen(
                                                 )
                                             } else {
                                                 Text(
-                                                    text = "Next $pageSize →",
+                                                    text = "Next →",
                                                     color = Color(0xFF64B5F6),
                                                     fontSize = 14.sp
                                                 )

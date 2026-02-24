@@ -68,6 +68,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val savedLichessUsername: String
         get() = settingsPrefs.savedLichessUsername
 
+    val savedChessComUsername: String
+        get() = settingsPrefs.savedChessComUsername
+
     private fun loadStockfishSettings(): StockfishSettings = settingsPrefs.loadStockfishSettings()
     private fun saveStockfishSettings(settings: StockfishSettings) = settingsPrefs.saveStockfishSettings(settings)
     private fun loadBoardLayoutSettings(): BoardLayoutSettings = settingsPrefs.loadBoardLayoutSettings()
@@ -201,9 +204,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 hasPreviousRetrieves = hasPreviousRetrieves,
                 hasAnalysedGames = hasAnalysedGames,
                 hasLastServerUser = hasLastServerUser,
-                previousRetrievesList = retrievesList,
-                playerGamesPageSize = generalSettings.paginationPageSize,
-                gameSelectionPageSize = generalSettings.paginationPageSize
+                previousRetrievesList = retrievesList
             )
 
             viewModelScope.launch {
@@ -305,9 +306,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             interfaceVisibility = interfaceVisibility,
             generalSettings = generalSettings,
             aiPrompts = aiPrompts,
-            lichessMaxGames = lichessMaxGames,
-            playerGamesPageSize = generalSettings.paginationPageSize,
-            gameSelectionPageSize = generalSettings.paginationPageSize
+            lichessMaxGames = lichessMaxGames
         )
 
         viewModelScope.launch {
@@ -332,7 +331,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun dismissPreviousRetrievesSelection() = gameLoader.dismissPreviousRetrievesSelection()
     fun selectPreviousRetrieve(entry: RetrievedGamesEntry) = gameLoader.selectPreviousRetrieve(entry)
     fun dismissSelectedRetrieveGames() = gameLoader.dismissSelectedRetrieveGames()
-    fun nextGameSelectionPage() = gameLoader.nextGameSelectionPage()
+    fun nextGameSelectionPage(pageSize: Int) = gameLoader.nextGameSelectionPage(pageSize)
     fun previousGameSelectionPage() = gameLoader.previousGameSelectionPage()
     fun setLichessMaxGames(max: Int) = gameLoader.setLichessMaxGames(max)
 
@@ -425,7 +424,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     fun showPlayerInfo(username: String) = contentSourceManager.showPlayerInfo(username, null)
     fun showPlayerInfo(username: String, server: ChessServer) = contentSourceManager.showPlayerInfoWithServer(username, server)
-    fun nextPlayerGamesPage() = contentSourceManager.nextPlayerGamesPage()
+    fun nextPlayerGamesPage(pageSize: Int) = contentSourceManager.nextPlayerGamesPage(pageSize)
     fun previousPlayerGamesPage() = contentSourceManager.previousPlayerGamesPage()
     fun selectGameFromPlayerInfo(game: LichessGame) = contentSourceManager.selectGameFromPlayerInfo(game)
     fun dismissPlayerInfo() = contentSourceManager.dismissPlayerInfo()
@@ -972,9 +971,7 @@ ${opening.moves} *
     fun updateGeneralSettings(settings: GeneralSettings) {
         saveGeneralSettings(settings)
         _uiState.value = _uiState.value.copy(
-            generalSettings = settings,
-            playerGamesPageSize = settings.paginationPageSize,
-            gameSelectionPageSize = settings.paginationPageSize
+            generalSettings = settings
         )
     }
 

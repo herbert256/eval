@@ -297,10 +297,9 @@ fun SelectedRetrieveGamesScreen(
     entry: RetrievedGamesEntry,
     games: List<LichessGame>,
     currentPage: Int,
-    pageSize: Int,
     isLoading: Boolean,
     hasMoreGames: Boolean,
-    onNextPage: () -> Unit,
+    onNextPage: (Int) -> Unit,
     onPreviousPage: () -> Unit,
     onSelectGame: (LichessGame) -> Unit,
     onDismiss: () -> Unit
@@ -310,15 +309,6 @@ fun SelectedRetrieveGamesScreen(
 
     // Handle back navigation
     BackHandler { onDismiss() }
-
-    // Calculate current page games
-    val startIndex = currentPage * pageSize
-    val endIndex = minOf(startIndex + pageSize, games.size)
-    val currentGames = if (games.isNotEmpty() && startIndex < games.size) {
-        games.subList(startIndex, endIndex)
-    } else {
-        emptyList()
-    }
 
     Column(
         modifier = Modifier
@@ -335,12 +325,23 @@ fun SelectedRetrieveGamesScreen(
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth(),
             contentAlignment = Alignment.TopCenter
         ) {
+            val pageSize = (maxHeight.value / 38f).toInt().coerceAtLeast(5)
+
+            // Calculate current page games
+            val startIndex = currentPage * pageSize
+            val endIndex = minOf(startIndex + pageSize, games.size)
+            val currentGames = if (games.isNotEmpty() && startIndex < games.size) {
+                games.subList(startIndex, endIndex)
+            } else {
+                emptyList()
+            }
+
             Column(
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -374,7 +375,7 @@ fun SelectedRetrieveGamesScreen(
                         if (currentPage > 0) {
                             TextButton(onClick = onPreviousPage) {
                                 Text(
-                                    text = "← Previous $pageSize",
+                                    text = "← Previous",
                                     color = serverColor,
                                     fontSize = 14.sp
                                 )
@@ -393,7 +394,7 @@ fun SelectedRetrieveGamesScreen(
                         // Next button
                         if (canGoNext) {
                             TextButton(
-                                onClick = onNextPage,
+                                onClick = { onNextPage(pageSize) },
                                 enabled = !isLoading
                             ) {
                                 if (isLoading) {
@@ -404,7 +405,7 @@ fun SelectedRetrieveGamesScreen(
                                     )
                                 } else {
                                     Text(
-                                        text = "Next $pageSize →",
+                                        text = "Next →",
                                         color = serverColor,
                                         fontSize = 14.sp
                                     )
@@ -549,21 +550,12 @@ private fun RetrieveGameListItem(
 fun AnalysedGamesSelectionScreen(
     games: List<AnalysedGame>,
     currentPage: Int,
-    pageSize: Int,
-    onNextPage: () -> Unit,
+    onNextPage: (Int) -> Unit,
     onPreviousPage: () -> Unit,
     onSelectGame: (AnalysedGame) -> Unit,
     onDismiss: () -> Unit
 ) {
     BackHandler { onDismiss() }
-
-    val startIndex = currentPage * pageSize
-    val endIndex = minOf(startIndex + pageSize, games.size)
-    val currentGames = if (games.isNotEmpty() && startIndex < games.size) {
-        games.subList(startIndex, endIndex)
-    } else {
-        emptyList()
-    }
 
     val dateFormat = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault())
 
@@ -581,12 +573,22 @@ fun AnalysedGamesSelectionScreen(
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth(),
             contentAlignment = Alignment.TopCenter
         ) {
+            val pageSize = (maxHeight.value / 72f).toInt().coerceAtLeast(3)
+
+            val startIndex = currentPage * pageSize
+            val endIndex = minOf(startIndex + pageSize, games.size)
+            val currentGames = if (games.isNotEmpty() && startIndex < games.size) {
+                games.subList(startIndex, endIndex)
+            } else {
+                emptyList()
+            }
+
             Column(
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -614,7 +616,7 @@ fun AnalysedGamesSelectionScreen(
                         if (currentPage > 0) {
                             TextButton(onClick = onPreviousPage) {
                                 Text(
-                                    text = "← Previous $pageSize",
+                                    text = "← Previous",
                                     color = Color(0xFF90CAF9),
                                     fontSize = 14.sp
                                 )
@@ -631,9 +633,9 @@ fun AnalysedGamesSelectionScreen(
 
                         val nextPageStartIndex = (currentPage + 1) * pageSize
                         if (nextPageStartIndex < games.size) {
-                            TextButton(onClick = onNextPage) {
+                            TextButton(onClick = { onNextPage(pageSize) }) {
                                 Text(
-                                    text = "Next $pageSize →",
+                                    text = "Next →",
                                     color = Color(0xFF90CAF9),
                                     fontSize = 14.sp
                                 )

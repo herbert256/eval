@@ -38,6 +38,9 @@ internal class GameLoader(
     val savedLichessUsername: String
         get() = settingsPrefs.savedLichessUsername
 
+    val savedChessComUsername: String
+        get() = settingsPrefs.savedChessComUsername
+
     /**
      * Automatically load a game and start analysis on app startup.
      */
@@ -47,9 +50,14 @@ internal class GameLoader(
     fun reloadLastGame() {
         val username = settingsPrefs.lastServerUser
         val serverName = settingsPrefs.lastServerName
-        if (username != null && serverName == "lichess.org") {
+        if (username != null) {
+            val server = when (serverName) {
+                "lichess.org" -> ChessServer.LICHESS
+                "chess.com" -> ChessServer.CHESS_COM
+                else -> return
+            }
             viewModelScope.launch {
-                fetchLastGameFromServer(ChessServer.LICHESS, username)
+                fetchLastGameFromServer(server, username)
             }
         }
     }
@@ -67,7 +75,10 @@ internal class GameLoader(
             )
         }
 
-        val result = repository.getLichessGames(username, 1)
+        val result = when (server) {
+            ChessServer.LICHESS -> repository.getLichessGames(username, 1)
+            ChessServer.CHESS_COM -> repository.getChessComGames(username, 1)
+        }
 
         when (result) {
             is Result.Success -> {
@@ -103,15 +114,23 @@ internal class GameLoader(
     }
 
     fun fetchGames(server: ChessServer, username: String) {
-        settingsPrefs.saveLichessUsername(username)
-        settingsPrefs.saveLastServerUser(username, "lichess.org")
+        when (server) {
+            ChessServer.LICHESS -> {
+                settingsPrefs.saveLichessUsername(username)
+                settingsPrefs.saveLastServerUser(username, "lichess.org")
+            }
+            ChessServer.CHESS_COM -> {
+                settingsPrefs.saveChessComUsername(username)
+                settingsPrefs.saveLastServerUser(username, "chess.com")
+            }
+        }
         updateUiState { copy(hasLastServerUser = true) }
 
         settingsPrefs.setFirstGameRetrievedVersion(getAppVersionCode())
 
         analysisOrchestrator.autoAnalysisJob?.cancel()
 
-        val pageSize = getUiState().gameSelectionPageSize
+        val pageSize = 25
 
         viewModelScope.launch {
             updateUiState {
@@ -127,7 +146,10 @@ internal class GameLoader(
                 )
             }
 
-            val result = repository.getLichessGames(username, pageSize)
+            val result = when (server) {
+                ChessServer.LICHESS -> repository.getLichessGames(username, pageSize)
+                ChessServer.CHESS_COM -> repository.getChessComGames(username, pageSize)
+            }
 
             when (result) {
                 is Result.Success -> {
@@ -585,10 +607,19 @@ internal class GameLoader(
         }
     }
 
-    fun nextGameSelectionPage() {
+    fun nextGameSelectionPage(pageSize: Int) {
         val state = getUiState()
         val currentPage = state.gameSelectionPage
-        val pageSize = state.gameSelectionPageSize
+
+        // Handle analysed games selection (no API fetching needed)
+        if (state.showAnalysedGamesSelection) {
+            val nextPageStartIndex = (currentPage + 1) * pageSize
+            if (nextPageStartIndex < state.analysedGamesList.size) {
+                updateUiState { copy(gameSelectionPage = currentPage + 1) }
+            }
+            return
+        }
+
         val currentGames = state.selectedRetrieveGames
         val hasMore = state.gameSelectionHasMore
         val entry = state.selectedRetrieveEntry ?: return
@@ -600,7 +631,10 @@ internal class GameLoader(
 
             viewModelScope.launch {
                 val newCount = currentGames.size + pageSize
-                val gamesResult = repository.getLichessGames(entry.accountName, newCount)
+                val gamesResult = when (entry.server) {
+                    ChessServer.LICHESS -> repository.getLichessGames(entry.accountName, newCount)
+                    ChessServer.CHESS_COM -> repository.getChessComGames(entry.accountName, newCount)
+                }
                 when (gamesResult) {
                     is Result.Success -> {
                         val fetchedGames = gamesResult.data

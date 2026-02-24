@@ -11,7 +11,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import kotlin.math.roundToInt
 
 /**
  * General settings screen for app-wide settings.
@@ -23,13 +22,11 @@ fun GeneralSettingsScreen(
     onBackToGame: () -> Unit,
     onSave: (GeneralSettings) -> Unit
 ) {
-    var paginationPageSize by remember { mutableFloatStateOf(generalSettings.paginationPageSize.toFloat()) }
     var moveSoundsEnabled by remember { mutableStateOf(generalSettings.moveSoundsEnabled) }
     var lichessUsername by remember { mutableStateOf(generalSettings.lichessUsername) }
 
     fun saveSettings() {
         onSave(generalSettings.copy(
-            paginationPageSize = paginationPageSize.roundToInt(),
             moveSoundsEnabled = moveSoundsEnabled,
             lichessUsername = lichessUsername
         ))
@@ -68,37 +65,6 @@ fun GeneralSettingsScreen(
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White
                 )
-
-                // Pagination page size
-                Column {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Rows per page when pagination", color = Color.White)
-                        Text(
-                            text = "${paginationPageSize.roundToInt()}",
-                            color = AppColors.AccentBlue,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Text(
-                        text = "Number of items shown per page (5-50)",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AppColors.SubtleText
-                    )
-                    Slider(
-                        value = paginationPageSize,
-                        onValueChange = { paginationPageSize = it },
-                        onValueChangeFinished = { saveSettings() },
-                        valueRange = 5f..50f,
-                        steps = 8,  // 5, 10, 15, 20, 25, 30, 35, 40, 45, 50
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-
-                HorizontalDivider(color = AppColors.Divider)
 
                 // Move sounds toggle
                 Row(

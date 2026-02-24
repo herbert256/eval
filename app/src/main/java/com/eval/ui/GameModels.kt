@@ -110,6 +110,7 @@ object AppColors {
     val AccentBlue = Color(0xFF6B9BFF)
     val BlueGrayAccent = Color(0xFF3A5A7C)
     val LichessGreen = Color(0xFF629924)
+    val ChessComGreen = Color(0xFF769656)
     val ButtonGreen = Color(0xFF6B8E23)
     val PositiveGreen = Color(0xFF00E676)
     val NegativeRed = Color(0xFFFF5252)
@@ -206,7 +207,6 @@ data class InterfaceVisibilitySettings(
 
 // General app settings
 data class GeneralSettings(
-    val paginationPageSize: Int = 25,
     val moveSoundsEnabled: Boolean = true,
     val lichessUsername: String = ""
 )
@@ -331,7 +331,6 @@ data class GameUiState(
     val selectedRetrieveGames: List<LichessGame> = emptyList(),
     // Game selection pagination
     val gameSelectionPage: Int = 0,
-    val gameSelectionPageSize: Int = 10,
     val gameSelectionLoading: Boolean = false,
     val gameSelectionHasMore: Boolean = true,
     // Retrieve screen navigation
@@ -354,7 +353,6 @@ data class GameUiState(
     val playerGames: List<LichessGame> = emptyList(),
     val playerGamesLoading: Boolean = false,
     val playerGamesPage: Int = 0,
-    val playerGamesPageSize: Int = 10,
     val playerGamesHasMore: Boolean = true,  // Whether there might be more games to fetch
     // Top rankings screen
     val showTopRankingsScreen: Boolean = false,

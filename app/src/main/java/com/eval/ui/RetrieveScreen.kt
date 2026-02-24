@@ -40,6 +40,9 @@ private enum class RetrieveSubScreen {
     BROADCASTS,
     LICHESS_TV,
     STREAMERS,
+    CHESS_COM,
+    TOP_RANKINGS_CHESS_COM,
+    DAILY_PUZZLE,
     PGN_FILE,
     OPENING_SELECTION,
     FEN_INPUT
@@ -84,8 +87,7 @@ fun RetrieveScreen(
         AnalysedGamesSelectionScreen(
             games = uiState.analysedGamesList,
             currentPage = uiState.gameSelectionPage,
-            pageSize = uiState.gameSelectionPageSize,
-            onNextPage = { viewModel.nextGameSelectionPage() },
+            onNextPage = { pageSize -> viewModel.nextGameSelectionPage(pageSize) },
             onPreviousPage = { viewModel.previousGameSelectionPage() },
             onSelectGame = { viewModel.selectAnalysedGame(it) },
             onDismiss = { viewModel.dismissAnalysedGamesSelection() }
@@ -100,10 +102,9 @@ fun RetrieveScreen(
             entry = selectedRetrieveEntry,
             games = uiState.selectedRetrieveGames,
             currentPage = uiState.gameSelectionPage,
-            pageSize = uiState.gameSelectionPageSize,
             isLoading = uiState.gameSelectionLoading,
             hasMoreGames = uiState.gameSelectionHasMore,
-            onNextPage = { viewModel.nextGameSelectionPage() },
+            onNextPage = { pageSize -> viewModel.nextGameSelectionPage(pageSize) },
             onPreviousPage = { viewModel.previousGameSelectionPage() },
             onSelectGame = { viewModel.selectGameFromRetrieve(it) },
             onDismiss = { viewModel.dismissSelectedRetrieveGames() }
@@ -130,9 +131,8 @@ fun RetrieveScreen(
             games = uiState.playerGames,
             gamesLoading = uiState.playerGamesLoading,
             currentPage = uiState.playerGamesPage,
-            pageSize = uiState.playerGamesPageSize,
             hasMoreGames = uiState.playerGamesHasMore,
-            onNextPage = { viewModel.nextPlayerGamesPage() },
+            onNextPage = { pageSize -> viewModel.nextPlayerGamesPage(pageSize) },
             onPreviousPage = { viewModel.previousPlayerGamesPage() },
             onGameSelected = { game -> viewModel.selectGameFromPlayerInfo(game) },
             onAiReportsClick = {
@@ -142,7 +142,10 @@ fun RetrieveScreen(
                     val serverName = if (uiState.playerInfoError != null) {
                         null
                     } else {
-                        "lichess.org"
+                        when (info.server) {
+                            ChessServer.LICHESS -> "lichess.org"
+                            ChessServer.CHESS_COM -> "chess.com"
+                        }
                     }
                     if (serverName != null) {
                         viewModel.launchServerPlayerAnalysis(context, info.username, serverName)
@@ -169,6 +172,9 @@ fun RetrieveScreen(
             RetrieveSubScreen.TOP_RANKINGS_LICHESS, RetrieveSubScreen.TOURNAMENTS_LICHESS,
             RetrieveSubScreen.BROADCASTS, RetrieveSubScreen.LICHESS_TV,
             RetrieveSubScreen.STREAMERS -> currentScreen = RetrieveSubScreen.LICHESS
+            RetrieveSubScreen.CHESS_COM -> currentScreen = RetrieveSubScreen.MAIN
+            RetrieveSubScreen.TOP_RANKINGS_CHESS_COM,
+            RetrieveSubScreen.DAILY_PUZZLE -> currentScreen = RetrieveSubScreen.CHESS_COM
             RetrieveSubScreen.PGN_FILE -> {
                 if (uiState.selectedPgnEvent != null) {
                     viewModel.backToPgnEventList()
@@ -188,6 +194,7 @@ fun RetrieveScreen(
             viewModel = viewModel,
             onBack = onBack,
             onLichessClick = { currentScreen = RetrieveSubScreen.LICHESS },
+            onChessComClick = { currentScreen = RetrieveSubScreen.CHESS_COM },
             onPgnFileLoaded = { hasMultipleEvents ->
                 if (hasMultipleEvents) {
                     currentScreen = RetrieveSubScreen.PGN_FILE
@@ -227,10 +234,44 @@ fun RetrieveScreen(
         )
         RetrieveSubScreen.TOP_RANKINGS_LICHESS -> TopRankingsScreen(
             uiState = uiState,
+            serverName = "lichess.org",
+            serverColor = AppColors.LichessGreen,
             onBack = { currentScreen = RetrieveSubScreen.LICHESS },
             onPlayerClick = { player ->
                 previousScreen = RetrieveSubScreen.TOP_RANKINGS_LICHESS
                 viewModel.selectTopRankingPlayer(player.username, ChessServer.LICHESS)
+            }
+        )
+        RetrieveSubScreen.CHESS_COM -> ChessComRetrieveScreen(
+            viewModel = viewModel,
+            uiState = uiState,
+            onBack = { currentScreen = RetrieveSubScreen.MAIN },
+            onTopRankingsClick = {
+                viewModel.showTopRankings(ChessServer.CHESS_COM)
+                previousScreen = RetrieveSubScreen.TOP_RANKINGS_CHESS_COM
+                currentScreen = RetrieveSubScreen.TOP_RANKINGS_CHESS_COM
+            },
+            onDailyPuzzleClick = {
+                viewModel.showDailyPuzzle()
+                currentScreen = RetrieveSubScreen.DAILY_PUZZLE
+            }
+        )
+        RetrieveSubScreen.TOP_RANKINGS_CHESS_COM -> TopRankingsScreen(
+            uiState = uiState,
+            serverName = "chess.com",
+            serverColor = AppColors.ChessComGreen,
+            onBack = { currentScreen = RetrieveSubScreen.CHESS_COM },
+            onPlayerClick = { player ->
+                previousScreen = RetrieveSubScreen.TOP_RANKINGS_CHESS_COM
+                viewModel.selectTopRankingPlayer(player.username, ChessServer.CHESS_COM)
+            }
+        )
+        RetrieveSubScreen.DAILY_PUZZLE -> DailyPuzzleScreen(
+            viewModel = viewModel,
+            uiState = uiState,
+            onBack = {
+                viewModel.dismissDailyPuzzle()
+                currentScreen = RetrieveSubScreen.CHESS_COM
             }
         )
         RetrieveSubScreen.TOURNAMENTS_LICHESS -> TournamentsScreen(
@@ -313,6 +354,7 @@ private fun RetrieveMainScreen(
     viewModel: GameViewModel,
     onBack: () -> Unit,
     onLichessClick: () -> Unit,
+    onChessComClick: () -> Unit,
     onPgnFileLoaded: (hasMultipleEvents: Boolean) -> Unit,
     onOpeningClick: () -> Unit,
     onFenClick: () -> Unit = {}
@@ -385,7 +427,7 @@ private fun RetrieveMainScreen(
                     .fillMaxWidth()
                     .clickable { onLichessClick() },
                 colors = CardDefaults.cardColors(
-                    containerColor = AppColors.LichessGreen // Lichess green
+                    containerColor = AppColors.LichessGreen
                 ),
                 shape = RoundedCornerShape(12.dp)
             ) {
@@ -398,6 +440,37 @@ private fun RetrieveMainScreen(
                 ) {
                     Text(
                         text = "lichess.org",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text(
+                        text = ">",
+                        fontSize = 24.sp,
+                        color = Color.White
+                    )
+                }
+            }
+
+            // Chess.com card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onChessComClick() },
+                colors = CardDefaults.cardColors(
+                    containerColor = AppColors.ChessComGreen
+                ),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "chess.com",
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
@@ -711,11 +784,11 @@ private fun LichessRetrieveScreen(
 @Composable
 private fun TopRankingsScreen(
     uiState: GameUiState,
+    serverName: String = "lichess.org",
+    serverColor: Color = AppColors.LichessGreen,
     onBack: () -> Unit,
     onPlayerClick: (LeaderboardPlayer) -> Unit
 ) {
-    val serverName = "lichess.org"
-    val serverColor = AppColors.LichessGreen
 
     // Handle back navigation
     BackHandler { onBack() }
@@ -1827,6 +1900,282 @@ private fun StreamerRow(
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold
                 )
+            }
+        }
+    }
+}
+
+// ==================== CHESS.COM RETRIEVE SCREEN ====================
+
+/**
+ * Chess.com retrieve screen.
+ */
+@Composable
+private fun ChessComRetrieveScreen(
+    viewModel: GameViewModel,
+    uiState: GameUiState,
+    onBack: () -> Unit,
+    onTopRankingsClick: () -> Unit,
+    onDailyPuzzleClick: () -> Unit
+) {
+    var username by remember { mutableStateOf(viewModel.savedChessComUsername) }
+    val focusManager = LocalFocusManager.current
+    val serverColor = AppColors.ChessComGreen
+
+    BackHandler { onBack() }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AppColors.DarkBlueBackground)
+            .padding(16.dp)
+    ) {
+        EvalTitleBar(
+            title = "chess.com",
+            onBackClick = onBack,
+            onEvalClick = onBack
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Error message
+            if (uiState.errorMessage != null) {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = uiState.errorMessage.orEmpty(),
+                        color = Color.White,
+                        modifier = Modifier.padding(12.dp),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+
+            // Username field
+            OutlinedTextField(
+                value = username,
+                onValueChange = { username = it },
+                label = { Text("Username") },
+                placeholder = { Text("Enter Chess.com username") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    unfocusedBorderColor = AppColors.DarkGray,
+                    focusedBorderColor = serverColor,
+                    unfocusedLabelColor = AppColors.SubtleText,
+                    focusedLabelColor = serverColor
+                )
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Retrieve button
+            Button(
+                onClick = {
+                    focusManager.clearFocus()
+                    if (username.isNotBlank()) {
+                        viewModel.fetchGames(ChessServer.CHESS_COM, username)
+                    }
+                },
+                enabled = !uiState.isLoading && username.isNotBlank(),
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = serverColor
+                )
+            ) {
+                Text(
+                    text = "Retrieve games",
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Top rankings button
+            OutlinedButton(
+                onClick = onTopRankingsClick,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = serverColor
+                )
+            ) {
+                Text(
+                    text = "Select from top rankings",
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+            }
+
+            // Daily puzzle button
+            OutlinedButton(
+                onClick = onDailyPuzzleClick,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = serverColor
+                )
+            ) {
+                Text(
+                    text = "Daily puzzle",
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+            }
+
+            // Loading indicator
+            if (uiState.isLoading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(40.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator(color = serverColor)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Fetching games from Chess.com...",
+                            color = AppColors.SubtleText
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ==================== DAILY PUZZLE SCREEN ====================
+
+/**
+ * Daily puzzle screen for Chess.com.
+ */
+@Composable
+private fun DailyPuzzleScreen(
+    viewModel: GameViewModel,
+    uiState: GameUiState,
+    onBack: () -> Unit
+) {
+    val serverColor = AppColors.ChessComGreen
+
+    BackHandler { onBack() }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AppColors.DarkBlueBackground)
+            .padding(16.dp)
+    ) {
+        EvalTitleBar(
+            title = "Daily Puzzle",
+            onBackClick = onBack,
+            onEvalClick = onBack
+        )
+
+        Text(
+            text = "chess.com",
+            style = MaterialTheme.typography.bodyMedium,
+            color = AppColors.SubtleText,
+            modifier = Modifier.padding(start = 8.dp, bottom = 16.dp)
+        )
+
+        when {
+            uiState.dailyPuzzleLoading -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator(color = serverColor)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Loading daily puzzle...",
+                            color = AppColors.SubtleText
+                        )
+                    }
+                }
+            }
+            uiState.dailyPuzzle != null -> {
+                val puzzle = uiState.dailyPuzzle
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // Puzzle title
+                    Text(
+                        text = puzzle.title,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+
+                    // FEN display
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = AppColors.CardBackground
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = "FEN",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = serverColor,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = puzzle.fen,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AppColors.LightGray,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+
+                    // Start from this position button
+                    Button(
+                        onClick = {
+                            viewModel.dismissDailyPuzzle()
+                            viewModel.startFromFen(puzzle.fen)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = serverColor
+                        )
+                    ) {
+                        Text(
+                            text = "Start from this position",
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                    }
+                }
+            }
+            else -> {
+                // Error or no puzzle
+                if (uiState.errorMessage != null) {
+                    Text(
+                        text = uiState.errorMessage,
+                        color = AppColors.NegativeRed,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                } else {
+                    Text(
+                        text = "No puzzle available",
+                        color = AppColors.SubtleText,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                }
             }
         }
     }

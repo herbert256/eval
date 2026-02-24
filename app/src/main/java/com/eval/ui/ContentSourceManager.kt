@@ -312,9 +312,16 @@ internal class ContentSourceManager(
         updateUiState {
             copy(
                 showDailyPuzzleScreen = true,
-                dailyPuzzleLoading = false,
-                dailyPuzzle = null,
-                errorMessage = "Daily puzzle feature is not available"
+                dailyPuzzleLoading = true,
+                dailyPuzzle = null
+            )
+        }
+
+        viewModelScope.launch {
+            handleApiResult(
+                result = repository.getChessComDailyPuzzle(),
+                onSuccess = { copy(dailyPuzzleLoading = false, dailyPuzzle = it) },
+                onError = { copy(dailyPuzzleLoading = false, errorMessage = it) }
             )
         }
     }
@@ -439,9 +446,13 @@ internal class ContentSourceManager(
         }
     }
 
-    private suspend fun fetchPlayerGames(username: String, @Suppress("UNUSED_PARAMETER") server: ChessServer, count: Int) {
+    private suspend fun fetchPlayerGames(username: String, server: ChessServer, count: Int) {
+        val result = when (server) {
+            ChessServer.LICHESS -> repository.getLichessGames(username, count)
+            ChessServer.CHESS_COM -> repository.getChessComGames(username, count)
+        }
         handleApiResult(
-            result = repository.getLichessGames(username, count),
+            result = result,
             onSuccess = { fetchedGames ->
                 copy(
                     playerGames = fetchedGames,
@@ -459,10 +470,9 @@ internal class ContentSourceManager(
         )
     }
 
-    fun nextPlayerGamesPage() {
+    fun nextPlayerGamesPage(pageSize: Int) {
         val state = getUiState()
         val currentPage = state.playerGamesPage
-        val pageSize = state.playerGamesPageSize
         val currentGames = state.playerGames
         val hasMore = state.playerGamesHasMore
         val playerInfo = state.playerInfo ?: return
@@ -474,8 +484,12 @@ internal class ContentSourceManager(
 
             viewModelScope.launch {
                 val newCount = currentGames.size + pageSize
+                val result = when (playerInfo.server) {
+                    ChessServer.LICHESS -> repository.getLichessGames(playerInfo.username, newCount)
+                    ChessServer.CHESS_COM -> repository.getChessComGames(playerInfo.username, newCount)
+                }
                 handleApiResult(
-                    result = repository.getLichessGames(playerInfo.username, newCount),
+                    result = result,
                     onSuccess = { fetchedGames ->
                         val gotMoreGames = fetchedGames.size > currentGames.size
                         copy(
@@ -548,7 +562,10 @@ internal class ContentSourceManager(
         }
 
         viewModelScope.launch {
-            val result = repository.getLichessLeaderboard()
+            val result = when (server) {
+                ChessServer.LICHESS -> repository.getLichessLeaderboard()
+                ChessServer.CHESS_COM -> repository.getChessComLeaderboard()
+            }
 
             handleApiResult(
                 result = result,
