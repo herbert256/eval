@@ -20,10 +20,9 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 
 /**
- * Color picker dialog with hue/saturation grid, brightness slider, and opacity slider.
+ * Full-screen color picker with hue/saturation grid, brightness slider, and opacity slider.
  */
 @Composable
 fun ColorPickerDialog(
@@ -58,154 +57,152 @@ fun ColorPickerDialog(
         )
     }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        EvalTitleBar(
+            title = title,
+            onBackClick = onDismiss,
+            onEvalClick = onDismiss
+        )
+
+        // Color preview
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(currentHsvColor)
+                .border(1.dp, Color.Gray, RoundedCornerShape(8.dp))
+        )
+
+        // Hue/Saturation picker (2D grid)
+        Text("Color", style = MaterialTheme.typography.labelMedium)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(150.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .border(1.dp, Color.Gray, RoundedCornerShape(8.dp))
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+            Canvas(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTapGestures { offset ->
+                            hue = (offset.x / size.width * 360f).coerceIn(0f, 360f)
+                            saturation = (1f - offset.y / size.height).coerceIn(0f, 1f)
+                        }
+                    }
+                    .pointerInput(Unit) {
+                        detectDragGestures { change, _ ->
+                            val offset = change.position
+                            hue = (offset.x / size.width * 360f).coerceIn(0f, 360f)
+                            saturation = (1f - offset.y / size.height).coerceIn(0f, 1f)
+                        }
+                    }
             ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-
-                // Color preview
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(currentHsvColor)
-                        .border(1.dp, Color.Gray, RoundedCornerShape(8.dp))
-                )
-
-                // Hue/Saturation picker (2D grid)
-                Text("Color", style = MaterialTheme.typography.labelMedium)
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(150.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .border(1.dp, Color.Gray, RoundedCornerShape(8.dp))
-                ) {
-                    Canvas(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .pointerInput(Unit) {
-                                detectTapGestures { offset ->
-                                    hue = (offset.x / size.width * 360f).coerceIn(0f, 360f)
-                                    saturation = (1f - offset.y / size.height).coerceIn(0f, 1f)
-                                }
-                            }
-                            .pointerInput(Unit) {
-                                detectDragGestures { change, _ ->
-                                    val offset = change.position
-                                    hue = (offset.x / size.width * 360f).coerceIn(0f, 360f)
-                                    saturation = (1f - offset.y / size.height).coerceIn(0f, 1f)
-                                }
-                            }
-                    ) {
-                        // Draw hue/saturation gradient
-                        val step = 4f
-                        for (x in 0 until size.width.toInt() step step.toInt()) {
-                            for (y in 0 until size.height.toInt() step step.toInt()) {
-                                val h = x / size.width * 360f
-                                val s = 1f - y / size.height
-                                val rgb = android.graphics.Color.HSVToColor(floatArrayOf(h, s, brightness))
-                                drawRect(
-                                    color = Color(rgb),
-                                    topLeft = Offset(x.toFloat(), y.toFloat()),
-                                    size = Size(step, step)
-                                )
-                            }
-                        }
-                        // Draw crosshair at current position
-                        val crossX = hue / 360f * size.width
-                        val crossY = (1f - saturation) * size.height
-                        drawCircle(Color.White, 8f, Offset(crossX, crossY))
-                        drawCircle(Color.Black, 6f, Offset(crossX, crossY))
-                    }
-                }
-
-                // Brightness slider
-                GradientSlider(
-                    label = "Brightness",
-                    value = brightness,
-                    onValueChange = { brightness = it }
-                ) { size ->
-                    for (x in 0 until size.width.toInt()) {
-                        val b = x / size.width
-                        val rgb = android.graphics.Color.HSVToColor(floatArrayOf(hue, saturation, b))
-                        drawLine(
-                            Color(rgb),
-                            Offset(x.toFloat(), 0f),
-                            Offset(x.toFloat(), size.height),
-                            strokeWidth = 1f
+                // Draw hue/saturation gradient
+                val step = 4f
+                for (x in 0 until size.width.toInt() step step.toInt()) {
+                    for (y in 0 until size.height.toInt() step step.toInt()) {
+                        val h = x / size.width * 360f
+                        val s = 1f - y / size.height
+                        val rgb = android.graphics.Color.HSVToColor(floatArrayOf(h, s, brightness))
+                        drawRect(
+                            color = Color(rgb),
+                            topLeft = Offset(x.toFloat(), y.toFloat()),
+                            size = Size(step, step)
                         )
                     }
                 }
+                // Draw crosshair at current position
+                val crossX = hue / 360f * size.width
+                val crossY = (1f - saturation) * size.height
+                drawCircle(Color.White, 8f, Offset(crossX, crossY))
+                drawCircle(Color.Black, 6f, Offset(crossX, crossY))
+            }
+        }
 
-                // Alpha/Opacity slider
-                GradientSlider(
-                    label = "Opacity",
-                    value = alpha,
-                    onValueChange = { alpha = it }
-                ) { size ->
-                    // Draw checkerboard background for transparency
-                    val checkSize = 8f
-                    for (x in 0 until (size.width / checkSize).toInt()) {
-                        for (y in 0 until (size.height / checkSize).toInt()) {
-                            val isLight = (x + y) % 2 == 0
-                            drawRect(
-                                if (isLight) Color.White else Color.LightGray,
-                                Offset(x * checkSize, y * checkSize),
-                                Size(checkSize, checkSize)
-                            )
-                        }
-                    }
-                    // Draw alpha gradient
-                    val baseRgb = android.graphics.Color.HSVToColor(floatArrayOf(hue, saturation, brightness))
-                    val baseColor = Color(baseRgb)
-                    for (x in 0 until size.width.toInt()) {
-                        val a = x / size.width
-                        drawLine(
-                            baseColor.copy(alpha = a),
-                            Offset(x.toFloat(), 0f),
-                            Offset(x.toFloat(), size.height),
-                            strokeWidth = 1f
-                        )
-                    }
-                }
+        // Brightness slider
+        GradientSlider(
+            label = "Brightness",
+            value = brightness,
+            onValueChange = { brightness = it }
+        ) { size ->
+            for (x in 0 until size.width.toInt()) {
+                val b = x / size.width
+                val rgb = android.graphics.Color.HSVToColor(floatArrayOf(hue, saturation, b))
+                drawLine(
+                    Color(rgb),
+                    Offset(x.toFloat(), 0f),
+                    Offset(x.toFloat(), size.height),
+                    strokeWidth = 1f
+                )
+            }
+        }
 
-                // Buttons
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
-                ) {
-                    TextButton(onClick = onDismiss) {
-                        Text("Cancel")
-                    }
-                    Button(onClick = {
-                        // Convert to Long color value
-                        val rgb = android.graphics.Color.HSVToColor(floatArrayOf(hue, saturation, brightness))
-                        val r = android.graphics.Color.red(rgb)
-                        val g = android.graphics.Color.green(rgb)
-                        val b = android.graphics.Color.blue(rgb)
-                        val a = (alpha * 255).toInt()
-                        val colorLong = ((a.toLong() and 0xFF) shl 24) or
-                                ((r.toLong() and 0xFF) shl 16) or
-                                ((g.toLong() and 0xFF) shl 8) or
-                                (b.toLong() and 0xFF)
-                        onColorSelected(colorLong)
-                        onDismiss()
-                    }) {
-                        Text("Select")
-                    }
+        // Alpha/Opacity slider
+        GradientSlider(
+            label = "Opacity",
+            value = alpha,
+            onValueChange = { alpha = it }
+        ) { size ->
+            // Draw checkerboard background for transparency
+            val checkSize = 8f
+            for (x in 0 until (size.width / checkSize).toInt()) {
+                for (y in 0 until (size.height / checkSize).toInt()) {
+                    val isLight = (x + y) % 2 == 0
+                    drawRect(
+                        if (isLight) Color.White else Color.LightGray,
+                        Offset(x * checkSize, y * checkSize),
+                        Size(checkSize, checkSize)
+                    )
                 }
+            }
+            // Draw alpha gradient
+            val baseRgb = android.graphics.Color.HSVToColor(floatArrayOf(hue, saturation, brightness))
+            val baseColor = Color(baseRgb)
+            for (x in 0 until size.width.toInt()) {
+                val a = x / size.width
+                drawLine(
+                    baseColor.copy(alpha = a),
+                    Offset(x.toFloat(), 0f),
+                    Offset(x.toFloat(), size.height),
+                    strokeWidth = 1f
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        // Buttons
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
+        ) {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+            Button(onClick = {
+                // Convert to Long color value
+                val rgb = android.graphics.Color.HSVToColor(floatArrayOf(hue, saturation, brightness))
+                val r = android.graphics.Color.red(rgb)
+                val g = android.graphics.Color.green(rgb)
+                val b = android.graphics.Color.blue(rgb)
+                val a = (alpha * 255).toInt()
+                val colorLong = ((a.toLong() and 0xFF) shl 24) or
+                        ((r.toLong() and 0xFF) shl 16) or
+                        ((g.toLong() and 0xFF) shl 8) or
+                        (b.toLong() and 0xFF)
+                onColorSelected(colorLong)
+                onDismiss()
+            }) {
+                Text("Select")
             }
         }
     }

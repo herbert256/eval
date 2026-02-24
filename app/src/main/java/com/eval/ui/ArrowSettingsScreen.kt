@@ -19,7 +19,6 @@ import androidx.compose.ui.unit.dp
 /**
  * Arrow settings screen for configuring move arrow display options.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ArrowSettingsScreen(
     stockfishSettings: StockfishSettings,
@@ -36,15 +35,9 @@ fun ArrowSettingsScreen(
     // Multi lines settings
     var multiLinesArrowColor by remember { mutableStateOf(stockfishSettings.manualStage.multiLinesArrowColor) }
 
-    // Dialog states
-    var showWhiteColorPicker by remember { mutableStateOf(false) }
-    var showBlackColorPicker by remember { mutableStateOf(false) }
-    var showMultiLinesColorPicker by remember { mutableStateOf(false) }
-
-    // Dropdown states
-    var arrowModeExpanded by remember { mutableStateOf(false) }
-    var numArrowsExpanded by remember { mutableStateOf(false) }
-    var showArrowNumbersExpanded by remember { mutableStateOf(false) }
+    // Color picker state
+    var activeColorPicker by remember { mutableStateOf<Pair<String, Long>?>(null) }
+    var activeColorCallback by remember { mutableStateOf<((Long) -> Unit)?>(null) }
 
     val numArrowsOptions = listOf(1, 2, 3, 4, 5, 6, 7, 8)
     val arrowModeOptions = listOf(
@@ -73,6 +66,22 @@ fun ArrowSettingsScreen(
         ))
     }
 
+    // Full-screen color picker (early return pattern)
+    activeColorPicker?.let { (title, color) ->
+        ColorPickerDialog(
+            currentColor = color,
+            title = title,
+            onColorSelected = { newColor ->
+                activeColorCallback?.invoke(newColor)
+            },
+            onDismiss = {
+                activeColorPicker = null
+                activeColorCallback = null
+            }
+        )
+        return
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -89,7 +98,7 @@ fun ArrowSettingsScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // ===== CARD 1: Arrow Mode (no title) =====
+        // ===== CARD 1: Arrow Mode - inline radio buttons =====
         Card(
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant
@@ -100,32 +109,24 @@ fun ArrowSettingsScreen(
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Arrow mode dropdown
-                ExposedDropdownMenuBox(
-                    expanded = arrowModeExpanded,
-                    onExpandedChange = { arrowModeExpanded = it }
+                Text("Draw arrows", style = MaterialTheme.typography.bodyLarge, color = Color.White)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    OutlinedTextField(
-                        value = arrowModeOptions.find { it.first == arrowMode }?.second ?: "Main line",
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Draw arrows") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = arrowModeExpanded) },
-                        modifier = Modifier.fillMaxWidth().menuAnchor()
-                    )
-                    ExposedDropdownMenu(
-                        expanded = arrowModeExpanded,
-                        onDismissRequest = { arrowModeExpanded = false }
-                    ) {
-                        arrowModeOptions.forEach { (mode, label) ->
-                            DropdownMenuItem(
-                                text = { Text(label) },
+                    arrowModeOptions.forEach { (mode, label) ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            RadioButton(
+                                selected = arrowMode == mode,
                                 onClick = {
                                     arrowMode = mode
-                                    arrowModeExpanded = false
                                     saveSettings(newArrowMode = mode)
                                 }
                             )
+                            Text(label, color = Color.White)
                         }
                     }
                 }
@@ -150,71 +151,37 @@ fun ArrowSettingsScreen(
                     color = Color.White
                 )
 
-                // Number of arrows dropdown
-                ExposedDropdownMenuBox(
-                    expanded = numArrowsExpanded,
-                    onExpandedChange = { numArrowsExpanded = it }
+                // Number of arrows - inline radio buttons
+                Text("Number of arrows", style = MaterialTheme.typography.bodyLarge, color = Color.White)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(0.dp)
                 ) {
-                    OutlinedTextField(
-                        value = numArrows.toString(),
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Number of arrows") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = numArrowsExpanded) },
-                        modifier = Modifier.fillMaxWidth().menuAnchor()
-                    )
-                    ExposedDropdownMenu(
-                        expanded = numArrowsExpanded,
-                        onDismissRequest = { numArrowsExpanded = false }
-                    ) {
-                        numArrowsOptions.forEach { num ->
-                            DropdownMenuItem(
-                                text = { Text(num.toString()) },
+                    numArrowsOptions.forEach { num ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = numArrows == num,
                                 onClick = {
                                     numArrows = num
-                                    numArrowsExpanded = false
                                     saveSettings(newNumArrows = num)
                                 }
                             )
+                            Text(num.toString(), color = Color.White)
                         }
                     }
                 }
 
-                // Show move number in arrow dropdown
-                ExposedDropdownMenuBox(
-                    expanded = showArrowNumbersExpanded,
-                    onExpandedChange = { showArrowNumbersExpanded = it }
-                ) {
-                    OutlinedTextField(
-                        value = if (showArrowNumbers) "Yes" else "No",
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Show move number in arrow") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showArrowNumbersExpanded) },
-                        modifier = Modifier.fillMaxWidth().menuAnchor()
-                    )
-                    ExposedDropdownMenu(
-                        expanded = showArrowNumbersExpanded,
-                        onDismissRequest = { showArrowNumbersExpanded = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Yes") },
-                            onClick = {
-                                showArrowNumbers = true
-                                showArrowNumbersExpanded = false
-                                saveSettings(newShowArrowNumbers = true)
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("No") },
-                            onClick = {
-                                showArrowNumbers = false
-                                showArrowNumbersExpanded = false
-                                saveSettings(newShowArrowNumbers = false)
-                            }
-                        )
+                // Show move number in arrow - toggle switch
+                SettingsToggle(
+                    label = "Show move number in arrow",
+                    checked = showArrowNumbers,
+                    onCheckedChange = {
+                        showArrowNumbers = it
+                        saveSettings(newShowArrowNumbers = it)
                     }
-                }
+                )
 
                 // Color picker for white move arrows
                 Row(
@@ -229,7 +196,13 @@ fun ArrowSettingsScreen(
                             .clip(RoundedCornerShape(8.dp))
                             .background(Color(whiteArrowColor.toInt()))
                             .border(2.dp, Color.Gray, RoundedCornerShape(8.dp))
-                            .clickable { showWhiteColorPicker = true }
+                            .clickable {
+                                activeColorPicker = "Arrow color for white moves" to whiteArrowColor
+                                activeColorCallback = { color ->
+                                    whiteArrowColor = color
+                                    saveSettings(newWhiteArrowColor = color)
+                                }
+                            }
                     )
                 }
 
@@ -246,7 +219,13 @@ fun ArrowSettingsScreen(
                             .clip(RoundedCornerShape(8.dp))
                             .background(Color(blackArrowColor.toInt()))
                             .border(2.dp, Color.Gray, RoundedCornerShape(8.dp))
-                            .clickable { showBlackColorPicker = true }
+                            .clickable {
+                                activeColorPicker = "Arrow color for black moves" to blackArrowColor
+                                activeColorCallback = { color ->
+                                    blackArrowColor = color
+                                    saveSettings(newBlackArrowColor = color)
+                                }
+                            }
                     )
                 }
             }
@@ -283,48 +262,17 @@ fun ArrowSettingsScreen(
                             .clip(RoundedCornerShape(8.dp))
                             .background(Color(multiLinesArrowColor.toInt()))
                             .border(2.dp, Color.Gray, RoundedCornerShape(8.dp))
-                            .clickable { showMultiLinesColorPicker = true }
+                            .clickable {
+                                activeColorPicker = "Arrow color for multi lines" to multiLinesArrowColor
+                                activeColorCallback = { color ->
+                                    multiLinesArrowColor = color
+                                    saveSettings(newMultiLinesArrowColor = color)
+                                }
+                            }
                     )
                 }
             }
         }
 
-    }
-
-    // Color picker dialogs
-    if (showWhiteColorPicker) {
-        ColorPickerDialog(
-            currentColor = whiteArrowColor,
-            title = "Arrow color for white moves",
-            onColorSelected = { color ->
-                whiteArrowColor = color
-                saveSettings(newWhiteArrowColor = color)
-            },
-            onDismiss = { showWhiteColorPicker = false }
-        )
-    }
-
-    if (showBlackColorPicker) {
-        ColorPickerDialog(
-            currentColor = blackArrowColor,
-            title = "Arrow color for black moves",
-            onColorSelected = { color ->
-                blackArrowColor = color
-                saveSettings(newBlackArrowColor = color)
-            },
-            onDismiss = { showBlackColorPicker = false }
-        )
-    }
-
-    if (showMultiLinesColorPicker) {
-        ColorPickerDialog(
-            currentColor = multiLinesArrowColor,
-            title = "Arrow color for multi lines",
-            onColorSelected = { color ->
-                multiLinesArrowColor = color
-                saveSettings(newMultiLinesArrowColor = color)
-            },
-            onDismiss = { showMultiLinesColorPicker = false }
-        )
     }
 }

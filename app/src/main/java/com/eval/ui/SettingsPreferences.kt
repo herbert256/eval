@@ -270,9 +270,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
     // ============================================================================
 
     fun loadGeneralSettings(): GeneralSettings {
-        // Full screen mode is not persistent - always starts as false
         return GeneralSettings(
-            longTapForFullScreen = false,
             paginationPageSize = prefs.getInt(KEY_PAGINATION_PAGE_SIZE, 25).coerceIn(5, 50),
             moveSoundsEnabled = prefs.getBoolean(KEY_MOVE_SOUNDS_ENABLED, true),
             lichessUsername = prefs.getString(KEY_LICHESS_USERNAME, "DrNykterstein") ?: ""

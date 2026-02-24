@@ -19,16 +19,11 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.foundation.text.ClickableText
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.lifecycle.viewmodel.compose.viewModel
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.delay
 
 /**
@@ -115,48 +110,34 @@ fun GameScreenContent(
         }
     }
 
-    // Handle full screen mode (using generalSettings.longTapForFullScreen as the state)
-    val window = (context as? Activity)?.window
-    val isFullScreen = uiState.generalSettings.longTapForFullScreen
-
-    // Track if we've ever entered full screen to avoid modifying window on startup
-    var hasBeenFullScreen by remember { mutableStateOf(false) }
-
-    LaunchedEffect(isFullScreen) {
-        if (window != null) {
-            if (isFullScreen) {
-                // Enter full screen mode
-                hasBeenFullScreen = true
-                WindowCompat.setDecorFitsSystemWindows(window, false)
-                val controller = WindowInsetsControllerCompat(window, view)
-                controller.hide(WindowInsetsCompat.Type.systemBars())
-                controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            } else if (hasBeenFullScreen) {
-                // Only restore normal mode if we were previously in full screen
-                WindowCompat.setDecorFitsSystemWindows(window, true)
-                val controller = WindowInsetsControllerCompat(window, view)
-                controller.show(WindowInsetsCompat.Type.systemBars())
-            }
-        }
-    }
-
-    // Restore normal mode when composable is disposed (only if we modified it)
-    DisposableEffect(Unit) {
-        onDispose {
-            if (window != null && hasBeenFullScreen) {
-                WindowCompat.setDecorFitsSystemWindows(window, true)
-                val controller = WindowInsetsControllerCompat(window, view)
-                controller.show(WindowInsetsCompat.Type.systemBars())
-            }
-        }
-    }
-
     // Note: Full-screen destinations (Settings, Help, Trace, Retrieve) are now handled via navigation
 
-    // Show share position dialog
+    // Show GIF export progress (full screen)
+    if (uiState.showGifExportDialog) {
+        GifExportScreen(
+            progress = uiState.gifExportProgress ?: 0f,
+            onCancel = { viewModel.cancelGifExport() }
+        )
+        return
+    }
+
+    // Show AI app not installed dialog (full screen)
+    if (uiState.showAiAppNotInstalledDialog) {
+        AiAppNotInstalledDialog(
+            onDismiss = { viewModel.hideAiAppNotInstalledDialog() },
+            onInstallClick = {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=com.ai"))
+                context.startActivity(intent)
+            },
+            onDontAskAgain = { viewModel.setAiAppDontAskAgain() }
+        )
+        return
+    }
+
+    // Show share position screen (full screen)
     if (uiState.showSharePositionDialog) {
         val gameSiteUrl = viewModel.getGameSiteUrl()
-        SharePositionDialog(
+        SharePositionScreen(
             gameSiteUrl = gameSiteUrl,
             onCopyFen = { viewModel.copyFenToClipboard(context) },
             onShare = { viewModel.sharePositionAsText(context) },
@@ -175,11 +156,12 @@ fun GameScreenContent(
             },
             onDismiss = { viewModel.hideSharePositionDialog() }
         )
+        return
     }
 
-    // Show AI prompt selection dialog
+    // Show AI prompt selection screen (full screen)
     if (uiState.showAiPromptSelectionDialog) {
-        AiPromptSelectionDialog(
+        AiPromptSelectionScreen(
             prompts = uiState.aiPrompts.filter { it.safeCategory == AiPromptCategory.GAME },
             onSelectPrompt = { promptEntry ->
                 viewModel.hideAiPromptSelectionDialog()
@@ -187,54 +169,7 @@ fun GameScreenContent(
             },
             onDismiss = { viewModel.hideAiPromptSelectionDialog() }
         )
-    }
-
-    // Show GIF export progress dialog
-    if (uiState.showGifExportDialog) {
-        AlertDialog(
-            onDismissRequest = { viewModel.cancelGifExport() },
-            title = { Text("Exporting GIF", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    CircularProgressIndicator(
-                        progress = { uiState.gifExportProgress ?: 0f },
-                        modifier = Modifier.size(64.dp),
-                        strokeWidth = 6.dp
-                    )
-                    Text(
-                        text = "Creating animated GIF...",
-                        color = Color.Gray
-                    )
-                    Text(
-                        text = "${((uiState.gifExportProgress ?: 0f) * 100).toInt()}%",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp
-                    )
-                }
-            },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = { viewModel.cancelGifExport() }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
-
-    // Show AI app not installed dialog
-    if (uiState.showAiAppNotInstalledDialog) {
-        AiAppNotInstalledDialog(
-            onDismiss = { viewModel.hideAiAppNotInstalledDialog() },
-            onInstallClick = {
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=com.ai"))
-                context.startActivity(intent)
-            },
-            onDontAskAgain = { viewModel.setAiAppDontAskAgain() }
-        )
+        return
     }
 
     // Show player info screen (triggered by clicking on player names)
@@ -289,17 +224,9 @@ fun GameScreenContent(
             .background(backgroundColor)
             .padding(horizontal = 12.dp)
             .verticalScroll(rememberScrollState())
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onLongPress = {
-                        viewModel.toggleFullScreen()
-                    }
-                )
-            }
     ) {
-        // Title bar - hidden in full screen mode
-        if (!isFullScreen) {
-            EvalTitleBar(
+        // Title bar - always shown
+        EvalTitleBar(
                 onEvalClick = { viewModel.clearGame() },
                 leftContent = {
                     // Menu icon - navigate to retrieve
@@ -311,17 +238,16 @@ fun GameScreenContent(
                             }
                             onNavigateToRetrieve()
                         },
-                        fontSize = 44,
-                        offsetY = -12
+                        fontSize = 34,
+                        offsetY = -8
                     )
                     // Reload last game from server
                     if (uiState.game != null || uiState.hasLastServerUser) {
                         TitleBarIcon(
                             icon = "↻",
                             onClick = { viewModel.reloadLastGame() },
-                            fontSize = 44,
-                            size = 52,
-                            offsetY = -12
+                            fontSize = 34,
+                            offsetY = -8
                         )
                     }
                     // Settings icon
@@ -336,10 +262,9 @@ fun GameScreenContent(
                     )
                 }
             )
-        }
 
-        // Stage indicator - only show during Preview and Analyse stages, hidden in full screen mode
-        if (uiState.game != null && uiState.currentStage != AnalysisStage.MANUAL && !isFullScreen) {
+        // Stage indicator - only show during Preview and Analyse stages
+        if (uiState.game != null && uiState.currentStage != AnalysisStage.MANUAL) {
             val isPreviewStage = uiState.currentStage == AnalysisStage.PREVIEW
             val stageText = if (isPreviewStage) "Preview stage" else "Analyse stage"
             val stageColor = if (isPreviewStage) Color(0xFFFFAA00) else AppColors.AccentBlue
@@ -574,7 +499,7 @@ fun StockfishNotInstalledScreen(
 }
 
 /**
- * Dialog shown when user tries to use AI features without the AI app installed.
+ * Full-screen view shown when user tries to use AI features without the AI app installed.
  */
 @Composable
 fun AiAppNotInstalledDialog(
@@ -582,53 +507,70 @@ fun AiAppNotInstalledDialog(
     onInstallClick: () -> Unit,
     onDontAskAgain: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = "AI App Not Installed",
-                fontWeight = FontWeight.Bold
-            )
-        },
-        text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = "The AI app is required to generate AI reports.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Text(
-                    text = "Install the AI app from the Google Play Store to enable AI-powered game and player analysis.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray
-                )
-            }
-        },
-        confirmButton = {
-            Button(onClick = {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        EvalTitleBar(
+            title = "AI App",
+            onBackClick = onDismiss,
+            onEvalClick = onDismiss
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(
+            text = "AI App Not Installed",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = Color.White
+        )
+
+        Text(
+            text = "The AI app is required to generate AI reports.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color.White
+        )
+
+        Text(
+            text = "Install the AI app from the Google Play Store to enable AI-powered game and player analysis.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.Gray
+        )
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        Button(
+            onClick = {
                 onInstallClick()
                 onDismiss()
-            }) {
-                Text("Install")
-            }
-        },
-        dismissButton = {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                TextButton(onClick = {
-                    onDontAskAgain()
-                    onDismiss()
-                }) {
-                    Text("Don't ask again")
-                }
-                TextButton(onClick = onDismiss) {
-                    Text("Cancel")
-                }
-            }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = AppColors.ButtonGreen)
+        ) {
+            Text("Install")
         }
-    )
+
+        TextButton(
+            onClick = {
+                onDontAskAgain()
+                onDismiss()
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Don't ask again")
+        }
+
+        TextButton(
+            onClick = onDismiss,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Cancel")
+        }
+    }
 }
 
 /**
@@ -764,9 +706,9 @@ fun EvalLogo() {
             // Top chess pieces - black pieces
             Text(
                 text = "\u265A \u265B \u265C",
-                fontSize = 56.sp,
+                fontSize = 40.sp,
                 color = AppColors.DarkBackground,
-                letterSpacing = 12.sp
+                letterSpacing = 8.sp
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -774,10 +716,10 @@ fun EvalLogo() {
             // Main title
             Text(
                 text = "Eval",
-                fontSize = 96.sp,
+                fontSize = 72.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
-                letterSpacing = 6.sp
+                letterSpacing = 4.sp
             )
 
             // Subtitle
@@ -793,9 +735,9 @@ fun EvalLogo() {
             // Bottom chess pieces - white pieces
             Text(
                 text = "\u2657 \u2658 \u2659",
-                fontSize = 56.sp,
+                fontSize = 40.sp,
                 color = Color.White,
-                letterSpacing = 12.sp
+                letterSpacing = 8.sp
             )
         }
     }
@@ -811,10 +753,10 @@ internal fun convertMarkdownToHtml(serviceName: String, markdown: String, uiStat
 
 
 /**
- * Dialog for sharing the current position.
+ * Full-screen view for sharing the current position.
  */
 @Composable
-fun SharePositionDialog(
+fun SharePositionScreen(
     gameSiteUrl: String?,
     onCopyFen: () -> Unit,
     onShare: () -> Unit,
@@ -825,181 +767,208 @@ fun SharePositionDialog(
     onViewOnSite: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = "Share / Export",
-                fontWeight = FontWeight.Bold
-            )
-        },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // Copy FEN button
-                Button(
-                    onClick = {
-                        onCopyFen()
-                        onDismiss()
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = AppColors.ButtonGreen
-                    )
-                ) {
-                    Text("Copy FEN to Clipboard")
-                }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        EvalTitleBar(
+            title = "Share / Export",
+            onBackClick = onDismiss,
+            onEvalClick = onDismiss
+        )
 
-                // Copy PGN button
-                Button(
-                    onClick = {
-                        onCopyPgn()
-                        onDismiss()
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = AppColors.ButtonGreen
-                    )
-                ) {
-                    Text("Copy PGN to Clipboard")
-                }
+        Spacer(modifier = Modifier.height(8.dp))
 
-                // Share button
-                Button(
-                    onClick = {
-                        onShare()
-                        onDismiss()
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = AppColors.ButtonGreen
-                    )
-                ) {
-                    Text("Share Position")
-                }
+        // Copy FEN button
+        Button(
+            onClick = {
+                onCopyFen()
+                onDismiss()
+            },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = AppColors.ButtonGreen)
+        ) {
+            Text("Copy FEN to Clipboard")
+        }
 
-                // Export PGN button
-                Button(
-                    onClick = {
-                        onExportPgn()
-                        onDismiss()
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = AppColors.ButtonGreen
-                    )
-                ) {
-                    Text("Share Annotated PGN")
-                }
+        // Copy PGN button
+        Button(
+            onClick = {
+                onCopyPgn()
+                onDismiss()
+            },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = AppColors.ButtonGreen)
+        ) {
+            Text("Copy PGN to Clipboard")
+        }
 
-                // Export GIF button
-                Button(
-                    onClick = {
-                        onExportGif()
-                        onDismiss()
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = AppColors.ButtonGreen
-                    )
-                ) {
-                    Text("Export as Animated GIF")
-                }
+        // Share button
+        Button(
+            onClick = {
+                onShare()
+                onDismiss()
+            },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = AppColors.ButtonGreen)
+        ) {
+            Text("Share Position")
+        }
 
-                // AI Reports button - always visible, selection dialog will show available providers
-                Button(
-                    onClick = {
-                        onGenerateAiReports()
-                        onDismiss()
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = AppColors.ButtonGreen
-                    )
-                ) {
-                    Text("Generate AI Reports")
-                }
+        // Export PGN button
+        Button(
+            onClick = {
+                onExportPgn()
+                onDismiss()
+            },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = AppColors.ButtonGreen)
+        ) {
+            Text("Share Annotated PGN")
+        }
 
-                // View on lichess.org / chess.com button - only if game has a site URL
-                if (gameSiteUrl != null) {
-                    val siteName = when {
-                        gameSiteUrl.contains("lichess.org") -> "lichess.org"
-                        gameSiteUrl.contains("chess.com") -> "chess.com"
-                        else -> "site"
-                    }
-                    Button(
-                        onClick = {
-                            onViewOnSite()
-                            onDismiss()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = AppColors.ButtonGreen
-                        )
-                    ) {
-                        Text("View on $siteName")
-                    }
-                }
+        // Export GIF button
+        Button(
+            onClick = {
+                onExportGif()
+                onDismiss()
+            },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = AppColors.ButtonGreen)
+        ) {
+            Text("Export as Animated GIF")
+        }
+
+        // AI Reports button
+        Button(
+            onClick = {
+                onGenerateAiReports()
+                onDismiss()
+            },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = AppColors.ButtonGreen)
+        ) {
+            Text("Generate AI Reports")
+        }
+
+        // View on lichess.org / chess.com button
+        if (gameSiteUrl != null) {
+            val siteName = when {
+                gameSiteUrl.contains("lichess.org") -> "lichess.org"
+                gameSiteUrl.contains("chess.com") -> "chess.com"
+                else -> "site"
             }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
+            Button(
+                onClick = {
+                    onViewOnSite()
+                    onDismiss()
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = AppColors.ButtonGreen)
+            ) {
+                Text("View on $siteName")
             }
         }
-    )
+    }
 }
 
 /**
- * Dialog for selecting an AI prompt before launching analysis.
+ * Full-screen view for selecting an AI prompt before launching analysis.
  */
 @Composable
-fun AiPromptSelectionDialog(
+fun AiPromptSelectionScreen(
     prompts: List<AiPromptEntry>,
     onSelectPrompt: (AiPromptEntry) -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        EvalTitleBar(
+            title = "Select AI Prompt",
+            onBackClick = onDismiss,
+            onEvalClick = onDismiss
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        if (prompts.isEmpty()) {
             Text(
-                text = "Select AI Prompt",
-                fontWeight = FontWeight.Bold
+                text = "No prompts configured. Go to Settings > AI Prompts to add prompts.",
+                color = AppColors.SubtleText
             )
-        },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                if (prompts.isEmpty()) {
-                    Text(
-                        text = "No prompts configured. Go to Settings > AI Prompts to add prompts.",
-                        color = AppColors.SubtleText
-                    )
-                } else {
-                    prompts.sortedBy { it.name.lowercase() }.forEach { prompt ->
-                        Button(
-                            onClick = { onSelectPrompt(prompt) },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = AppColors.ButtonGreen
-                            )
-                        ) {
-                            Text(prompt.name)
-                        }
-                    }
+        } else {
+            prompts.sortedBy { it.name.lowercase() }.forEach { prompt ->
+                Button(
+                    onClick = { onSelectPrompt(prompt) },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.ButtonGreen)
+                ) {
+                    Text(prompt.name)
                 }
             }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
         }
-    )
+    }
+}
+
+/**
+ * Full-screen view for GIF export progress.
+ */
+@Composable
+fun GifExportScreen(
+    progress: Float,
+    onCancel: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        EvalTitleBar(
+            title = "Exporting GIF",
+            onBackClick = onCancel,
+            onEvalClick = onCancel
+        )
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            CircularProgressIndicator(
+                progress = { progress },
+                modifier = Modifier.size(64.dp),
+                strokeWidth = 6.dp
+            )
+            Text(
+                text = "Creating animated GIF...",
+                color = Color.Gray
+            )
+            Text(
+                text = "${(progress * 100).toInt()}%",
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp
+            )
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        TextButton(
+            onClick = onCancel,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Cancel")
+        }
+    }
 }

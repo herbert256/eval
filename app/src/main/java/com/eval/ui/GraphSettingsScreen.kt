@@ -34,11 +34,9 @@ fun GraphSettingsScreen(
 
     val scaleValues = listOf(50, 75, 100, 150, 200, 250, 300)
 
-    var showPlusScoreColorPicker by remember { mutableStateOf(false) }
-    var showNegativeScoreColorPicker by remember { mutableStateOf(false) }
-    var showBackgroundColorPicker by remember { mutableStateOf(false) }
-    var showAnalyseLineColorPicker by remember { mutableStateOf(false) }
-    var showVerticalLineColorPicker by remember { mutableStateOf(false) }
+    // Color picker state
+    var activeColorPicker by remember { mutableStateOf<Pair<String, Long>?>(null) }
+    var activeColorCallback by remember { mutableStateOf<((Long) -> Unit)?>(null) }
 
     fun saveSettings(
         newPlusScoreColor: Long = plusScoreColor,
@@ -62,6 +60,22 @@ fun GraphSettingsScreen(
             lineGraphScale = newLineGraphScale,
             barGraphScale = newBarGraphScale
         ))
+    }
+
+    // Full-screen color picker (early return pattern)
+    activeColorPicker?.let { (title, color) ->
+        ColorPickerDialog(
+            currentColor = color,
+            title = title,
+            onColorSelected = { newColor ->
+                activeColorCallback?.invoke(newColor)
+            },
+            onDismiss = {
+                activeColorPicker = null
+                activeColorCallback = null
+            }
+        )
+        return
     }
 
     Column(
@@ -102,35 +116,65 @@ fun GraphSettingsScreen(
                 ColorSettingRow(
                     label = "Plus score color",
                     color = Color(plusScoreColor.toInt()),
-                    onClick = { showPlusScoreColorPicker = true }
+                    onClick = {
+                        activeColorPicker = "Plus score color" to plusScoreColor
+                        activeColorCallback = { color ->
+                            plusScoreColor = color
+                            saveSettings(newPlusScoreColor = color)
+                        }
+                    }
                 )
 
                 // Negative score color picker
                 ColorSettingRow(
                     label = "Negative score color",
                     color = Color(negativeScoreColor.toInt()),
-                    onClick = { showNegativeScoreColorPicker = true }
+                    onClick = {
+                        activeColorPicker = "Negative score color" to negativeScoreColor
+                        activeColorCallback = { color ->
+                            negativeScoreColor = color
+                            saveSettings(newNegativeScoreColor = color)
+                        }
+                    }
                 )
 
                 // Background color picker
                 ColorSettingRow(
                     label = "Background color",
                     color = Color(backgroundColor.toInt()),
-                    onClick = { showBackgroundColorPicker = true }
+                    onClick = {
+                        activeColorPicker = "Background color" to backgroundColor
+                        activeColorCallback = { color ->
+                            backgroundColor = color
+                            saveSettings(newBackgroundColor = color)
+                        }
+                    }
                 )
 
                 // Analyse line color picker
                 ColorSettingRow(
                     label = "Line color in Analyse stage",
                     color = Color(analyseLineColor.toInt()),
-                    onClick = { showAnalyseLineColorPicker = true }
+                    onClick = {
+                        activeColorPicker = "Line color in Analyse stage" to analyseLineColor
+                        activeColorCallback = { color ->
+                            analyseLineColor = color
+                            saveSettings(newAnalyseLineColor = color)
+                        }
+                    }
                 )
 
                 // Vertical line color picker
                 ColorSettingRow(
                     label = "Vertical line color",
                     color = Color(verticalLineColor.toInt()),
-                    onClick = { showVerticalLineColorPicker = true }
+                    onClick = {
+                        activeColorPicker = "Vertical line color" to verticalLineColor
+                        activeColorCallback = { color ->
+                            verticalLineColor = color
+                            saveSettings(newVerticalLineColor = color)
+                        }
+                    }
                 )
             }
         }
@@ -400,66 +444,4 @@ fun GraphSettingsScreen(
         }
 
     }
-
-    // Color picker dialogs
-    if (showPlusScoreColorPicker) {
-        ColorPickerDialog(
-            currentColor = plusScoreColor,
-            title = "Plus score color",
-            onColorSelected = { color ->
-                plusScoreColor = color
-                saveSettings(newPlusScoreColor = color)
-            },
-            onDismiss = { showPlusScoreColorPicker = false }
-        )
-    }
-
-    if (showNegativeScoreColorPicker) {
-        ColorPickerDialog(
-            currentColor = negativeScoreColor,
-            title = "Negative score color",
-            onColorSelected = { color ->
-                negativeScoreColor = color
-                saveSettings(newNegativeScoreColor = color)
-            },
-            onDismiss = { showNegativeScoreColorPicker = false }
-        )
-    }
-
-    if (showBackgroundColorPicker) {
-        ColorPickerDialog(
-            currentColor = backgroundColor,
-            title = "Background color",
-            onColorSelected = { color ->
-                backgroundColor = color
-                saveSettings(newBackgroundColor = color)
-            },
-            onDismiss = { showBackgroundColorPicker = false }
-        )
-    }
-
-    if (showAnalyseLineColorPicker) {
-        ColorPickerDialog(
-            currentColor = analyseLineColor,
-            title = "Line color in Analyse stage",
-            onColorSelected = { color ->
-                analyseLineColor = color
-                saveSettings(newAnalyseLineColor = color)
-            },
-            onDismiss = { showAnalyseLineColorPicker = false }
-        )
-    }
-
-    if (showVerticalLineColorPicker) {
-        ColorPickerDialog(
-            currentColor = verticalLineColor,
-            title = "Vertical line color",
-            onColorSelected = { color ->
-                verticalLineColor = color
-                saveSettings(newVerticalLineColor = color)
-            },
-            onDismiss = { showVerticalLineColorPicker = false }
-        )
-    }
 }
-

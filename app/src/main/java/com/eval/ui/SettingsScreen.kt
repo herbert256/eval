@@ -324,26 +324,50 @@ fun AiPromptsListScreen(
 ) {
     var promptToDelete by remember { mutableStateOf<AiPromptEntry?>(null) }
 
-    // Delete confirmation dialog
+    // Delete confirmation (full screen, early return pattern)
     promptToDelete?.let { prompt ->
-        AlertDialog(
-            onDismissRequest = { promptToDelete = null },
-            title = { Text("Delete Prompt", fontWeight = FontWeight.Bold) },
-            text = { Text("Delete \"${prompt.name}\"?") },
-            confirmButton = {
-                TextButton(onClick = {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            EvalTitleBar(
+                title = "Delete Prompt",
+                onBackClick = { promptToDelete = null },
+                onEvalClick = onBackToGame
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(
+                text = "Delete \"${prompt.name}\"?",
+                style = MaterialTheme.typography.bodyLarge,
+                color = Color.White
+            )
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            Button(
+                onClick = {
                     onDeletePrompt(prompt.id)
                     promptToDelete = null
-                }) {
-                    Text("Delete", color = AppColors.NegativeRed)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { promptToDelete = null }) {
-                    Text("Cancel")
-                }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+            ) {
+                Text("Delete")
             }
-        )
+
+            TextButton(
+                onClick = { promptToDelete = null },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Cancel")
+            }
+        }
+        return
     }
 
     Column(

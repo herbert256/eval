@@ -44,17 +44,18 @@ fun EvalTitleBar(
         // Left side: custom content or back button
         if (leftContent != null) {
             Row(
+                modifier = Modifier.weight(1f),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                horizontalArrangement = Arrangement.spacedBy(0.dp)
             ) {
                 leftContent()
             }
         } else if (onBackClick != null) {
-            TextButton(onClick = onBackClick) {
+            TextButton(onClick = onBackClick, modifier = Modifier.weight(1f)) {
                 Text(backText, color = Color.White, fontSize = 16.sp)
             }
         } else {
-            Spacer(modifier = Modifier.width(1.dp))
+            Spacer(modifier = Modifier.weight(1f))
         }
 
         // Middle: title (if provided)
@@ -72,12 +73,14 @@ fun EvalTitleBar(
         // Right side: "Eval" branding
         Text(
             text = "Eval",
-            fontSize = 36.sp,
+            fontSize = 24.sp,
             color = Color.White,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.End,
             maxLines = 1,
-            modifier = Modifier.clickable { onEvalClick() }
+            modifier = Modifier
+                .padding(start = 8.dp)
+                .clickable { onEvalClick() }
         )
     }
 }
@@ -145,8 +148,8 @@ fun SettingsToggle(
 fun TitleBarIcon(
     icon: String,
     onClick: () -> Unit,
-    fontSize: Int = 30,
-    size: Int = 44,
+    fontSize: Int = 26,
+    size: Int = 38,
     offsetY: Int = -3
 ) {
     Box(

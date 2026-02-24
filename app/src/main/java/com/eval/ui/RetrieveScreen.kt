@@ -41,7 +41,8 @@ private enum class RetrieveSubScreen {
     LICHESS_TV,
     STREAMERS,
     PGN_FILE,
-    OPENING_SELECTION
+    OPENING_SELECTION,
+    FEN_INPUT
 }
 
 /**
@@ -177,6 +178,7 @@ fun RetrieveScreen(
                 }
             }
             RetrieveSubScreen.OPENING_SELECTION -> currentScreen = RetrieveSubScreen.MAIN
+            RetrieveSubScreen.FEN_INPUT -> currentScreen = RetrieveSubScreen.MAIN
         }
     }
 
@@ -194,7 +196,8 @@ fun RetrieveScreen(
             onOpeningClick = {
                 viewModel.loadEcoOpenings()
                 currentScreen = RetrieveSubScreen.OPENING_SELECTION
-            }
+            },
+            onFenClick = { currentScreen = RetrieveSubScreen.FEN_INPUT }
         )
         RetrieveSubScreen.LICHESS -> LichessRetrieveScreen(
             viewModel = viewModel,
@@ -275,6 +278,29 @@ fun RetrieveScreen(
             uiState = uiState,
             onBack = { currentScreen = RetrieveSubScreen.MAIN }
         )
+        RetrieveSubScreen.FEN_INPUT -> {
+            val fenContext = LocalContext.current
+            val fenSettingsPrefs = remember {
+                val prefs = fenContext.getSharedPreferences(SettingsPreferences.PREFS_NAME, android.content.Context.MODE_PRIVATE)
+                SettingsPreferences(prefs)
+            }
+            var fenInput by remember { mutableStateOf("") }
+            var fenHistory by remember { mutableStateOf(fenSettingsPrefs.loadFenHistory()) }
+            FenInputScreen(
+                fenInput = fenInput,
+                onFenInputChange = { fenInput = it },
+                fenHistory = fenHistory,
+                onStart = {
+                    if (fenInput.isNotBlank()) {
+                        val trimmedFen = fenInput.trim()
+                        fenSettingsPrefs.saveFenToHistory(trimmedFen)
+                        viewModel.startFromFen(trimmedFen)
+                        currentScreen = RetrieveSubScreen.MAIN
+                    }
+                },
+                onDismiss = { currentScreen = RetrieveSubScreen.MAIN }
+            )
+        }
     }
 }
 
@@ -288,7 +314,8 @@ private fun RetrieveMainScreen(
     onBack: () -> Unit,
     onLichessClick: () -> Unit,
     onPgnFileLoaded: (hasMultipleEvents: Boolean) -> Unit,
-    onOpeningClick: () -> Unit
+    onOpeningClick: () -> Unit,
+    onFenClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -453,114 +480,14 @@ private fun RetrieveMainScreen(
             }
 
             // Button to start from FEN position
-            var showFenDialog by remember { mutableStateOf(false) }
-            var fenInput by remember { mutableStateOf("") }
-
-            // Load FEN history from preferences
-            val settingsPrefs = remember {
-                val prefs = context.getSharedPreferences(SettingsPreferences.PREFS_NAME, android.content.Context.MODE_PRIVATE)
-                SettingsPreferences(prefs)
-            }
-            var fenHistory by remember { mutableStateOf(settingsPrefs.loadFenHistory()) }
-
             Button(
-                onClick = {
-                    fenHistory = settingsPrefs.loadFenHistory()  // Refresh history when opening dialog
-                    showFenDialog = true
-                },
+                onClick = onFenClick,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = AppColors.BlueGrayAccent
                 )
             ) {
                 Text("Start from FEN position")
-            }
-
-            // FEN input dialog
-            if (showFenDialog) {
-                AlertDialog(
-                    onDismissRequest = { showFenDialog = false },
-                    title = { Text("Enter FEN position") },
-                    text = {
-                        Column(
-                            modifier = Modifier.heightIn(max = 400.dp)
-                        ) {
-                            Text(
-                                "Paste or type a FEN string:",
-                                color = Color.Gray,
-                                fontSize = 14.sp
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            OutlinedTextField(
-                                value = fenInput,
-                                onValueChange = { fenInput = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                placeholder = { Text("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", fontSize = 11.sp) },
-                                singleLine = false,
-                                maxLines = 3
-                            )
-
-                            // FEN History
-                            if (fenHistory.isNotEmpty()) {
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Text(
-                                    "Recent positions:",
-                                    color = Color.Gray,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(max = 200.dp)
-                                        .verticalScroll(rememberScrollState()),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    fenHistory.forEach { fen ->
-                                        Card(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable { fenInput = fen },
-                                            colors = CardDefaults.cardColors(
-                                                containerColor = AppColors.CardBackground
-                                            )
-                                        ) {
-                                            Text(
-                                                text = fen,
-                                                fontSize = 11.sp,
-                                                color = AppColors.LightGray,
-                                                maxLines = 1,
-                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(
-                            onClick = {
-                                if (fenInput.isNotBlank()) {
-                                    val trimmedFen = fenInput.trim()
-                                    settingsPrefs.saveFenToHistory(trimmedFen)
-                                    viewModel.startFromFen(trimmedFen)
-                                    showFenDialog = false
-                                    fenInput = ""
-                                }
-                            }
-                        ) {
-                            Text("Start")
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { showFenDialog = false }) {
-                            Text("Cancel")
-                        }
-                    }
-                )
             }
 
             // Loading indicator
@@ -2058,6 +1985,104 @@ private fun OpeningSelectionScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Full-screen FEN input view.
+ */
+@Composable
+fun FenInputScreen(
+    fenInput: String,
+    onFenInputChange: (String) -> Unit,
+    fenHistory: List<String>,
+    onStart: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        EvalTitleBar(
+            title = "Enter FEN Position",
+            onBackClick = onDismiss,
+            onEvalClick = onDismiss
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            "Paste or type a FEN string:",
+            color = Color.Gray,
+            fontSize = 14.sp
+        )
+
+        OutlinedTextField(
+            value = fenInput,
+            onValueChange = onFenInputChange,
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", fontSize = 11.sp) },
+            singleLine = false,
+            maxLines = 3
+        )
+
+        // FEN History
+        if (fenHistory.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "Recent positions:",
+                color = Color.Gray,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                fenHistory.forEach { fen ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onFenInputChange(fen) },
+                        colors = CardDefaults.cardColors(
+                            containerColor = AppColors.CardBackground
+                        )
+                    ) {
+                        Text(
+                            text = fen,
+                            fontSize = 11.sp,
+                            color = AppColors.LightGray,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+            }
+        } else {
+            Spacer(modifier = Modifier.weight(1f))
+        }
+
+        Button(
+            onClick = onStart,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = AppColors.ButtonGreen)
+        ) {
+            Text("Start")
+        }
+
+        TextButton(
+            onClick = onDismiss,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Cancel")
         }
     }
 }

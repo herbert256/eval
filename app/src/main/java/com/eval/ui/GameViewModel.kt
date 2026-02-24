@@ -1201,14 +1201,6 @@ ${opening.moves} *
         _uiState.value = _uiState.value.copy(stockfishSettings = newSettings)
     }
 
-    fun toggleFullScreen() {
-        val currentSettings = _uiState.value.generalSettings
-        val newSettings = currentSettings.copy(
-            longTapForFullScreen = !currentSettings.longTapForFullScreen
-        )
-        _uiState.value = _uiState.value.copy(generalSettings = newSettings)
-    }
-
     override fun onCleared() {
         super.onCleared()
         analysisOrchestrator.autoAnalysisJob?.cancel()

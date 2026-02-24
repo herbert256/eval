@@ -23,14 +23,12 @@ fun GeneralSettingsScreen(
     onBackToGame: () -> Unit,
     onSave: (GeneralSettings) -> Unit
 ) {
-    var longTapForFullScreen by remember { mutableStateOf(generalSettings.longTapForFullScreen) }
     var paginationPageSize by remember { mutableFloatStateOf(generalSettings.paginationPageSize.toFloat()) }
     var moveSoundsEnabled by remember { mutableStateOf(generalSettings.moveSoundsEnabled) }
     var lichessUsername by remember { mutableStateOf(generalSettings.lichessUsername) }
 
     fun saveSettings() {
         onSave(generalSettings.copy(
-            longTapForFullScreen = longTapForFullScreen,
             paginationPageSize = paginationPageSize.roundToInt(),
             moveSoundsEnabled = moveSoundsEnabled,
             lichessUsername = lichessUsername
@@ -70,31 +68,6 @@ fun GeneralSettingsScreen(
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White
                 )
-
-                // Full screen mode toggle
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Full screen mode", color = Color.White)
-                        Text(
-                            text = "Long tap anywhere to toggle (not saved)",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = AppColors.SubtleText
-                        )
-                    }
-                    Switch(
-                        checked = longTapForFullScreen,
-                        onCheckedChange = {
-                            longTapForFullScreen = it
-                            saveSettings()
-                        }
-                    )
-                }
-
-                HorizontalDivider(color = AppColors.Divider)
 
                 // Pagination page size
                 Column {

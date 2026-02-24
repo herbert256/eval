@@ -15,7 +15,6 @@ import androidx.compose.ui.unit.dp
 /**
  * Board layout settings screen for configuring chess board appearance.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BoardLayoutSettingsScreen(
     boardLayoutSettings: BoardLayoutSettings,
@@ -37,14 +36,9 @@ fun BoardLayoutSettingsScreen(
     var evalBarColor2 by remember { mutableStateOf(boardLayoutSettings.evalBarColor2) }
     var evalBarRange by remember { mutableStateOf(boardLayoutSettings.evalBarRange) }
 
-    var playerBarModeExpanded by remember { mutableStateOf(false) }
-    var evalBarPositionExpanded by remember { mutableStateOf(false) }
-    var showWhiteSquareColorPicker by remember { mutableStateOf(false) }
-    var showBlackSquareColorPicker by remember { mutableStateOf(false) }
-    var showWhitePieceColorPicker by remember { mutableStateOf(false) }
-    var showBlackPieceColorPicker by remember { mutableStateOf(false) }
-    var showEvalBarColor1Picker by remember { mutableStateOf(false) }
-    var showEvalBarColor2Picker by remember { mutableStateOf(false) }
+    // Color picker state: pair of (title, currentColor) and callback
+    var activeColorPicker by remember { mutableStateOf<Pair<String, Long>?>(null) }
+    var activeColorCallback by remember { mutableStateOf<((Long) -> Unit)?>(null) }
 
     fun saveSettings(
         newShowCoordinates: Boolean = showCoordinates,
@@ -74,6 +68,22 @@ fun BoardLayoutSettingsScreen(
             evalBarColor2 = newEvalBarColor2,
             evalBarRange = newEvalBarRange
         ))
+    }
+
+    // Full-screen color picker (early return pattern)
+    activeColorPicker?.let { (title, color) ->
+        ColorPickerDialog(
+            currentColor = color,
+            title = title,
+            onColorSelected = { newColor ->
+                activeColorCallback?.invoke(newColor)
+            },
+            onDismiss = {
+                activeColorPicker = null
+                activeColorCallback = null
+            }
+        )
+        return
     }
 
     Column(
@@ -114,58 +124,32 @@ fun BoardLayoutSettingsScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Player bar(s) dropdown
-        ExposedDropdownMenuBox(
-            expanded = playerBarModeExpanded,
-            onExpandedChange = { playerBarModeExpanded = it }
+        // Player bar(s) - inline radio buttons
+        Text("Player bar(s)", style = MaterialTheme.typography.bodyLarge, color = Color.White)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            val displayText = when (playerBarMode) {
-                PlayerBarMode.NONE -> "None"
-                PlayerBarMode.TOP -> "Top"
-                PlayerBarMode.BOTTOM -> "Bottom"
-                PlayerBarMode.BOTH -> "Both"
-            }
-            OutlinedTextField(
-                value = displayText,
-                onValueChange = {},
-                readOnly = true,
-                label = { Text("Player bar(s)") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = playerBarModeExpanded) },
-                modifier = Modifier.fillMaxWidth().menuAnchor()
-            )
-            ExposedDropdownMenu(expanded = playerBarModeExpanded, onDismissRequest = { playerBarModeExpanded = false }) {
-                DropdownMenuItem(
-                    text = { Text("None") },
-                    onClick = {
-                        playerBarMode = PlayerBarMode.NONE
-                        playerBarModeExpanded = false
-                        saveSettings(newPlayerBarMode = PlayerBarMode.NONE)
-                    }
-                )
-                DropdownMenuItem(
-                    text = { Text("Top") },
-                    onClick = {
-                        playerBarMode = PlayerBarMode.TOP
-                        playerBarModeExpanded = false
-                        saveSettings(newPlayerBarMode = PlayerBarMode.TOP)
-                    }
-                )
-                DropdownMenuItem(
-                    text = { Text("Bottom") },
-                    onClick = {
-                        playerBarMode = PlayerBarMode.BOTTOM
-                        playerBarModeExpanded = false
-                        saveSettings(newPlayerBarMode = PlayerBarMode.BOTTOM)
-                    }
-                )
-                DropdownMenuItem(
-                    text = { Text("Both") },
-                    onClick = {
-                        playerBarMode = PlayerBarMode.BOTH
-                        playerBarModeExpanded = false
-                        saveSettings(newPlayerBarMode = PlayerBarMode.BOTH)
-                    }
-                )
+            PlayerBarMode.entries.forEach { mode ->
+                val label = when (mode) {
+                    PlayerBarMode.NONE -> "None"
+                    PlayerBarMode.TOP -> "Top"
+                    PlayerBarMode.BOTTOM -> "Bottom"
+                    PlayerBarMode.BOTH -> "Both"
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    RadioButton(
+                        selected = playerBarMode == mode,
+                        onClick = {
+                            playerBarMode = mode
+                            saveSettings(newPlayerBarMode = mode)
+                        }
+                    )
+                    Text(label, color = Color.White)
+                }
             }
         }
 
@@ -187,14 +171,26 @@ fun BoardLayoutSettingsScreen(
         ColorSettingRow(
             label = "White squares color",
             color = Color(whiteSquareColor.toInt()),
-            onClick = { showWhiteSquareColorPicker = true }
+            onClick = {
+                activeColorPicker = "White squares color" to whiteSquareColor
+                activeColorCallback = { color ->
+                    whiteSquareColor = color
+                    saveSettings(newWhiteSquareColor = color)
+                }
+            }
         )
 
         // Black squares color picker
         ColorSettingRow(
             label = "Black squares color",
             color = Color(blackSquareColor.toInt()),
-            onClick = { showBlackSquareColorPicker = true }
+            onClick = {
+                activeColorPicker = "Black squares color" to blackSquareColor
+                activeColorCallback = { color ->
+                    blackSquareColor = color
+                    saveSettings(newBlackSquareColor = color)
+                }
+            }
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -203,14 +199,26 @@ fun BoardLayoutSettingsScreen(
         ColorSettingRow(
             label = "White pieces color",
             color = Color(whitePieceColor.toInt()),
-            onClick = { showWhitePieceColorPicker = true }
+            onClick = {
+                activeColorPicker = "White pieces color" to whitePieceColor
+                activeColorCallback = { color ->
+                    whitePieceColor = color
+                    saveSettings(newWhitePieceColor = color)
+                }
+            }
         )
 
         // Black pieces color picker
         ColorSettingRow(
             label = "Black pieces color",
             color = Color(blackPieceColor.toInt()),
-            onClick = { showBlackPieceColorPicker = true }
+            onClick = {
+                activeColorPicker = "Black pieces color" to blackPieceColor
+                activeColorCallback = { color ->
+                    blackPieceColor = color
+                    saveSettings(newBlackPieceColor = color)
+                }
+            }
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -233,49 +241,31 @@ fun BoardLayoutSettingsScreen(
                     color = Color.White
                 )
 
-                // Show evaluation bar dropdown
-                ExposedDropdownMenuBox(
-                    expanded = evalBarPositionExpanded,
-                    onExpandedChange = { evalBarPositionExpanded = it }
+                // Eval bar position - inline radio buttons
+                Text("Show evaluation bar", style = MaterialTheme.typography.bodyLarge, color = Color.White)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    val displayText = when (evalBarPosition) {
-                        EvalBarPosition.NONE -> "None"
-                        EvalBarPosition.LEFT -> "Left"
-                        EvalBarPosition.RIGHT -> "Right"
-                    }
-                    OutlinedTextField(
-                        value = displayText,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Show evaluation bar") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = evalBarPositionExpanded) },
-                        modifier = Modifier.fillMaxWidth().menuAnchor()
-                    )
-                    ExposedDropdownMenu(expanded = evalBarPositionExpanded, onDismissRequest = { evalBarPositionExpanded = false }) {
-                        DropdownMenuItem(
-                            text = { Text("None") },
-                            onClick = {
-                                evalBarPosition = EvalBarPosition.NONE
-                                evalBarPositionExpanded = false
-                                saveSettings(newEvalBarPosition = EvalBarPosition.NONE)
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Left") },
-                            onClick = {
-                                evalBarPosition = EvalBarPosition.LEFT
-                                evalBarPositionExpanded = false
-                                saveSettings(newEvalBarPosition = EvalBarPosition.LEFT)
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Right") },
-                            onClick = {
-                                evalBarPosition = EvalBarPosition.RIGHT
-                                evalBarPositionExpanded = false
-                                saveSettings(newEvalBarPosition = EvalBarPosition.RIGHT)
-                            }
-                        )
+                    EvalBarPosition.entries.forEach { pos ->
+                        val label = when (pos) {
+                            EvalBarPosition.NONE -> "None"
+                            EvalBarPosition.LEFT -> "Left"
+                            EvalBarPosition.RIGHT -> "Right"
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            RadioButton(
+                                selected = evalBarPosition == pos,
+                                onClick = {
+                                    evalBarPosition = pos
+                                    saveSettings(newEvalBarPosition = pos)
+                                }
+                            )
+                            Text(label, color = Color.White)
+                        }
                     }
                 }
 
@@ -285,14 +275,26 @@ fun BoardLayoutSettingsScreen(
                     ColorSettingRow(
                         label = "Color 1 (score)",
                         color = Color(evalBarColor1.toInt()),
-                        onClick = { showEvalBarColor1Picker = true }
+                        onClick = {
+                            activeColorPicker = "Evaluation bar color 1 (score)" to evalBarColor1
+                            activeColorCallback = { color ->
+                                evalBarColor1 = color
+                                saveSettings(newEvalBarColor1 = color)
+                            }
+                        }
                     )
 
                     // Color 2 (filler color)
                     ColorSettingRow(
                         label = "Color 2 (filler)",
                         color = Color(evalBarColor2.toInt()),
-                        onClick = { showEvalBarColor2Picker = true }
+                        onClick = {
+                            activeColorPicker = "Evaluation bar color 2 (filler)" to evalBarColor2
+                            activeColorCallback = { color ->
+                                evalBarColor2 = color
+                                saveSettings(newEvalBarColor2 = color)
+                            }
+                        }
                     )
 
                     // Range stepper
@@ -373,78 +375,4 @@ fun BoardLayoutSettingsScreen(
         }
 
     }
-
-    // Color picker dialogs
-    if (showWhiteSquareColorPicker) {
-        ColorPickerDialog(
-            currentColor = whiteSquareColor,
-            title = "White squares color",
-            onColorSelected = { color ->
-                whiteSquareColor = color
-                saveSettings(newWhiteSquareColor = color)
-            },
-            onDismiss = { showWhiteSquareColorPicker = false }
-        )
-    }
-
-    if (showBlackSquareColorPicker) {
-        ColorPickerDialog(
-            currentColor = blackSquareColor,
-            title = "Black squares color",
-            onColorSelected = { color ->
-                blackSquareColor = color
-                saveSettings(newBlackSquareColor = color)
-            },
-            onDismiss = { showBlackSquareColorPicker = false }
-        )
-    }
-
-    if (showWhitePieceColorPicker) {
-        ColorPickerDialog(
-            currentColor = whitePieceColor,
-            title = "White pieces color",
-            onColorSelected = { color ->
-                whitePieceColor = color
-                saveSettings(newWhitePieceColor = color)
-            },
-            onDismiss = { showWhitePieceColorPicker = false }
-        )
-    }
-
-    if (showBlackPieceColorPicker) {
-        ColorPickerDialog(
-            currentColor = blackPieceColor,
-            title = "Black pieces color",
-            onColorSelected = { color ->
-                blackPieceColor = color
-                saveSettings(newBlackPieceColor = color)
-            },
-            onDismiss = { showBlackPieceColorPicker = false }
-        )
-    }
-
-    if (showEvalBarColor1Picker) {
-        ColorPickerDialog(
-            currentColor = evalBarColor1,
-            title = "Evaluation bar color 1 (score)",
-            onColorSelected = { color ->
-                evalBarColor1 = color
-                saveSettings(newEvalBarColor1 = color)
-            },
-            onDismiss = { showEvalBarColor1Picker = false }
-        )
-    }
-
-    if (showEvalBarColor2Picker) {
-        ColorPickerDialog(
-            currentColor = evalBarColor2,
-            title = "Evaluation bar color 2 (filler)",
-            onColorSelected = { color ->
-                evalBarColor2 = color
-                saveSettings(newEvalBarColor2 = color)
-            },
-            onDismiss = { showEvalBarColor2Picker = false }
-        )
-    }
 }
-
