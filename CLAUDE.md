@@ -14,14 +14,22 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@17 ./gradlew assembleRelease
 # Clean build
 ./gradlew clean
 
-# Deploy to device
+# Deploy to device (emulator or connected device)
 adb install -r app/build/outputs/apk/debug/app-debug.apk && \
 adb shell am start -n com.eval/.MainActivity
+
+# Deploy to cloud (shared APK location)
+cp app/build/outputs/apk/debug/app-debug.apk /Users/herbert/cloud/eval.apk
+
+# Deploy to both targets
+adb install -r app/build/outputs/apk/debug/app-debug.apk && \
+adb shell am start -n com.eval/.MainActivity && \
+cp app/build/outputs/apk/debug/app-debug.apk /Users/herbert/cloud/eval.apk
 ```
 
 ## Project Overview
 
-Eval is an Android chess analysis app. It fetches games from Lichess.org, parses PGN, and provides three-stage Stockfish 17.1 analysis with an interactive board. AI reports are delegated to an external companion app (`com.ai`).
+Eval is an Android chess analysis app. It fetches games from Lichess.org and Chess.com, parses PGN, and provides three-stage Stockfish 17.1 analysis with an interactive board. AI reports are delegated to an external companion app (`com.ai`).
 
 **Codebase:** 46 Kotlin files, ~22,300 lines | **SDK:** minSdk 26, targetSdk 34 | **UI:** Jetpack Compose + Material 3
 
@@ -37,8 +45,9 @@ com.eval/
 │   └── PgnParser.kt (98) - PGN parsing with clock time extraction
 ├── data/
 │   ├── LichessApi.kt (304) - Retrofit interface for Lichess API
+│   ├── ChessComApi.kt (156) - Retrofit interface for Chess.com API
 │   ├── LichessModels.kt (40) - Data classes: LichessGame, Players, Clock
-│   ├── LichessRepository.kt (1,069) - Repository with ChessServer enum
+│   ├── LichessRepository.kt (1,280) - Repository with ChessServer enum (Lichess + Chess.com)
 │   ├── OpeningBook.kt (217) - ECO opening identification
 │   └── OpeningExplorerApi.kt (57) - Opening statistics API
 ├── stockfish/
@@ -110,7 +119,7 @@ object NavRoutes {
 
 | Enum | Values |
 |------|--------|
-| `ChessServer` | `LICHESS` |
+| `ChessServer` | `LICHESS`, `CHESS_COM` |
 | `AnalysisStage` | `PREVIEW`, `ANALYSE`, `MANUAL` |
 | `ArrowMode` | `NONE`, `MAIN_LINE`, `MULTI_LINES` |
 | `PlayerBarMode` | `NONE`, `TOP`, `BOTTOM`, `BOTH` |
@@ -166,6 +175,8 @@ Three prompt categories: `GAME` (position analysis), `CHESS_SERVER_PLAYER` (onli
 
 **Lichess.org:** User games (NDJSON streaming), tournaments, broadcasts, TV channels, top rankings, streamers, live game following
 
+**Chess.com:** User games (monthly archives), top rankings, daily puzzle
+
 **Local:** PGN file upload (with ZIP support), ECO opening selection (A00-E99), FEN position entry (with history), previously analysed games
 
 ## Settings Persistence
@@ -175,7 +186,7 @@ All settings via `SettingsPreferences` using SharedPreferences (`eval_prefs`). K
 - Board layout: colors, coordinates, player bars, eval bar
 - Graph: colors, ranges, scales
 - Interface visibility: ~23 toggles across 3 stages
-- General: pagination, move sounds, Lichess username
+- General: pagination, move sounds, Lichess username, Chess.com username
 - AI prompts: JSON list of `AiPromptEntry`
 - Settings export/import: Full JSON round-trip with type preservation
 

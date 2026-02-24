@@ -44,21 +44,21 @@ fun EvalTitleBar(
         // Left side: custom content or back button
         if (leftContent != null) {
             Row(
-                modifier = Modifier.weight(1f),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(0.dp)
             ) {
                 leftContent()
             }
         } else if (onBackClick != null) {
-            TextButton(onClick = onBackClick, modifier = Modifier.weight(1f)) {
-                Text(backText, color = Color.White, fontSize = 16.sp)
-            }
-        } else {
-            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                text = backText,
+                color = Color.White,
+                fontSize = 16.sp,
+                modifier = Modifier.clickable { onBackClick() }
+            )
         }
 
-        // Middle: title (if provided)
+        // Middle: title (if provided) - takes remaining space
         if (title != null) {
             Text(
                 text = title,
@@ -68,6 +68,8 @@ fun EvalTitleBar(
                 modifier = Modifier.weight(1f),
                 textAlign = TextAlign.Center
             )
+        } else {
+            Spacer(modifier = Modifier.weight(1f))
         }
 
         // Right side: "Eval" branding
