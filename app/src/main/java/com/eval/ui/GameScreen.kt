@@ -1,6 +1,5 @@
 package com.eval.ui
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -89,12 +88,12 @@ fun GameScreenContent(
             val userPlayedBlack = searchedUser.isNotEmpty() && searchedUser == blackPlayerName
 
             when {
-                game.winner == "white" && userPlayedWhite -> Color(0xFF2A4A2A)  // Light green - user won as white
-                game.winner == "black" && userPlayedBlack -> Color(0xFF2A4A2A)  // Light green - user won as black
-                game.winner == "white" && userPlayedBlack -> Color(0xFF4A2A2A)  // Light red - user lost as black
-                game.winner == "black" && userPlayedWhite -> Color(0xFF4A2A2A)  // Light red - user lost as white
-                game.winner == null -> Color(0xFF2A3A4A)  // Light blue - draw
-                else -> AppColors.CardBackground  // Default dark gray
+                game.winner == "white" && userPlayedWhite -> AppColors.ResultWinBackground
+                game.winner == "black" && userPlayedBlack -> AppColors.ResultWinBackground
+                game.winner == "white" && userPlayedBlack -> AppColors.ResultLossBackground
+                game.winner == "black" && userPlayedWhite -> AppColors.ResultLossBackground
+                game.winner == null -> AppColors.ResultDrawBackground
+                else -> AppColors.CardBackground
             }
         }
     }
@@ -692,7 +691,7 @@ fun EvalLogo() {
         modifier = Modifier
             .padding(horizontal = 48.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF3A5A3A)  // Light green background
+            containerColor = AppColors.LogoBackground
         ),
         shape = RoundedCornerShape(24.dp)
     ) {

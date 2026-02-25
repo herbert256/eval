@@ -6,7 +6,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -109,11 +108,11 @@ private fun GameListItem(
         game.status == "unknown" || game.status.isBlank()
     val (resultText, resultColor) = when {
         isOngoingGame -> "" to Color.Transparent  // No result for ongoing games
-        game.winner == "white" && userPlayedWhite -> "won" to Color(0xFF4CAF50)  // Green
-        game.winner == "black" && userPlayedBlack -> "won" to Color(0xFF4CAF50)  // Green
-        game.winner == "white" && userPlayedBlack -> "lost" to Color(0xFFF44336) // Red
-        game.winner == "black" && userPlayedWhite -> "lost" to Color(0xFFF44336) // Red
-        game.status == "draw" || game.status == "stalemate" -> "draw" to Color(0xFF2196F3) // Blue
+        game.winner == "white" && userPlayedWhite -> "won" to AppColors.ResultWon
+        game.winner == "black" && userPlayedBlack -> "won" to AppColors.ResultWon
+        game.winner == "white" && userPlayedBlack -> "lost" to AppColors.ResultLost
+        game.winner == "black" && userPlayedWhite -> "lost" to AppColors.ResultLost
+        game.status == "draw" || game.status == "stalemate" -> "draw" to AppColors.ResultDraw
         game.winner == null && (game.status == "draw" || game.status == "stalemate" || game.status == "timeout" || game.status == "outoftime") -> {
             "draw" to Color(0xFF2196F3)
         }
@@ -476,11 +475,11 @@ private fun RetrieveGameListItem(
         game.status == "unknown" || game.status.isBlank()
     val (resultText, resultColor) = when {
         isOngoingGame -> "" to Color.Transparent  // No result for ongoing games
-        game.winner == "white" && accountPlayedWhite -> "won" to Color(0xFF4CAF50)  // Green - won
-        game.winner == "black" && accountPlayedBlack -> "won" to Color(0xFF4CAF50)  // Green - won
-        game.winner == "white" && accountPlayedBlack -> "lost" to Color(0xFFF44336) // Red - lost
-        game.winner == "black" && accountPlayedWhite -> "lost" to Color(0xFFF44336) // Red - lost
-        else -> "draw" to Color(0xFF2196F3) // Blue - draw
+        game.winner == "white" && accountPlayedWhite -> "won" to AppColors.ResultWon
+        game.winner == "black" && accountPlayedBlack -> "won" to AppColors.ResultWon
+        game.winner == "white" && accountPlayedBlack -> "lost" to AppColors.ResultLost
+        game.winner == "black" && accountPlayedWhite -> "lost" to AppColors.ResultLost
+        else -> "draw" to AppColors.ResultDraw
     }
 
     // Row colors based on which color the account played
@@ -617,7 +616,7 @@ fun AnalysedGamesSelectionScreen(
                             TextButton(onClick = onPreviousPage) {
                                 Text(
                                     text = "← Previous",
-                                    color = Color(0xFF90CAF9),
+                                    color = AppColors.PaginationLink,
                                     fontSize = 14.sp
                                 )
                             }
@@ -636,7 +635,7 @@ fun AnalysedGamesSelectionScreen(
                             TextButton(onClick = { onNextPage(pageSize) }) {
                                 Text(
                                     text = "Next →",
-                                    color = Color(0xFF90CAF9),
+                                    color = AppColors.PaginationLink,
                                     fontSize = 14.sp
                                 )
                             }
@@ -680,9 +679,9 @@ private fun AnalysedGameListItem(
     onClick: () -> Unit
 ) {
     val (resultText, resultColor) = when (game.result) {
-        "1-0" -> "1-0" to Color(0xFF4CAF50)
-        "0-1" -> "0-1" to Color(0xFFF44336)
-        "1/2-1/2" -> "1/2" to Color(0xFF2196F3)
+        "1-0" -> "1-0" to AppColors.ResultWon
+        "0-1" -> "0-1" to AppColors.ResultLost
+        "1/2-1/2" -> "1/2" to AppColors.ResultDraw
         "*" -> "" to Color.Transparent
         else -> "" to Color.Transparent
     }

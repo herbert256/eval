@@ -74,7 +74,3 @@ data class AiPromptEntry(
     val safeCategory: AiPromptCategory get() = category ?: AiPromptCategory.GAME
 }
 
-/**
- * Default prompt entries seeded on first load.
- */
-fun defaultAiPrompts(): List<AiPromptEntry> = emptyList()

@@ -113,7 +113,7 @@ class ChessRepository(
             val body = response.body()
             processNdjsonResponse<LichessGame>(body, "No games found for this user on Lichess")
         } catch (e: Exception) {
-            Result.Error(e.message ?: "Unknown error occurred")
+            Result.Error("${e.javaClass.simpleName}: ${e.message ?: "unknown"}")
         }
     }
 
@@ -163,7 +163,7 @@ class ChessRepository(
                 isStreamer = user.streaming
             ))
         } catch (e: Exception) {
-            Result.Error(e.message ?: "Unknown error occurred")
+            Result.Error("${e.javaClass.simpleName}: ${e.message ?: "unknown"}")
         }
     }
 
@@ -236,7 +236,7 @@ class ChessRepository(
 
             Result.Success(result)
         } catch (e: Exception) {
-            Result.Error(e.message ?: "Unknown error occurred")
+            Result.Error("${e.javaClass.simpleName}: ${e.message ?: "unknown"}")
         }
     }
 
@@ -258,6 +258,7 @@ class ChessRepository(
             try {
                 val jsonArray = gson.fromJson(responseBody, com.google.gson.JsonArray::class.java)
                 for (element in jsonArray) {
+                    if (!element.isJsonObject) continue
                     val obj = element.asJsonObject
                     val username = obj.get("id")?.asString ?: continue
                     val name = obj.get("name")?.asString ?: username
@@ -277,7 +278,7 @@ class ChessRepository(
 
             Result.Success(streamers)
         } catch (e: Exception) {
-            Result.Error(e.message ?: "Unknown error occurred")
+            Result.Error("${e.javaClass.simpleName}: ${e.message ?: "unknown"}")
         }
     }
 
@@ -340,7 +341,7 @@ class ChessRepository(
 
             Result.Success(result)
         } catch (e: Exception) {
-            Result.Error(e.message ?: "Unknown error occurred")
+            Result.Error("${e.javaClass.simpleName}: ${e.message ?: "unknown"}")
         }
     }
 
@@ -368,7 +369,7 @@ class ChessRepository(
             val body = response.body()
             processNdjsonResponse<LichessGame>(body, "No games found in this tournament")
         } catch (e: Exception) {
-            Result.Error(e.message ?: "Unknown error occurred")
+            Result.Error("${e.javaClass.simpleName}: ${e.message ?: "unknown"}")
         }
     }
 
@@ -420,7 +421,7 @@ class ChessRepository(
 
             Result.Success(result)
         } catch (e: Exception) {
-            Result.Error(e.message ?: "Unknown error occurred")
+            Result.Error("${e.javaClass.simpleName}: ${e.message ?: "unknown"}")
         }
     }
 
@@ -458,7 +459,7 @@ class ChessRepository(
 
             Result.Success(games)
         } catch (e: Exception) {
-            Result.Error(e.message ?: "Unknown error occurred")
+            Result.Error("${e.javaClass.simpleName}: ${e.message ?: "unknown"}")
         }
     }
 
@@ -652,7 +653,7 @@ class ChessRepository(
             Result.Success(result)
         } catch (e: Exception) {
             android.util.Log.e("ChessRepository", "getLichessTvChannels: Exception: ${e.message}", e)
-            Result.Error(e.message ?: "Unknown error occurred")
+            Result.Error("${e.javaClass.simpleName}: ${e.message ?: "unknown"}")
         }
     }
 
@@ -675,7 +676,7 @@ class ChessRepository(
             val game = gson.fromJson(body, LichessGame::class.java)
             Result.Success(game)
         } catch (e: Exception) {
-            Result.Error(e.message ?: "Unknown error occurred")
+            Result.Error("${e.javaClass.simpleName}: ${e.message ?: "unknown"}")
         }
     }
 
@@ -778,7 +779,7 @@ class ChessRepository(
 
             Result.Success(game)
         } catch (e: Exception) {
-            Result.Error(e.message ?: "Unknown error streaming game")
+            Result.Error("${e.javaClass.simpleName}: ${e.message ?: "unknown"}")
         }
     }
 
@@ -1006,7 +1007,7 @@ class ChessRepository(
 
             Result.Success(allGames.take(maxGames))
         } catch (e: Exception) {
-            Result.Error(e.message ?: "Unknown error occurred")
+            Result.Error("${e.javaClass.simpleName}: ${e.message ?: "unknown"}")
         }
     }
 
@@ -1088,7 +1089,7 @@ class ChessRepository(
                 isStreamer = profile.is_streamer
             ))
         } catch (e: Exception) {
-            Result.Error(e.message ?: "Unknown error occurred")
+            Result.Error("${e.javaClass.simpleName}: ${e.message ?: "unknown"}")
         }
     }
 
@@ -1151,7 +1152,7 @@ class ChessRepository(
 
             Result.Success(result)
         } catch (e: Exception) {
-            Result.Error(e.message ?: "Unknown error occurred")
+            Result.Error("${e.javaClass.simpleName}: ${e.message ?: "unknown"}")
         }
     }
 
@@ -1181,7 +1182,7 @@ class ChessRepository(
                 server = ChessServer.CHESS_COM
             ))
         } catch (e: Exception) {
-            Result.Error(e.message ?: "Unknown error occurred")
+            Result.Error("${e.javaClass.simpleName}: ${e.message ?: "unknown"}")
         }
     }
 
@@ -1202,7 +1203,7 @@ class ChessRepository(
                 Result.Error("Failed to fetch opening data: ${response.code()}")
             }
         } catch (e: Exception) {
-            Result.Error(e.message ?: "Unknown error fetching opening data")
+            Result.Error("${e.javaClass.simpleName}: ${e.message ?: "unknown"}")
         }
     }
 

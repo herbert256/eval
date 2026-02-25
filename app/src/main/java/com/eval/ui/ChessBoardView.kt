@@ -68,13 +68,13 @@ fun ChessBoardView(
     var selectedSquare by remember { mutableStateOf<Square?>(null) }
     var dragFromSquare by remember { mutableStateOf<Square?>(null) }
     var dragPosition by remember { mutableStateOf<Offset?>(null) }
-    var legalMoves by remember { mutableStateOf<List<Square>>(emptyList()) }
+    var legalMoves by remember { mutableStateOf<Set<Square>>(emptySet()) }
     var squareSize by remember { mutableStateOf(0f) }
 
     // Clear selection when board changes (e.g., after a move)
     LaunchedEffect(board.getFen()) {
         selectedSquare = null
-        legalMoves = emptyList()
+        legalMoves = emptySet()
     }
 
     // Load piece images
@@ -127,18 +127,18 @@ fun ChessBoardView(
                                         // Tapped on a legal move target - make the move
                                         onMove(currentSelected, tappedSquare)
                                         selectedSquare = null
-                                        legalMoves = emptyList()
+                                        legalMoves = emptySet()
                                     } else {
                                         // Check if tapped on own piece
                                         val piece = board.getPiece(tappedSquare)
                                         if (piece != null && piece.color == board.getTurn()) {
                                             // Select this piece
                                             selectedSquare = tappedSquare
-                                            legalMoves = board.getLegalMoves(tappedSquare)
+                                            legalMoves = board.getLegalMoves(tappedSquare).toSet()
                                         } else {
                                             // Tapped on empty or opponent piece without selection - deselect
                                             selectedSquare = null
-                                            legalMoves = emptyList()
+                                            legalMoves = emptySet()
                                         }
                                     }
                                 }
@@ -154,7 +154,7 @@ fun ChessBoardView(
                                         if (piece != null && piece.color == board.getTurn()) {
                                             dragFromSquare = square
                                             dragPosition = offset
-                                            legalMoves = board.getLegalMoves(square)
+                                            legalMoves = board.getLegalMoves(square).toSet()
                                             selectedSquare = null // Clear tap selection when dragging
                                         }
                                     }
@@ -174,12 +174,12 @@ fun ChessBoardView(
                                     }
                                     dragFromSquare = null
                                     dragPosition = null
-                                    legalMoves = emptyList()
+                                    legalMoves = emptySet()
                                 },
                                 onDragCancel = {
                                     dragFromSquare = null
                                     dragPosition = null
-                                    legalMoves = emptyList()
+                                    legalMoves = emptySet()
                                 }
                             )
                         }
@@ -251,7 +251,7 @@ private fun DrawScope.drawSquares(
     lastMove: Move?,
     selectedSquare: Square?,
     dragFromSquare: Square?,
-    legalMoves: List<Square>,
+    legalMoves: Set<Square>,
     board: ChessBoard
 ) {
     for (rank in 0..7) {
@@ -391,8 +391,11 @@ private fun DrawScope.drawArrows(
 
     val isMultiLinesMode = moveArrows.any { it.scoreText != null }
 
+    // Pre-sort arrows (avoid re-allocating sorted list each frame)
+    val sortedArrows = moveArrows.sortedByDescending { it.index }
+
     // Draw arrow shafts and heads in reverse order so first arrow (thickest) is on top
-    for (arrow in moveArrows.sortedByDescending { it.index }) {
+    for (arrow in sortedArrows) {
         val (arrowFrom, arrowTo) = arrow.from to arrow.to
 
         // Convert squares to screen coordinates (center of each square)

@@ -114,6 +114,22 @@ object AppColors {
     val ButtonGreen = Color(0xFF6B8E23)
     val PositiveGreen = Color(0xFF00E676)
     val NegativeRed = Color(0xFFFF5252)
+    // Game result background colors
+    val ResultWinBackground = Color(0xFF2A4A2A)
+    val ResultLossBackground = Color(0xFF4A2A2A)
+    val ResultDrawBackground = Color(0xFF2A3A4A)
+    // Game list result colors
+    val ResultWon = Color(0xFF4CAF50)
+    val ResultLost = Color(0xFFF44336)
+    val ResultDraw = Color(0xFF2196F3)
+    // Logo background
+    val LogoBackground = Color(0xFF3A5A3A)
+    // Analysis panel background
+    val AnalysisPanelBg = Color(0xFF151D30)
+    val AnalysisPanelMoveBg = Color(0xFF0F1629)
+    val AnalysisMoveChipBg = Color(0xFF1A2744)
+    // Pagination link color
+    val PaginationLink = Color(0xFF90CAF9)
 }
 
 // Graph settings

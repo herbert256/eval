@@ -1,7 +1,5 @@
 package com.eval.data
 
-import com.google.gson.annotations.SerializedName
-
 data class LichessGame(
     val id: String,
     val rated: Boolean,

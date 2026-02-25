@@ -11,7 +11,6 @@ import com.eval.data.BroadcastRoundInfo
 import com.eval.data.ChessRepository
 import com.eval.data.ChessServer
 import com.eval.data.LichessGame
-import com.eval.data.OpeningBook
 import com.eval.data.Result
 import com.eval.data.StreamerInfo
 import com.eval.data.TournamentInfo
@@ -26,6 +25,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = ChessRepository()
@@ -43,8 +43,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(GameUiState())
     val uiState: StateFlow<GameUiState> = _uiState.asStateFlow()
 
-    private var boardHistory = mutableListOf<ChessBoard>()
-    private var exploringLineHistory = mutableListOf<ChessBoard>()
+    private var boardHistory = java.util.Collections.synchronizedList(mutableListOf<ChessBoard>())
+    private var exploringLineHistory = java.util.Collections.synchronizedList(mutableListOf<ChessBoard>())
 
     // Track settings when dialog opens to detect changes
     private var settingsOnDialogOpen: SettingsSnapshot? = null
@@ -121,7 +121,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             saveManualGame = { game -> gameStorage.saveManualStageGame(game) },
             storeManualGameToList = { game ->
                 gameStorage.storeManualGameToList(game)
-                _uiState.value = _uiState.value.copy(hasAnalysedGames = true)
+                _uiState.update { it.copy(hasAnalysedGames = true) }
             }
         )
 
@@ -169,10 +169,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val stockfishInstalled = stockfish.isStockfishInstalled()
         // Check if AI app is installed
         val aiAppInstalled = AiAppLauncher.isAiAppInstalled(application)
-        _uiState.value = _uiState.value.copy(
+        _uiState.update { it.copy(
             stockfishInstalled = stockfishInstalled,
             aiAppInstalled = aiAppInstalled
-        )
+        ) }
 
         if (stockfishInstalled) {
             if (isFirstRun()) {
@@ -192,7 +192,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val hasAnalysedGames = gameStorage.hasManualGames()
             val hasLastServerUser = settingsPrefs.lastServerUser != null
 
-            _uiState.value = _uiState.value.copy(
+            _uiState.update { it.copy(
                 stockfishSettings = settings,
                 boardLayoutSettings = boardSettings,
                 graphSettings = graphSettings,
@@ -204,14 +204,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 hasAnalysedGames = hasAnalysedGames,
                 hasLastServerUser = hasLastServerUser,
                 previousRetrievesList = retrievesList
-            )
+            ) }
 
             viewModelScope.launch {
                 val ready = stockfish.initialize()
                 if (ready) {
                     analysisOrchestrator.configureForManualStage()
                 }
-                _uiState.value = _uiState.value.copy(stockfishReady = ready)
+                _uiState.update { it.copy(stockfishReady = ready) }
 
                 // Auto-restore manual stage game from previous session
                 if (ready) {
@@ -228,16 +228,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                         if (result != null) {
                             val expectedFen = analysisOrchestrator.currentAnalysisFen
                             if (expectedFen != null && expectedFen == _uiState.value.currentBoard.getFen()) {
-                                _uiState.value = _uiState.value.copy(
+                                _uiState.update { it.copy(
                                     analysisResult = result,
                                     analysisResultFen = expectedFen
-                                )
+                                ) }
                             }
                         } else {
-                            _uiState.value = _uiState.value.copy(
+                            _uiState.update { it.copy(
                                 analysisResult = null,
                                 analysisResultFen = null
-                            )
+                            ) }
                         }
                     }
                 }
@@ -245,7 +245,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
             viewModelScope.launch {
                 stockfish.isReady.collect { ready ->
-                    _uiState.value = _uiState.value.copy(stockfishReady = ready)
+                    _uiState.update { it.copy(stockfishReady = ready) }
                 }
             }
         }
@@ -255,12 +255,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     fun checkAiAppInstalled(): Boolean {
         val installed = AiAppLauncher.isAiAppInstalled(getApplication())
-        _uiState.value = _uiState.value.copy(aiAppInstalled = installed)
+        _uiState.update { it.copy(aiAppInstalled = installed) }
         return installed
     }
 
     fun dismissAiAppWarning() {
-        _uiState.value = _uiState.value.copy(aiAppWarningDismissed = true)
+        _uiState.update { it.copy(aiAppWarningDismissed = true) }
     }
 
     fun showAiAppNotInstalledDialog() {
@@ -268,23 +268,23 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (settingsPrefs.getAiAppDontAskAgain()) {
             return
         }
-        _uiState.value = _uiState.value.copy(showAiAppNotInstalledDialog = true)
+        _uiState.update { it.copy(showAiAppNotInstalledDialog = true) }
     }
 
     fun hideAiAppNotInstalledDialog() {
-        _uiState.value = _uiState.value.copy(showAiAppNotInstalledDialog = false)
+        _uiState.update { it.copy(showAiAppNotInstalledDialog = false) }
     }
 
     fun setAiAppDontAskAgain() {
         settingsPrefs.setAiAppDontAskAgain(true)
-        _uiState.value = _uiState.value.copy(showAiAppNotInstalledDialog = false)
+        _uiState.update { it.copy(showAiAppNotInstalledDialog = false) }
     }
 
     fun initializeStockfish() {
         val installed = stockfish.isStockfishInstalled()
         if (!installed) return
 
-        _uiState.value = _uiState.value.copy(stockfishInstalled = true)
+        _uiState.update { it.copy(stockfishInstalled = true) }
 
         if (isFirstRun()) {
             resetSettingsToDefaults()
@@ -298,7 +298,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val aiPrompts = loadAiPrompts()
         val lichessMaxGames = settingsPrefs.lichessMaxGames
 
-        _uiState.value = _uiState.value.copy(
+        _uiState.update { it.copy(
             stockfishSettings = settings,
             boardLayoutSettings = boardSettings,
             graphSettings = graphSettings,
@@ -306,14 +306,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             generalSettings = generalSettings,
             aiPrompts = aiPrompts,
             lichessMaxGames = lichessMaxGames
-        )
+        ) }
 
         viewModelScope.launch {
             val ready = stockfish.initialize()
             if (ready) {
                 analysisOrchestrator.configureForManualStage()
             }
-            _uiState.value = _uiState.value.copy(stockfishReady = ready)
+            _uiState.update { it.copy(stockfishReady = ready) }
         }
 
         // Collectors are already set up in init block, no need to duplicate
@@ -337,25 +337,25 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     // Previously analysed games
     fun showAnalysedGames() {
         val list = gameStorage.loadManualGamesList()
-        _uiState.value = _uiState.value.copy(
+        _uiState.update { it.copy(
             analysedGamesList = list,
             showAnalysedGamesSelection = true,
             gameSelectionPage = 0
-        )
+        ) }
     }
 
     fun dismissAnalysedGamesSelection() {
-        _uiState.value = _uiState.value.copy(
+        _uiState.update { it.copy(
             showAnalysedGamesSelection = false,
             analysedGamesList = emptyList()
-        )
+        ) }
     }
 
     fun selectAnalysedGame(game: AnalysedGame) {
-        _uiState.value = _uiState.value.copy(
+        _uiState.update { it.copy(
             showAnalysedGamesSelection = false,
             analysedGamesList = emptyList()
-        )
+        ) }
         gameLoader.loadAnalysedGameDirectly(game)
     }
 
@@ -382,7 +382,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun restartAnalysisAtMove(moveIndex: Int) = analysisOrchestrator.restartAnalysisAtMove(moveIndex)
 
     fun setAnalysisEnabled(enabled: Boolean) {
-        _uiState.value = _uiState.value.copy(analysisEnabled = enabled)
+        _uiState.update { it.copy(analysisEnabled = enabled) }
         if (enabled) {
             analysisOrchestrator.restartAnalysisForExploringLine()
         } else {
@@ -441,7 +441,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun restartStockfishAndAnalyze(fen: String) {
         analysisOrchestrator.stop()
         val ready = stockfish.restart()
-        _uiState.value = _uiState.value.copy(stockfishReady = ready)
+        _uiState.update { it.copy(stockfishReady = ready) }
         if (ready) {
             stockfish.newGame()
             analysisOrchestrator.configureForManualStage()
@@ -462,37 +462,37 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         openingExplorerJob?.cancel()
         openingExplorerJob = viewModelScope.launch {
             delay(500)
-            _uiState.value = _uiState.value.copy(openingExplorerLoading = true)
+            _uiState.update { it.copy(openingExplorerLoading = true) }
 
             val fen = _uiState.value.currentBoard.getFen()
             when (val result = repository.getOpeningExplorer(fen)) {
                 is Result.Success -> {
-                    _uiState.value = _uiState.value.copy(
+                    _uiState.update { it.copy(
                         openingExplorerData = result.data,
                         openingExplorerLoading = false
-                    )
+                    ) }
                 }
                 is Result.Error -> {
-                    _uiState.value = _uiState.value.copy(
+                    _uiState.update { it.copy(
                         openingExplorerData = null,
                         openingExplorerLoading = false
-                    )
+                    ) }
                 }
             }
         }
     }
 
     fun toggleOpeningExplorer() {
-        _uiState.value = _uiState.value.copy(showOpeningExplorer = !_uiState.value.showOpeningExplorer)
+        _uiState.update { it.copy(showOpeningExplorer = !it.showOpeningExplorer) }
     }
 
     // ===== SHARE/EXPORT =====
     fun showSharePositionDialog() {
-        _uiState.value = _uiState.value.copy(showSharePositionDialog = true)
+        _uiState.update { it.copy(showSharePositionDialog = true) }
     }
 
     fun hideSharePositionDialog() {
-        _uiState.value = _uiState.value.copy(showSharePositionDialog = false)
+        _uiState.update { it.copy(showSharePositionDialog = false) }
     }
 
     fun getCurrentFen(): String = _uiState.value.currentBoard.getFen()
@@ -609,10 +609,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.value.previewScores
         }
 
-        _uiState.value = _uiState.value.copy(
+        _uiState.update { it.copy(
             showGifExportDialog = true,
             gifExportProgress = 0f
-        )
+        ) }
 
         viewModelScope.launch {
             try {
@@ -642,17 +642,17 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     frameDelay = 1000,
                     callback = object : com.eval.export.GifExporter.ProgressCallback {
                         override fun onProgress(current: Int, total: Int) {
-                            _uiState.value = _uiState.value.copy(
+                            _uiState.update { it.copy(
                                 gifExportProgress = current.toFloat() / total
-                            )
+                            ) }
                         }
                     }
                 )
 
-                _uiState.value = _uiState.value.copy(
+                _uiState.update { it.copy(
                     showGifExportDialog = false,
                     gifExportProgress = null
-                )
+                ) }
 
                 val uri = androidx.core.content.FileProvider.getUriForFile(
                     context,
@@ -667,20 +667,20 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 context.startActivity(android.content.Intent.createChooser(shareIntent, "Share GIF"))
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
+                _uiState.update { it.copy(
                     showGifExportDialog = false,
                     gifExportProgress = null,
                     errorMessage = "GIF export failed: ${e.message}"
-                )
+                ) }
             }
         }
     }
 
     fun cancelGifExport() {
-        _uiState.value = _uiState.value.copy(
+        _uiState.update { it.copy(
             showGifExportDialog = false,
             gifExportProgress = null
-        )
+        ) }
     }
 
     // ===== SETTINGS =====
@@ -690,11 +690,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             analyseStageSettings = _uiState.value.stockfishSettings.analyseStage,
             manualStageSettings = _uiState.value.stockfishSettings.manualStage
         )
-        _uiState.value = _uiState.value.copy(showSettingsDialog = true)
+        _uiState.update { it.copy(showSettingsDialog = true) }
     }
 
     fun hideSettingsDialog() {
-        _uiState.value = _uiState.value.copy(showSettingsDialog = false)
+        _uiState.update { it.copy(showSettingsDialog = false) }
 
         val originalSettings = settingsOnDialogOpen
         val currentPreviewStageSettings = _uiState.value.stockfishSettings.previewStage
@@ -713,27 +713,27 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             analysisOrchestrator.stop()
 
-            _uiState.value = _uiState.value.copy(stockfishReady = false)
+            _uiState.update { it.copy(stockfishReady = false) }
 
             val ready = stockfish.restart()
 
             if (ready) {
                 kotlinx.coroutines.delay(200)
                 val confirmedReady = stockfish.isReady.value
-                _uiState.value = _uiState.value.copy(stockfishReady = confirmedReady)
+                _uiState.update { it.copy(stockfishReady = confirmedReady) }
 
                 if (!confirmedReady) return@launch
             } else {
-                _uiState.value = _uiState.value.copy(stockfishReady = false)
+                _uiState.update { it.copy(stockfishReady = false) }
                 return@launch
             }
 
             if (previewStageSettingsChanged || analyseStageSettingsChanged) {
-                _uiState.value = _uiState.value.copy(
+                _uiState.update { it.copy(
                     currentStage = AnalysisStage.PREVIEW,
                     previewScores = emptyMap(),
                     analyseScores = emptyMap()
-                )
+                ) }
                 analysisOrchestrator.startAnalysis()
             } else if (manualStageSettingsChanged) {
                 if (_uiState.value.currentStage == AnalysisStage.MANUAL) {
@@ -747,26 +747,26 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun showHelpScreen() {
-        _uiState.value = _uiState.value.copy(showHelpScreen = true)
+        _uiState.update { it.copy(showHelpScreen = true) }
     }
 
     fun hideHelpScreen() {
-        _uiState.value = _uiState.value.copy(showHelpScreen = false)
+        _uiState.update { it.copy(showHelpScreen = false) }
     }
 
     fun showRetrieveScreen() {
-        _uiState.value = _uiState.value.copy(showRetrieveScreen = true)
+        _uiState.update { it.copy(showRetrieveScreen = true) }
     }
 
     fun hideRetrieveScreen() {
-        _uiState.value = _uiState.value.copy(showRetrieveScreen = false)
+        _uiState.update { it.copy(showRetrieveScreen = false) }
     }
 
     // ===== ECO OPENING SELECTION =====
     fun loadEcoOpenings() {
         if (_uiState.value.ecoOpenings.isNotEmpty()) return // Already loaded
 
-        _uiState.value = _uiState.value.copy(ecoOpeningsLoading = true)
+        _uiState.update { it.copy(ecoOpeningsLoading = true) }
 
         viewModelScope.launch {
             try {
@@ -792,16 +792,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 // Sort by ECO code
                 openings.sortBy { it.eco }
 
-                _uiState.value = _uiState.value.copy(
+                _uiState.update { it.copy(
                     ecoOpenings = openings,
                     ecoOpeningsLoading = false
-                )
+                ) }
             } catch (e: Exception) {
                 android.util.Log.e("GameViewModel", "Error loading ECO openings: ${e.message}")
-                _uiState.value = _uiState.value.copy(
+                _uiState.update { it.copy(
                     ecoOpeningsLoading = false,
                     errorMessage = "Failed to load openings: ${e.message}"
-                )
+                ) }
             }
         }
     }
@@ -823,7 +823,7 @@ ${opening.moves} *
         """.trimIndent()
 
         // Hide the retrieve screen and load the game
-        _uiState.value = _uiState.value.copy(showRetrieveScreen = false)
+        _uiState.update { it.copy(showRetrieveScreen = false) }
 
         // Load the game from PGN content
         gameLoader.loadGamesFromPgnContent(pgn) { _ ->
@@ -841,9 +841,9 @@ ${opening.moves} *
         // Validate FEN by trying to set up the board
         val board = com.eval.chess.ChessBoard()
         if (!board.setFen(normalizedFen)) {
-            _uiState.value = _uiState.value.copy(
+            _uiState.update { it.copy(
                 errorMessage = "Invalid FEN position"
-            )
+            ) }
             return
         }
 
@@ -879,7 +879,7 @@ ${opening.moves} *
         val isWhiteToMove = board.getTurn() == com.eval.chess.PieceColor.WHITE
 
         // Hide retrieve screen and go directly to Manual stage
-        _uiState.value = _uiState.value.copy(
+        _uiState.update { it.copy(
             showRetrieveScreen = false,
             isLoading = false,
             game = lichessGame,
@@ -901,7 +901,7 @@ ${opening.moves} *
             savedGameMoveIndex = -1,
             analysisResult = null,
             analysisResultFen = null
-        )
+        ) }
 
         // Configure Stockfish for Manual stage and start analysis
         viewModelScope.launch {
@@ -914,7 +914,7 @@ ${opening.moves} *
 
     fun updateStockfishSettings(settings: StockfishSettings) {
         saveStockfishSettings(settings)
-        _uiState.value = _uiState.value.copy(stockfishSettings = settings)
+        _uiState.update { it.copy(stockfishSettings = settings) }
         if (_uiState.value.stockfishReady) {
             when (_uiState.value.currentStage) {
                 AnalysisStage.PREVIEW -> analysisOrchestrator.configureForPreviewStage()
@@ -929,12 +929,12 @@ ${opening.moves} *
 
     fun updateBoardLayoutSettings(settings: BoardLayoutSettings) {
         saveBoardLayoutSettings(settings)
-        _uiState.value = _uiState.value.copy(boardLayoutSettings = settings)
+        _uiState.update { it.copy(boardLayoutSettings = settings) }
     }
 
     fun updateGraphSettings(settings: GraphSettings) {
         saveGraphSettings(settings)
-        _uiState.value = _uiState.value.copy(graphSettings = settings)
+        _uiState.update { it.copy(graphSettings = settings) }
     }
 
     fun updateInterfaceVisibilitySettings(settings: InterfaceVisibilitySettings) {
@@ -944,21 +944,21 @@ ${opening.moves} *
         val analyseChanged = currentSettings.analyseStage != settings.analyseStage
 
         saveInterfaceVisibilitySettings(settings)
-        _uiState.value = _uiState.value.copy(interfaceVisibility = settings)
+        _uiState.update { it.copy(interfaceVisibility = settings) }
 
         if ((previewChanged || analyseChanged) && _uiState.value.game != null) {
             analysisOrchestrator.stop()
 
-            _uiState.value = _uiState.value.copy(
+            _uiState.update { it.copy(
                 currentStage = AnalysisStage.PREVIEW,
                 previewScores = emptyMap(),
                 analyseScores = emptyMap(),
                 autoAnalysisIndex = -1
-            )
+            ) }
 
             viewModelScope.launch {
                 val ready = stockfish.restart()
-                _uiState.value = _uiState.value.copy(stockfishReady = ready)
+                _uiState.update { it.copy(stockfishReady = ready) }
                 if (ready) {
                     stockfish.newGame()
                     analysisOrchestrator.startAnalysis()
@@ -969,9 +969,9 @@ ${opening.moves} *
 
     fun updateGeneralSettings(settings: GeneralSettings) {
         saveGeneralSettings(settings)
-        _uiState.value = _uiState.value.copy(
+        _uiState.update { it.copy(
             generalSettings = settings
-        )
+        ) }
     }
 
     /**
@@ -986,7 +986,7 @@ ${opening.moves} *
         exploringLineHistory.clear()
 
         // Reset UI state to show only the homepage with logo
-        _uiState.value = _uiState.value.copy(
+        _uiState.update { it.copy(
             game = null,
             gameList = emptyList(),
             showGameSelection = false,
@@ -1009,14 +1009,14 @@ ${opening.moves} *
             autoAnalysisIndex = -1,
             openingName = null,
             currentOpeningName = null
-        )
+        ) }
     }
 
     // ===== AI Prompts CRUD =====
 
     fun updateAiPrompts(prompts: List<AiPromptEntry>) {
         saveAiPrompts(prompts)
-        _uiState.value = _uiState.value.copy(aiPrompts = prompts)
+        _uiState.update { it.copy(aiPrompts = prompts) }
     }
 
     fun addAiPrompt(prompt: AiPromptEntry) {
@@ -1037,11 +1037,11 @@ ${opening.moves} *
     // ===== AI Prompt Selection Dialog =====
 
     fun showAiPromptSelectionDialog() {
-        _uiState.value = _uiState.value.copy(showAiPromptSelectionDialog = true)
+        _uiState.update { it.copy(showAiPromptSelectionDialog = true) }
     }
 
     fun hideAiPromptSelectionDialog() {
-        _uiState.value = _uiState.value.copy(showAiPromptSelectionDialog = false)
+        _uiState.update { it.copy(showAiPromptSelectionDialog = false) }
     }
 
     /**
@@ -1158,14 +1158,14 @@ ${opening.moves} *
                 val interfaceVisibility = loadInterfaceVisibilitySettings()
                 val generalSettings = loadGeneralSettings()
                 val aiPrompts = loadAiPrompts()
-                _uiState.value = _uiState.value.copy(
+                _uiState.update { it.copy(
                     stockfishSettings = settings,
                     boardLayoutSettings = boardSettings,
                     graphSettings = graphSettings,
                     interfaceVisibility = interfaceVisibility,
                     generalSettings = generalSettings,
                     aiPrompts = aiPrompts
-                )
+                ) }
                 android.widget.Toast.makeText(context, "Settings imported", android.widget.Toast.LENGTH_SHORT).show()
             } else {
                 android.widget.Toast.makeText(context, "Import failed: invalid file", android.widget.Toast.LENGTH_SHORT).show()
@@ -1194,7 +1194,7 @@ ${opening.moves} *
             manualStage = currentSettings.manualStage.copy(arrowMode = newMode)
         )
         saveStockfishSettings(newSettings)
-        _uiState.value = _uiState.value.copy(stockfishSettings = newSettings)
+        _uiState.update { it.copy(stockfishSettings = newSettings) }
     }
 
     override fun onCleared() {

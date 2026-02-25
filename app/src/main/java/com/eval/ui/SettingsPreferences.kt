@@ -1,7 +1,6 @@
 package com.eval.ui
 
 import android.content.SharedPreferences
-import com.eval.data.ChessServer
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 

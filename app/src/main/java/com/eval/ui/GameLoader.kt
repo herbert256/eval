@@ -296,7 +296,7 @@ internal class GameLoader(
         boardHistory.clear()
         exploringLineHistory.clear()
         boardHistory.addAll(boards)
-        val initialBoard = boards.first()
+        val initialBoard = boards.firstOrNull() ?: ChessBoard()
 
         val providedUsername = username ?: savedLichessUsername
         val whitePlayerName = game.players.white.user?.name ?: "White"

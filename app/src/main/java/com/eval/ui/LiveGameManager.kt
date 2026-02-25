@@ -99,7 +99,7 @@ internal class LiveGameManager(
         val toSquare = Square.fromAlgebraic(to)
 
         if (fromSquare != null && toSquare != null) {
-            val piece = board.getPiece(fromSquare)
+            val piece = board.getPiece(fromSquare) ?: return  // Invalid move - no piece at source
             val isCapture = board.getPiece(toSquare) != null
 
             val promotion = if (uciMove.length > 4) {
@@ -114,17 +114,18 @@ internal class LiveGameManager(
 
             board.makeMoveFromSquares(fromSquare, toSquare, promotion)
 
-            val pieceType = when (piece?.type) {
+            val pieceType = when (piece.type) {
                 PieceType.KING -> "K"
                 PieceType.QUEEN -> "Q"
                 PieceType.ROOK -> "R"
                 PieceType.BISHOP -> "B"
                 PieceType.KNIGHT -> "N"
                 PieceType.PAWN -> "P"
-                else -> "P"
             }
 
-            val clockTime = if (currentMoves.size % 2 == 1) {
+            // Move index is 0-based: even indices (0, 2, 4) are white moves
+            val moveIndex = currentMoves.size - 1
+            val clockTime = if (moveIndex % 2 == 0) {
                 moveData.wc?.let { formatClockSeconds(it) }
             } else {
                 moveData.bc?.let { formatClockSeconds(it) }

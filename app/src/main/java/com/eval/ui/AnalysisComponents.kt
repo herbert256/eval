@@ -705,14 +705,15 @@ fun AnalysisPanel(
                 )
             }
             result.lines.forEach { line ->
+                val rememberedOnMoveClick = remember(line.pv) { { moveIndex: Int ->
+                    onExploreLine(line.pv, moveIndex)
+                } }
                 PvLineRow(
                     line = line,
                     board = uiState.currentBoard,
                     isWhiteTurn = isWhiteTurn,
                     userPlayedBlack = uiState.userPlayedBlack,
-                    onMoveClick = { moveIndex ->
-                        onExploreLine(line.pv, moveIndex)
-                    }
+                    onMoveClick = rememberedOnMoveClick
                 )
             }
         }
@@ -766,7 +767,7 @@ private fun PvLineRow(
         Box(
             modifier = Modifier
                 .width(50.dp)
-                .background(Color(0xFF151D30), RoundedCornerShape(4.dp))
+                .background(AppColors.AnalysisPanelBg, RoundedCornerShape(4.dp))
                 .padding(horizontal = 6.dp, vertical = 4.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -785,7 +786,7 @@ private fun PvLineRow(
             modifier = Modifier
                 .weight(1f)
                 .horizontalScroll(rememberScrollState())
-                .background(Color(0xFF0F1629), RoundedCornerShape(4.dp))
+                .background(AppColors.AnalysisPanelMoveBg, RoundedCornerShape(4.dp))
                 .padding(horizontal = 4.dp, vertical = 2.dp),
             horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
@@ -797,7 +798,7 @@ private fun PvLineRow(
                     modifier = Modifier
                         .clip(RoundedCornerShape(3.dp))
                         .clickable { onMoveClick(index) }
-                        .background(Color(0xFF1A2744))
+                        .background(AppColors.AnalysisMoveChipBg)
                         .padding(horizontal = 6.dp, vertical = 3.dp)
                 )
             }
