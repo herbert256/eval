@@ -87,7 +87,7 @@ class StockfishEngine(private val context: Context) {
                 android.util.Log.i("StockfishEngine", "Using system Stockfish: $systemStockfishPath")
                 stockfishPath = systemStockfishPath
             } else {
-                android.util.Log.e("StockfishEngine", "Stockfish 17.1 Chess Engine app not installed")
+                android.util.Log.e("StockfishEngine", "Stockfish Chess Engine app not installed")
                 return@withContext false
             }
 
@@ -111,20 +111,26 @@ class StockfishEngine(private val context: Context) {
             val appInfo = packageManager.getApplicationInfo("com.stockfish141", 0)
             val nativeLibDir = appInfo.nativeLibraryDir
 
-            // Look for the Stockfish binary (lib_sf171.so for Stockfish 17.1)
+            // Look for the Stockfish binary in the native lib directory.
+            // Binary names vary by version: lib_sf171.so (17.1), lib_sf18.so (18), etc.
             val libDir = File(nativeLibDir)
             if (libDir.exists() && libDir.isDirectory) {
-                // Prefer explicit Stockfish library names to avoid false positives.
-                val candidates = libDir.listFiles()?.filter { file ->
+                val allFiles = libDir.listFiles().orEmpty()
+                // Prefer explicit Stockfish library names, ordered by version (newest first).
+                val candidates = allFiles.filter { file ->
                     val lower = file.name.lowercase()
-                    lower == "lib_sf171.so" ||
-                        lower.contains("stockfish") ||
+                    lower.contains("stockfish") ||
+                        lower.startsWith("lib_sf") ||
+                        lower.contains("sf18") ||
                         lower.contains("sf17")
-                }.orEmpty()
-                val stockfishFile = candidates.firstOrNull()
-                if (stockfishFile != null && stockfishFile.exists() && stockfishFile.canExecute()) {
+                }.sortedByDescending { it.name }
+                val stockfishFile = candidates.firstOrNull { it.canExecute() }
+                if (stockfishFile != null) {
+                    android.util.Log.i("StockfishEngine", "Found Stockfish binary: ${stockfishFile.name}")
                     return stockfishFile.absolutePath
                 }
+                // Log all files for debugging if no match found
+                android.util.Log.w("StockfishEngine", "No Stockfish binary found in $nativeLibDir. Files: ${allFiles.map { it.name }}")
             }
             null
         } catch (e: android.content.pm.PackageManager.NameNotFoundException) {
