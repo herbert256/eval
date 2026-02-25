@@ -547,10 +547,23 @@ class ChessBoard {
 
         // Check for castling
         if (piece.type == PieceType.KING && kotlin.math.abs(to.file - from.file) == 2) {
-            return canCastle(from, to)
+            if (!canCastle(from, to)) return false
+            if (isKingInCheck(piece.color)) return false
+
+            val rank = from.rank
+            val step = if (to.file > from.file) 1 else -1
+            val passThrough = Square(from.file + step, rank)
+            if (isSquareAttacked(passThrough, oppositeColor(piece.color))) return false
+            if (isSquareAttacked(to, oppositeColor(piece.color))) return false
+            return true
         }
 
-        return canMove(from, to, piece)
+        if (!canMove(from, to, piece)) return false
+
+        // Reject moves that leave our own king in check.
+        val testBoard = copy()
+        if (!testBoard.executeMove(Move(from, to))) return false
+        return !testBoard.isKingInCheck(piece.color)
     }
 
     /**
@@ -579,6 +592,11 @@ class ChessBoard {
             if (getPiece(1, rank) != null || getPiece(2, rank) != null || getPiece(3, rank) != null) return false
         }
 
+        // Rook must exist on the corresponding corner.
+        val rookFile = if (isKingside) 7 else 0
+        val rook = getPiece(rookFile, rank)
+        if (rook?.type != PieceType.ROOK || rook.color != piece.color) return false
+
         return true
     }
 
@@ -600,18 +618,60 @@ class ChessBoard {
             }
         }
 
-        // Add castling moves for king
-        if (piece.type == PieceType.KING) {
-            val rank = from.rank
-            if (canCastle(from, Square(6, rank))) {
-                legalMoves.add(Square(6, rank))
+        return legalMoves
+    }
+
+    private fun oppositeColor(color: PieceColor): PieceColor {
+        return if (color == PieceColor.WHITE) PieceColor.BLACK else PieceColor.WHITE
+    }
+
+    private fun isKingInCheck(color: PieceColor): Boolean {
+        var kingSquare: Square? = null
+        for (rank in 0..7) {
+            for (file in 0..7) {
+                val piece = getPiece(file, rank) ?: continue
+                if (piece.type == PieceType.KING && piece.color == color) {
+                    kingSquare = Square(file, rank)
+                    break
+                }
             }
-            if (canCastle(from, Square(2, rank))) {
-                legalMoves.add(Square(2, rank))
+            if (kingSquare != null) break
+        }
+        val king = kingSquare ?: return false
+        return isSquareAttacked(king, oppositeColor(color))
+    }
+
+    private fun isSquareAttacked(target: Square, byColor: PieceColor): Boolean {
+        for (rank in 0..7) {
+            for (file in 0..7) {
+                val piece = getPiece(file, rank) ?: continue
+                if (piece.color != byColor) continue
+                val from = Square(file, rank)
+                if (pieceAttacksSquare(from, target, piece)) {
+                    return true
+                }
             }
         }
+        return false
+    }
 
-        return legalMoves
+    private fun pieceAttacksSquare(from: Square, to: Square, piece: Piece): Boolean {
+        val df = to.file - from.file
+        val dr = to.rank - from.rank
+        val adf = kotlin.math.abs(df)
+        val adr = kotlin.math.abs(dr)
+
+        return when (piece.type) {
+            PieceType.PAWN -> {
+                val direction = if (piece.color == PieceColor.WHITE) 1 else -1
+                adr == 1 && adf == 1 && dr == direction
+            }
+            PieceType.KNIGHT -> (adf == 2 && adr == 1) || (adf == 1 && adr == 2)
+            PieceType.BISHOP -> adf == adr && isPathClear(from, to)
+            PieceType.ROOK -> (df == 0 || dr == 0) && isPathClear(from, to)
+            PieceType.QUEEN -> (df == 0 || dr == 0 || adf == adr) && isPathClear(from, to)
+            PieceType.KING -> adf <= 1 && adr <= 1
+        }
     }
 
     /**

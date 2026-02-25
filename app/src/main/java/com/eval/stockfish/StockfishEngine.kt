@@ -114,10 +114,14 @@ class StockfishEngine(private val context: Context) {
             // Look for the Stockfish binary (lib_sf171.so for Stockfish 17.1)
             val libDir = File(nativeLibDir)
             if (libDir.exists() && libDir.isDirectory) {
-                // Find any stockfish-related .so file
-                val stockfishFile = libDir.listFiles()?.find {
-                    it.name.contains("sf") || it.name.contains("stockfish", ignoreCase = true)
-                }
+                // Prefer explicit Stockfish library names to avoid false positives.
+                val candidates = libDir.listFiles()?.filter { file ->
+                    val lower = file.name.lowercase()
+                    lower == "lib_sf171.so" ||
+                        lower.contains("stockfish") ||
+                        lower.contains("sf17")
+                }.orEmpty()
+                val stockfishFile = candidates.firstOrNull()
                 if (stockfishFile != null && stockfishFile.exists() && stockfishFile.canExecute()) {
                     return stockfishFile.absolutePath
                 }
@@ -148,21 +152,25 @@ class StockfishEngine(private val context: Context) {
             sendCommand("uci")
 
             // Read until uciok
-            var line = processReader?.readLine()
+            var line = readLineWithTimeout(5000)
             while (line != null && line != "uciok") {
-                line = processReader?.readLine()
+                line = readLineWithTimeout(5000)
+            }
+            if (line != "uciok") {
+                _isReady.value = false
+                return
             }
 
             // Send isready and wait for readyok (with timeout)
             sendCommand("isready")
             var readyAttempts = 0
-            line = processReader?.readLine()
+            line = readLineWithTimeout(3000)
             while (line != null && line != "readyok" && readyAttempts < 50) {
-                line = processReader?.readLine()
+                line = readLineWithTimeout(3000)
                 readyAttempts++
             }
 
-            _isReady.value = true
+            _isReady.value = line == "readyok"
 
         } catch (e: Exception) {
             e.printStackTrace()
@@ -228,14 +236,14 @@ class StockfishEngine(private val context: Context) {
     private suspend fun CoroutineScope.waitForEngineReady(caller: String, maxAttempts: Int = 50): Boolean {
         sendCommand("isready")
 
-        var line = processReader?.readLine()
+        var line = readLineWithTimeout(3000)
         var readyAttempts = 0
         while (line != null && line != "readyok" && isActive && readyAttempts < maxAttempts) {
             // Skip info lines from previous analysis that might still be in buffer
             if (line.startsWith("info ") || line.startsWith("bestmove")) {
                 // Discard leftover output
             }
-            line = processReader?.readLine()
+            line = readLineWithTimeout(3000)
             readyAttempts++
         }
 
@@ -263,9 +271,26 @@ class StockfishEngine(private val context: Context) {
      * Must be called from a coroutine context (checks isActive).
      */
     private suspend fun CoroutineScope.readAnalysisOutput(caller: String): Int {
-        var line = processReader?.readLine()
         var linesRead = 0
-        while (line != null && isActive) {
+        var idlePolls = 0
+        val maxIdlePolls = 10
+        while (isActive) {
+            val line = readLineWithTimeout(3000)
+            if (line == null) {
+                idlePolls++
+                if (idlePolls >= maxIdlePolls) {
+                    val isAlive = try { process?.isAlive == true } catch (e: Exception) { false }
+                    if (!isAlive) {
+                        android.util.Log.e("StockfishEngine", "$caller: engine died during analysis")
+                        _isReady.value = false
+                    } else {
+                        android.util.Log.w("StockfishEngine", "$caller: timed out waiting for engine output")
+                    }
+                    break
+                }
+                continue
+            }
+            idlePolls = 0
             linesRead++
             when {
                 line.startsWith("info depth") && line.contains("score") -> {
@@ -275,16 +300,22 @@ class StockfishEngine(private val context: Context) {
                     break
                 }
             }
-            line = processReader?.readLine()
-        }
-
-        // Check if we exited due to process death
-        if (line == null && isActive) {
-            android.util.Log.e("StockfishEngine", "$caller: engine died during analysis")
-            _isReady.value = false
         }
 
         return linesRead
+    }
+
+    private suspend fun readLineWithTimeout(timeoutMs: Long): String? {
+        val reader = processReader ?: return null
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (!kotlinx.coroutines.currentCoroutineContext().isActive) return null
+            if (reader.ready()) {
+                return reader.readLine()
+            }
+            delay(20)
+        }
+        return null
     }
 
     fun analyze(fen: String, depth: Int = 16) {

@@ -261,11 +261,10 @@ class ChessRepository(
                     if (!element.isJsonObject) continue
                     val obj = element.asJsonObject
                     val username = obj.get("id")?.asString ?: continue
-                    val name = obj.get("name")?.asString ?: username
                     val twitch = obj.get("twitch")?.asJsonObject
                     val twitchUrl = twitch?.get("url")?.asString
                     streamers.add(StreamerInfo(
-                        username = name,
+                        username = username,
                         isLive = true,
                         twitchUrl = twitchUrl,
                         profileUrl = "https://lichess.org/@/$username",

@@ -359,7 +359,6 @@ data class GameUiState(
     // Opening Explorer
     val openingExplorerData: com.eval.data.OpeningExplorerResponse? = null,
     val openingExplorerLoading: Boolean = false,
-    val showOpeningExplorer: Boolean = true,
     // Player info screen
     val showPlayerInfoScreen: Boolean = false,
     val playerInfo: PlayerInfo? = null,
@@ -421,7 +420,6 @@ data class GameUiState(
     val autoFollowLive: Boolean = true,
     val liveStreamConnected: Boolean = false,
     // ECO Opening selection
-    val showOpeningSelection: Boolean = false,
     val ecoOpenings: List<EcoOpening> = emptyList(),
     val ecoOpeningsLoading: Boolean = false,
     // Last server user for reload

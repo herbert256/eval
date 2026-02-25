@@ -18,15 +18,18 @@ internal class LiveGameManager(
     private val getUiState: () -> GameUiState,
     private val updateUiState: (GameUiState.() -> GameUiState) -> Unit,
     private val viewModelScope: CoroutineScope,
-    private val moveSoundPlayer: MoveSoundPlayer
+    private val moveSoundPlayer: MoveSoundPlayer,
+    private val appendBoardHistory: (com.eval.chess.ChessBoard) -> Unit
 ) {
     private var liveGameJob: Job? = null
+    private var liveBoard: com.eval.chess.ChessBoard? = null
 
     /**
      * Start following a live game.
      */
     fun startLiveFollow(gameId: String) {
         stopLiveFollow()
+        liveBoard = buildLatestBoard(getUiState())
 
         updateUiState {
             copy(
@@ -89,10 +92,7 @@ internal class LiveGameManager(
         val state = getUiState()
         val currentMoves = state.moves.toMutableList()
         val currentMoveDetails = state.moveDetails.toMutableList()
-
-        currentMoves.add(uciMove)
-
-        val board = state.currentBoard.copy()
+        val board = liveBoard?.copy() ?: buildLatestBoard(state)
         val from = uciMove.substring(0, 2)
         val to = uciMove.substring(2, 4)
         val fromSquare = Square.fromAlgebraic(from)
@@ -100,7 +100,11 @@ internal class LiveGameManager(
 
         if (fromSquare != null && toSquare != null) {
             val piece = board.getPiece(fromSquare) ?: return  // Invalid move - no piece at source
-            val isCapture = board.getPiece(toSquare) != null
+            val targetPiece = board.getPiece(toSquare)
+            val isEnPassant = piece.type == PieceType.PAWN &&
+                fromSquare.file != toSquare.file &&
+                targetPiece == null
+            val isCapture = targetPiece != null || isEnPassant
 
             val promotion = if (uciMove.length > 4) {
                 when (uciMove[4]) {
@@ -112,7 +116,11 @@ internal class LiveGameManager(
                 }
             } else null
 
-            board.makeMoveFromSquares(fromSquare, toSquare, promotion)
+            val moveApplied = board.makeMoveFromSquares(fromSquare, toSquare, promotion)
+            if (!moveApplied) return
+            liveBoard = board.copy()
+            appendBoardHistory(board)
+            currentMoves.add(uciMove)
 
             val pieceType = when (piece.type) {
                 PieceType.KING -> "K"
@@ -176,6 +184,7 @@ internal class LiveGameManager(
     fun stopLiveFollow() {
         liveGameJob?.cancel()
         liveGameJob = null
+        liveBoard = null
         updateUiState {
             copy(
                 isLiveGame = false,
@@ -197,5 +206,15 @@ internal class LiveGameManager(
     fun cancel() {
         liveGameJob?.cancel()
         liveGameJob = null
+        liveBoard = null
+    }
+
+    private fun buildLatestBoard(state: GameUiState): com.eval.chess.ChessBoard {
+        val board = com.eval.chess.ChessBoard()
+        for (move in state.moves) {
+            val success = board.makeMove(move) || board.makeUciMove(move)
+            if (!success) break
+        }
+        return board
     }
 }

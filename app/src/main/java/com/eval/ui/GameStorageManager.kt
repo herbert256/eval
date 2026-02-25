@@ -30,18 +30,6 @@ class GameStorageManager(
     }
 
     // ============================================================================
-    // Current Analysed Game Storage
-    // ============================================================================
-
-    /**
-     * Save the current analysed game to SharedPreferences as JSON.
-     */
-    fun saveCurrentAnalysedGame(analysedGame: AnalysedGame) {
-        val json = gson.toJson(analysedGame)
-        prefs.edit().putString(SettingsPreferences.KEY_CURRENT_GAME_JSON, json).apply()
-    }
-
-    // ============================================================================
     // Retrieved Games Storage (List of Lists)
     // ============================================================================
 

@@ -422,8 +422,6 @@ internal class GameLoader(
             )
         }
 
-        gameStorage.saveCurrentAnalysedGame(analysedGame)
-
         val fenToAnalyze = board.getFen()
 
         viewModelScope.launch {
@@ -483,24 +481,12 @@ internal class GameLoader(
         onMoveApplied: ((index: Int, move: String, boardBefore: ChessBoard, boardAfter: ChessBoard) -> Unit)? = null,
         onMoveFailed: ((index: Int, move: String, boardBefore: ChessBoard) -> Unit)? = null
     ): Pair<List<ChessBoard>, List<String>> {
-        val boards = mutableListOf<ChessBoard>()
-        val validMoves = mutableListOf<String>()
-        val tempBoard = ChessBoard()
-        boards.add(tempBoard.copy())
-
-        for ((index, move) in moves.withIndex()) {
-            val boardBeforeMove = if (onMoveApplied != null || onMoveFailed != null) tempBoard.copy() else tempBoard
-            val moveSuccess = tempBoard.makeMove(move) || tempBoard.makeUciMove(move)
-            if (moveSuccess) {
-                validMoves.add(move)
-                boards.add(tempBoard.copy())
-                onMoveApplied?.invoke(index, move, boardBeforeMove, tempBoard)
-            } else {
-                onMoveFailed?.invoke(index, move, boardBeforeMove)
-            }
-        }
-
-        return Pair(boards, validMoves)
+        val result = BoardHistoryBuilder.build(
+            moves = moves,
+            onMoveApplied = onMoveApplied,
+            onMoveFailed = onMoveFailed
+        )
+        return Pair(result.boards, result.validMoves)
     }
 
     private fun findBiggestScoreChangeInScores(

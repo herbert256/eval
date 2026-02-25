@@ -43,8 +43,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(GameUiState())
     val uiState: StateFlow<GameUiState> = _uiState.asStateFlow()
 
-    private var boardHistory = java.util.Collections.synchronizedList(mutableListOf<ChessBoard>())
-    private var exploringLineHistory = java.util.Collections.synchronizedList(mutableListOf<ChessBoard>())
+    private val mainTimeline = GameTimeline()
+    private val exploringTimeline = GameTimeline()
+    private val boardHistory = mainTimeline.snapshotList
+    private val exploringLineHistory = exploringTimeline.snapshotList
 
     // Track settings when dialog opens to detect changes
     private var settingsOnDialogOpen: SettingsSnapshot? = null
@@ -61,6 +63,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val boardNavigationManager: BoardNavigationManager
     private val contentSourceManager: ContentSourceManager
     private val liveGameManager: LiveGameManager
+    private val exportShareManager: ExportShareManager
+    private val settingsManager: SettingsManager
 
     // Opening explorer job
     private var openingExplorerJob: Job? = null
@@ -162,7 +166,23 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             getUiState = { _uiState.value },
             updateUiState = { transform -> _uiState.value = _uiState.value.transform() },
             viewModelScope = viewModelScope,
-            moveSoundPlayer = moveSoundPlayer
+            moveSoundPlayer = moveSoundPlayer,
+            appendBoardHistory = { board -> boardHistory.add(board.copy()) }
+        )
+
+        exportShareManager = ExportShareManager(
+            getUiState = { _uiState.value },
+            updateUiState = { transform -> _uiState.value = _uiState.value.transform() },
+            viewModelScope = viewModelScope
+        )
+
+        settingsManager = SettingsManager(
+            getUiState = { _uiState.value },
+            updateUiState = { transform -> _uiState.value = _uiState.value.transform() },
+            viewModelScope = viewModelScope,
+            settingsPrefs = settingsPrefs,
+            stockfish = stockfish,
+            analysisOrchestrator = analysisOrchestrator
         )
 
         // Check if Stockfish is installed first
@@ -482,20 +502,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun toggleOpeningExplorer() {
-        _uiState.update { it.copy(showOpeningExplorer = !it.showOpeningExplorer) }
-    }
-
     // ===== SHARE/EXPORT =====
-    fun showSharePositionDialog() {
-        _uiState.update { it.copy(showSharePositionDialog = true) }
-    }
+    fun showSharePositionDialog() = exportShareManager.showSharePositionDialog()
 
-    fun hideSharePositionDialog() {
-        _uiState.update { it.copy(showSharePositionDialog = false) }
-    }
+    fun hideSharePositionDialog() = exportShareManager.hideSharePositionDialog()
 
-    fun getCurrentFen(): String = _uiState.value.currentBoard.getFen()
+    fun getCurrentFen(): String = exportShareManager.getCurrentFen()
 
     /** Extract the Site URL from the current game's PGN headers, if it's a lichess.org or chess.com URL. */
     fun getGameSiteUrl(): String? {
@@ -509,179 +521,17 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun copyFenToClipboard(context: android.content.Context) {
-        val fen = getCurrentFen()
-        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-        val clip = android.content.ClipData.newPlainText("Chess FEN", fen)
-        clipboard.setPrimaryClip(clip)
-    }
+    fun copyFenToClipboard(context: android.content.Context) = exportShareManager.copyFenToClipboard(context)
 
-    fun sharePositionAsText(context: android.content.Context) {
-        val fen = getCurrentFen()
-        val moveIndex = _uiState.value.currentMoveIndex
-        val game = _uiState.value.game
-        val analysis = _uiState.value.analysisResult
+    fun sharePositionAsText(context: android.content.Context) = exportShareManager.sharePositionAsText(context)
 
-        val shareText = buildString {
-            if (game != null) {
-                appendLine("${game.players.white.user?.name ?: "White"} vs ${game.players.black.user?.name ?: "Black"}")
-                appendLine()
-            }
-            appendLine("Position after move ${(moveIndex + 2) / 2}${if (moveIndex % 2 == 0) "." else "..."}")
-            appendLine()
-            appendLine("FEN: $fen")
-            if (analysis != null && analysis.lines.isNotEmpty()) {
-                val topLine = analysis.lines.first()
-                val evalText = if (topLine.isMate) {
-                    "Mate in ${kotlin.math.abs(topLine.mateIn)}"
-                } else {
-                    "%.2f".format(topLine.score)
-                }
-                appendLine()
-                appendLine("Evaluation: $evalText (depth ${analysis.depth})")
-                appendLine("Best move: ${topLine.pv.split(" ").firstOrNull() ?: "N/A"}")
-            }
-            appendLine()
-            appendLine("Analyze at: https://lichess.org/analysis/$fen")
-        }
+    fun exportAnnotatedPgn(context: android.content.Context) = exportShareManager.exportAnnotatedPgn(context)
 
-        val sendIntent = android.content.Intent().apply {
-            action = android.content.Intent.ACTION_SEND
-            putExtra(android.content.Intent.EXTRA_TEXT, shareText)
-            type = "text/plain"
-        }
-        val shareIntent = android.content.Intent.createChooser(sendIntent, "Share position")
-        context.startActivity(shareIntent)
-    }
+    fun copyPgnToClipboard(context: android.content.Context) = exportShareManager.copyPgnToClipboard(context)
 
-    fun exportAnnotatedPgn(context: android.content.Context) {
-        val game = _uiState.value.game ?: return
-        val moveDetails = _uiState.value.moveDetails
-        val analyseScores = _uiState.value.analyseScores
-        val moveQualities = _uiState.value.moveQualities
-        val openingName = _uiState.value.currentOpeningName ?: _uiState.value.openingName
+    fun exportAsGif(context: android.content.Context) = exportShareManager.exportAsGif(context)
 
-        val pgn = com.eval.export.PgnExporter.exportAnnotatedPgn(
-            game = game,
-            moveDetails = moveDetails,
-            analyseScores = analyseScores,
-            moveQualities = moveQualities,
-            openingName = openingName
-        )
-
-        val sendIntent = android.content.Intent().apply {
-            action = android.content.Intent.ACTION_SEND
-            putExtra(android.content.Intent.EXTRA_TEXT, pgn)
-            putExtra(android.content.Intent.EXTRA_SUBJECT, "Chess Game PGN - ${game.players.white.user?.name} vs ${game.players.black.user?.name}")
-            type = "text/plain"
-        }
-        val shareIntent = android.content.Intent.createChooser(sendIntent, "Export PGN")
-        context.startActivity(shareIntent)
-    }
-
-    fun copyPgnToClipboard(context: android.content.Context) {
-        val game = _uiState.value.game ?: return
-        val moveDetails = _uiState.value.moveDetails
-        val analyseScores = _uiState.value.analyseScores
-        val moveQualities = _uiState.value.moveQualities
-        val openingName = _uiState.value.currentOpeningName ?: _uiState.value.openingName
-
-        val pgn = com.eval.export.PgnExporter.exportAnnotatedPgn(
-            game = game,
-            moveDetails = moveDetails,
-            analyseScores = analyseScores,
-            moveQualities = moveQualities,
-            openingName = openingName
-        )
-
-        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-        val clip = android.content.ClipData.newPlainText("Chess PGN", pgn)
-        clipboard.setPrimaryClip(clip)
-    }
-
-    fun exportAsGif(context: android.content.Context) {
-        if (_uiState.value.game == null) return
-        val moveDetails = _uiState.value.moveDetails
-        // Merge scores: use analyseScores where available, otherwise previewScores
-        val analyseScores = if (_uiState.value.analyseScores.isNotEmpty()) {
-            _uiState.value.previewScores + _uiState.value.analyseScores
-        } else {
-            _uiState.value.previewScores
-        }
-
-        _uiState.update { it.copy(
-            showGifExportDialog = true,
-            gifExportProgress = 0f
-        ) }
-
-        viewModelScope.launch {
-            try {
-                val boards = mutableListOf<ChessBoard>()
-                var board = ChessBoard()
-                boards.add(board.copy())
-
-                for (i in moveDetails.indices) {
-                    val move = moveDetails[i]
-                    val success = board.makeMove(move.san)
-                    if (success) {
-                        boards.add(board.copy())
-                    }
-                }
-
-                val boardScores = mutableMapOf<Int, MoveScore>()
-                analyseScores.forEach { (moveIndex, score) ->
-                    boardScores[moveIndex + 1] = score
-                }
-
-                val moves = moveDetails.map { it.san }
-                val file = com.eval.export.GifExporter.exportAsGifWithAnnotations(
-                    context = context,
-                    boards = boards,
-                    moves = moves,
-                    scores = boardScores,
-                    frameDelay = 1000,
-                    callback = object : com.eval.export.GifExporter.ProgressCallback {
-                        override fun onProgress(current: Int, total: Int) {
-                            _uiState.update { it.copy(
-                                gifExportProgress = current.toFloat() / total
-                            ) }
-                        }
-                    }
-                )
-
-                _uiState.update { it.copy(
-                    showGifExportDialog = false,
-                    gifExportProgress = null
-                ) }
-
-                val uri = androidx.core.content.FileProvider.getUriForFile(
-                    context,
-                    "${context.packageName}.fileprovider",
-                    file
-                )
-
-                val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                    type = "image/gif"
-                    putExtra(android.content.Intent.EXTRA_STREAM, uri)
-                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                }
-                context.startActivity(android.content.Intent.createChooser(shareIntent, "Share GIF"))
-            } catch (e: Exception) {
-                _uiState.update { it.copy(
-                    showGifExportDialog = false,
-                    gifExportProgress = null,
-                    errorMessage = "GIF export failed: ${e.message}"
-                ) }
-            }
-        }
-    }
-
-    fun cancelGifExport() {
-        _uiState.update { it.copy(
-            showGifExportDialog = false,
-            gifExportProgress = null
-        ) }
-    }
+    fun cancelGifExport() = exportShareManager.cancelGifExport()
 
     // ===== SETTINGS =====
     fun showSettingsDialog() {
@@ -912,67 +762,16 @@ ${opening.moves} *
         }
     }
 
-    fun updateStockfishSettings(settings: StockfishSettings) {
-        saveStockfishSettings(settings)
-        _uiState.update { it.copy(stockfishSettings = settings) }
-        if (_uiState.value.stockfishReady) {
-            when (_uiState.value.currentStage) {
-                AnalysisStage.PREVIEW -> analysisOrchestrator.configureForPreviewStage()
-                AnalysisStage.ANALYSE -> analysisOrchestrator.configureForAnalyseStage()
-                AnalysisStage.MANUAL -> analysisOrchestrator.configureForManualStage()
-            }
-            if (_uiState.value.currentStage == AnalysisStage.MANUAL) {
-                analysisOrchestrator.restartAnalysisForExploringLine()
-            }
-        }
-    }
+    fun updateStockfishSettings(settings: StockfishSettings) = settingsManager.updateStockfishSettings(settings)
 
-    fun updateBoardLayoutSettings(settings: BoardLayoutSettings) {
-        saveBoardLayoutSettings(settings)
-        _uiState.update { it.copy(boardLayoutSettings = settings) }
-    }
+    fun updateBoardLayoutSettings(settings: BoardLayoutSettings) = settingsManager.updateBoardLayoutSettings(settings)
 
-    fun updateGraphSettings(settings: GraphSettings) {
-        saveGraphSettings(settings)
-        _uiState.update { it.copy(graphSettings = settings) }
-    }
+    fun updateGraphSettings(settings: GraphSettings) = settingsManager.updateGraphSettings(settings)
 
-    fun updateInterfaceVisibilitySettings(settings: InterfaceVisibilitySettings) {
-        val currentSettings = _uiState.value.interfaceVisibility
+    fun updateInterfaceVisibilitySettings(settings: InterfaceVisibilitySettings) =
+        settingsManager.updateInterfaceVisibilitySettings(settings)
 
-        val previewChanged = currentSettings.previewStage != settings.previewStage
-        val analyseChanged = currentSettings.analyseStage != settings.analyseStage
-
-        saveInterfaceVisibilitySettings(settings)
-        _uiState.update { it.copy(interfaceVisibility = settings) }
-
-        if ((previewChanged || analyseChanged) && _uiState.value.game != null) {
-            analysisOrchestrator.stop()
-
-            _uiState.update { it.copy(
-                currentStage = AnalysisStage.PREVIEW,
-                previewScores = emptyMap(),
-                analyseScores = emptyMap(),
-                autoAnalysisIndex = -1
-            ) }
-
-            viewModelScope.launch {
-                val ready = stockfish.restart()
-                _uiState.update { it.copy(stockfishReady = ready) }
-                if (ready) {
-                    stockfish.newGame()
-                    analysisOrchestrator.startAnalysis()
-                }
-            }
-        }
-    }
-
-    fun updateGeneralSettings(settings: GeneralSettings) {
-        saveGeneralSettings(settings)
-        _uiState.update { it.copy(
-            generalSettings = settings
-        ) }
-    }
+    fun updateGeneralSettings(settings: GeneralSettings) = settingsManager.updateGeneralSettings(settings)
 
     /**
      * Reset the app to the homepage (logo only), clearing all game state.
@@ -1014,25 +813,13 @@ ${opening.moves} *
 
     // ===== AI Prompts CRUD =====
 
-    fun updateAiPrompts(prompts: List<AiPromptEntry>) {
-        saveAiPrompts(prompts)
-        _uiState.update { it.copy(aiPrompts = prompts) }
-    }
+    fun updateAiPrompts(prompts: List<AiPromptEntry>) = settingsManager.updateAiPrompts(prompts)
 
-    fun addAiPrompt(prompt: AiPromptEntry) {
-        val updated = _uiState.value.aiPrompts + prompt
-        updateAiPrompts(updated)
-    }
+    fun addAiPrompt(prompt: AiPromptEntry) = settingsManager.addAiPrompt(prompt)
 
-    fun updateAiPrompt(prompt: AiPromptEntry) {
-        val updated = _uiState.value.aiPrompts.map { if (it.id == prompt.id) prompt else it }
-        updateAiPrompts(updated)
-    }
+    fun updateAiPrompt(prompt: AiPromptEntry) = settingsManager.updateAiPrompt(prompt)
 
-    fun deleteAiPrompt(id: String) {
-        val updated = _uiState.value.aiPrompts.filter { it.id != id }
-        updateAiPrompts(updated)
-    }
+    fun deleteAiPrompt(id: String) = settingsManager.deleteAiPrompt(id)
 
     // ===== AI Prompt Selection Dialog =====
 
@@ -1117,63 +904,30 @@ ${opening.moves} *
     /**
      * Export all settings to a JSON file and share via share sheet.
      */
-    fun exportSettings(context: android.content.Context) {
-        try {
-            val json = settingsPrefs.exportAllSettings()
-            val cacheDir = java.io.File(context.cacheDir, "settings_export")
-            cacheDir.mkdirs()
-            val file = java.io.File(cacheDir, "eval_settings.json")
-            file.writeText(json)
-
-            val uri = androidx.core.content.FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.fileprovider",
-                file
-            )
-            val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                type = "application/json"
-                putExtra(android.content.Intent.EXTRA_STREAM, uri)
-                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            context.startActivity(android.content.Intent.createChooser(shareIntent, "Export Settings"))
-        } catch (e: Exception) {
-            android.widget.Toast.makeText(context, "Export failed: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
-        }
-    }
+    fun exportSettings(context: android.content.Context) = settingsManager.exportSettings(context)
 
     /**
      * Import settings from a JSON file URI. Reloads all settings into UI state after import.
      * @return true if import succeeded
      */
     fun importSettings(context: android.content.Context, uri: android.net.Uri): Boolean {
-        return try {
-            val inputStream = context.contentResolver.openInputStream(uri)
-            val json = inputStream?.bufferedReader()?.use { it.readText() } ?: return false
-            val success = settingsPrefs.importAllSettings(json)
-            if (success) {
-                // Reload all settings into UI state
-                val settings = loadStockfishSettings()
-                val boardSettings = loadBoardLayoutSettings()
-                val graphSettings = loadGraphSettings()
-                val interfaceVisibility = loadInterfaceVisibilitySettings()
-                val generalSettings = loadGeneralSettings()
-                val aiPrompts = loadAiPrompts()
-                _uiState.update { it.copy(
+        return settingsManager.importSettings(context, uri) {
+            val settings = loadStockfishSettings()
+            val boardSettings = loadBoardLayoutSettings()
+            val graphSettings = loadGraphSettings()
+            val interfaceVisibility = loadInterfaceVisibilitySettings()
+            val generalSettings = loadGeneralSettings()
+            val aiPrompts = loadAiPrompts()
+            _uiState.update {
+                it.copy(
                     stockfishSettings = settings,
                     boardLayoutSettings = boardSettings,
                     graphSettings = graphSettings,
                     interfaceVisibility = interfaceVisibility,
                     generalSettings = generalSettings,
                     aiPrompts = aiPrompts
-                ) }
-                android.widget.Toast.makeText(context, "Settings imported", android.widget.Toast.LENGTH_SHORT).show()
-            } else {
-                android.widget.Toast.makeText(context, "Import failed: invalid file", android.widget.Toast.LENGTH_SHORT).show()
+                )
             }
-            success
-        } catch (e: Exception) {
-            android.widget.Toast.makeText(context, "Import failed: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
-            false
         }
     }
 

@@ -4,6 +4,24 @@ import android.content.SharedPreferences
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 
+data class SettingsSnapshotV2(
+    val schemaVersion: Int = 2,
+    val stockfishSettings: StockfishSettings = StockfishSettings(),
+    val boardLayoutSettings: BoardLayoutSettings = BoardLayoutSettings(),
+    val graphSettings: GraphSettings = GraphSettings(),
+    val interfaceVisibilitySettings: InterfaceVisibilitySettings = InterfaceVisibilitySettings(),
+    val generalSettings: GeneralSettings = GeneralSettings(),
+    val aiPrompts: List<AiPromptEntry> = emptyList(),
+    val lichessUsername: String = "DrNykterstein",
+    val chessComUsername: String = "MagnusCarlsen",
+    val lichessMaxGames: Int = 10,
+    val aiAppDontAskAgain: Boolean = false,
+    val firstGameRetrievedVersion: Long = 0L,
+    val lastServerUser: String? = null,
+    val lastServerName: String? = null,
+    val fenHistory: List<String> = emptyList()
+)
+
 /**
  * Helper class for managing all settings persistence via SharedPreferences.
  */
@@ -340,33 +358,69 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
     // ============================================================================
 
     /**
-     * Export all SharedPreferences entries as a JSON string.
-     * Each entry is stored with its key, type, and value.
+     * Export settings in typed schema v2 for safe round-trip and migration.
      */
     fun exportAllSettings(): String {
-        val allEntries = prefs.all
-        val exportMap = mutableMapOf<String, Any?>()
-        for ((key, value) in allEntries) {
-            // Store type info so we can restore correctly
-            val typed: Any = when (value) {
-                is Boolean -> mapOf("_type" to "Boolean", "_value" to value)
-                is Int -> mapOf("_type" to "Int", "_value" to value)
-                is Long -> mapOf("_type" to "Long", "_value" to value)
-                is Float -> mapOf("_type" to "Float", "_value" to value)
-                is String -> mapOf("_type" to "String", "_value" to value)
-                is Set<*> -> mapOf("_type" to "StringSet", "_value" to value.toList())
-                else -> mapOf("_type" to "String", "_value" to value.toString())
-            }
-            exportMap[key] = typed
-        }
-        return gson.toJson(exportMap)
+        val snapshot = SettingsSnapshotV2(
+            stockfishSettings = loadStockfishSettings(),
+            boardLayoutSettings = loadBoardLayoutSettings(),
+            graphSettings = loadGraphSettings(),
+            interfaceVisibilitySettings = loadInterfaceVisibilitySettings(),
+            generalSettings = loadGeneralSettings(),
+            aiPrompts = loadAiPrompts(),
+            lichessUsername = savedLichessUsername,
+            chessComUsername = savedChessComUsername,
+            lichessMaxGames = lichessMaxGames,
+            aiAppDontAskAgain = getAiAppDontAskAgain(),
+            firstGameRetrievedVersion = getFirstGameRetrievedVersion(),
+            lastServerUser = lastServerUser,
+            lastServerName = lastServerName,
+            fenHistory = loadFenHistory()
+        )
+        return gson.toJson(snapshot)
     }
 
     /**
-     * Import all settings from a JSON string, replacing current SharedPreferences.
-     * Returns true on success, false on parse failure.
+     * Import settings from typed schema v2, with legacy map migration fallback.
      */
     fun importAllSettings(json: String): Boolean {
+        return try {
+            val snapshot = gson.fromJson(json, SettingsSnapshotV2::class.java)
+            if (snapshot != null && snapshot.schemaVersion >= 2) {
+                importFromTypedSnapshot(snapshot)
+            } else {
+                importLegacySettings(json)
+            }
+        } catch (e: Exception) {
+            importLegacySettings(json)
+        }
+    }
+
+    private fun importFromTypedSnapshot(snapshot: SettingsSnapshotV2): Boolean {
+        val editor = prefs.edit()
+        editor.clear()
+
+        editor.putString(KEY_LICHESS_USERNAME, snapshot.lichessUsername)
+        editor.putString(KEY_CHESSCOM_USERNAME, snapshot.chessComUsername)
+        editor.putInt(KEY_LICHESS_MAX_GAMES, snapshot.lichessMaxGames.coerceIn(1, 25))
+
+        editor.putBoolean(KEY_MOVE_SOUNDS_ENABLED, snapshot.generalSettings.moveSoundsEnabled)
+        editor.putString(KEY_AI_PROMPTS_LIST, gson.toJson(snapshot.aiPrompts))
+        editor.putBoolean(KEY_AI_APP_DONT_ASK_AGAIN, snapshot.aiAppDontAskAgain)
+        editor.putLong(KEY_FIRST_GAME_RETRIEVED_VERSION, snapshot.firstGameRetrievedVersion)
+        editor.putString(KEY_LAST_SERVER_USER, snapshot.lastServerUser)
+        editor.putString(KEY_LAST_SERVER_NAME, snapshot.lastServerName)
+        editor.putString(KEY_FEN_HISTORY, gson.toJson(snapshot.fenHistory.take(MAX_FEN_HISTORY)))
+
+        putStockfishSettings(editor, snapshot.stockfishSettings)
+        putBoardLayoutSettings(editor, snapshot.boardLayoutSettings)
+        putGraphSettings(editor, snapshot.graphSettings)
+        putInterfaceVisibilitySettings(editor, snapshot.interfaceVisibilitySettings)
+
+        return editor.commit()
+    }
+
+    private fun importLegacySettings(json: String): Boolean {
         return try {
             val type = object : TypeToken<Map<String, Map<String, Any>>>() {}.type
             val importMap: Map<String, Map<String, Any>> = gson.fromJson(json, type)
@@ -388,8 +442,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
                     }
                 }
             }
-            editor.apply()
-            true
+            editor.commit()
         } catch (e: Exception) {
             false
         }
@@ -400,21 +453,92 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
     // ============================================================================
 
     fun resetAllSettingsToDefaults() {
-        // Reset stockfish settings
-        saveStockfishSettings(StockfishSettings())
-        // Reset board layout settings
-        saveBoardLayoutSettings(BoardLayoutSettings())
-        // Reset graph settings
-        saveGraphSettings(GraphSettings())
-        // Reset interface visibility settings
-        saveInterfaceVisibilitySettings(InterfaceVisibilitySettings())
+        prefs.edit().clear().commit()
+    }
+
+    private fun putStockfishSettings(editor: SharedPreferences.Editor, settings: StockfishSettings) {
+        editor
+            .putFloat(KEY_PREVIEW_SECONDS, settings.previewStage.secondsForMove)
+            .putInt(KEY_PREVIEW_THREADS, settings.previewStage.threads)
+            .putInt(KEY_PREVIEW_HASH, settings.previewStage.hashMb)
+            .putBoolean(KEY_PREVIEW_NNUE, settings.previewStage.useNnue)
+            .putFloat(KEY_ANALYSE_SECONDS, settings.analyseStage.secondsForMove)
+            .putInt(KEY_ANALYSE_THREADS, settings.analyseStage.threads)
+            .putInt(KEY_ANALYSE_HASH, settings.analyseStage.hashMb)
+            .putBoolean(KEY_ANALYSE_NNUE, settings.analyseStage.useNnue)
+            .putInt(KEY_MANUAL_DEPTH, settings.manualStage.depth)
+            .putInt(KEY_MANUAL_THREADS, settings.manualStage.threads)
+            .putInt(KEY_MANUAL_HASH, settings.manualStage.hashMb)
+            .putInt(KEY_MANUAL_MULTIPV, settings.manualStage.multiPv)
+            .putBoolean(KEY_MANUAL_NNUE, settings.manualStage.useNnue)
+            .putString(KEY_MANUAL_ARROW_MODE, settings.manualStage.arrowMode.name)
+            .putInt(KEY_MANUAL_NUMARROWS, settings.manualStage.numArrows)
+            .putBoolean(KEY_MANUAL_SHOWNUMBERS, settings.manualStage.showArrowNumbers)
+            .putLong(KEY_MANUAL_WHITE_ARROW_COLOR, settings.manualStage.whiteArrowColor)
+            .putLong(KEY_MANUAL_BLACK_ARROW_COLOR, settings.manualStage.blackArrowColor)
+            .putLong(KEY_MANUAL_MULTILINES_ARROW_COLOR, settings.manualStage.multiLinesArrowColor)
+    }
+
+    private fun putBoardLayoutSettings(editor: SharedPreferences.Editor, settings: BoardLayoutSettings) {
+        editor
+            .putBoolean(KEY_BOARD_SHOW_COORDINATES, settings.showCoordinates)
+            .putBoolean(KEY_BOARD_SHOW_LAST_MOVE, settings.showLastMove)
+            .putInt(KEY_BOARD_PLAYER_BAR_MODE, settings.playerBarMode.ordinal)
+            .putBoolean(KEY_BOARD_RED_BORDER_PLAYER_TO_MOVE, settings.showRedBorderForPlayerToMove)
+            .putLong(KEY_BOARD_WHITE_SQUARE_COLOR, settings.whiteSquareColor)
+            .putLong(KEY_BOARD_BLACK_SQUARE_COLOR, settings.blackSquareColor)
+            .putLong(KEY_BOARD_WHITE_PIECE_COLOR, settings.whitePieceColor)
+            .putLong(KEY_BOARD_BLACK_PIECE_COLOR, settings.blackPieceColor)
+            .putInt(KEY_EVAL_BAR_POSITION, settings.evalBarPosition.ordinal)
+            .putLong(KEY_EVAL_BAR_COLOR_1, settings.evalBarColor1)
+            .putLong(KEY_EVAL_BAR_COLOR_2, settings.evalBarColor2)
+            .putInt(KEY_EVAL_BAR_RANGE, settings.evalBarRange)
+    }
+
+    private fun putGraphSettings(editor: SharedPreferences.Editor, settings: GraphSettings) {
+        editor
+            .putLong(KEY_GRAPH_PLUS_SCORE_COLOR, settings.plusScoreColor)
+            .putLong(KEY_GRAPH_NEGATIVE_SCORE_COLOR, settings.negativeScoreColor)
+            .putLong(KEY_GRAPH_BACKGROUND_COLOR, settings.backgroundColor)
+            .putLong(KEY_GRAPH_ANALYSE_LINE_COLOR, settings.analyseLineColor)
+            .putLong(KEY_GRAPH_VERTICAL_LINE_COLOR, settings.verticalLineColor)
+            .putInt(KEY_GRAPH_LINE_RANGE, settings.lineGraphRange)
+            .putInt(KEY_GRAPH_BAR_RANGE, settings.barGraphRange)
+            .putInt(KEY_GRAPH_LINE_SCALE, settings.lineGraphScale)
+            .putInt(KEY_GRAPH_BAR_SCALE, settings.barGraphScale)
+    }
+
+    private fun putInterfaceVisibilitySettings(editor: SharedPreferences.Editor, settings: InterfaceVisibilitySettings) {
+        editor
+            .putBoolean(KEY_PREVIEW_VIS_SCOREBARSGRAPH, settings.previewStage.showScoreBarsGraph)
+            .putBoolean(KEY_PREVIEW_VIS_RESULTBAR, settings.previewStage.showResultBar)
+            .putBoolean(KEY_PREVIEW_VIS_BOARD, settings.previewStage.showBoard)
+            .putBoolean(KEY_PREVIEW_VIS_MOVELIST, settings.previewStage.showMoveList)
+            .putBoolean(KEY_PREVIEW_VIS_PGN, settings.previewStage.showPgn)
+            .putBoolean(KEY_ANALYSE_VIS_SCORELINEGRAPH, settings.analyseStage.showScoreLineGraph)
+            .putBoolean(KEY_ANALYSE_VIS_SCOREBARSGRAPH, settings.analyseStage.showScoreBarsGraph)
+            .putBoolean(KEY_ANALYSE_VIS_BOARD, settings.analyseStage.showBoard)
+            .putBoolean(KEY_ANALYSE_VIS_STOCKFISHANALYSE, settings.analyseStage.showStockfishAnalyse)
+            .putBoolean(KEY_ANALYSE_VIS_RESULTBAR, settings.analyseStage.showResultBar)
+            .putBoolean(KEY_ANALYSE_VIS_MOVELIST, settings.analyseStage.showMoveList)
+            .putBoolean(KEY_ANALYSE_VIS_GAMEINFO, settings.analyseStage.showGameInfo)
+            .putBoolean(KEY_ANALYSE_VIS_PGN, settings.analyseStage.showPgn)
+            .putBoolean(KEY_MANUAL_VIS_RESULTBAR, settings.manualStage.showResultBar)
+            .putBoolean(KEY_MANUAL_VIS_SCORELINEGRAPH, settings.manualStage.showScoreLineGraph)
+            .putBoolean(KEY_MANUAL_VIS_SCOREBARSGRAPH, settings.manualStage.showScoreBarsGraph)
+            .putBoolean(KEY_MANUAL_VIS_TIMEGRAPH, settings.manualStage.showTimeGraph)
+            .putBoolean(KEY_MANUAL_VIS_OPENINGEXPLORER, settings.manualStage.showOpeningExplorer)
+            .putBoolean(KEY_MANUAL_VIS_OPENINGNAME, settings.manualStage.showOpeningName)
+            .putBoolean(KEY_MANUAL_VIS_RAWSTOCKFISHSCORE, settings.manualStage.showRawStockfishScore)
+            .putBoolean(KEY_MANUAL_VIS_MOVELIST, settings.manualStage.showMoveList)
+            .putBoolean(KEY_MANUAL_VIS_GAMEINFO, settings.manualStage.showGameInfo)
+            .putBoolean(KEY_MANUAL_VIS_PGN, settings.manualStage.showPgn)
     }
 
     companion object {
         const val PREFS_NAME = "eval_prefs"
 
         // Current game storage
-        const val KEY_CURRENT_GAME_JSON = "current_game_json"
         const val KEY_CURRENT_MANUAL_GAME = "current_manual_game"
 
         // Lichess settings

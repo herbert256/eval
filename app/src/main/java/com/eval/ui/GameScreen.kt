@@ -74,18 +74,13 @@ fun GameScreenContent(
     }
 
     // Calculate background color based on game result
-    val backgroundColor = remember(uiState.game) {
+    val backgroundColor = remember(uiState.game, uiState.userPlayedBlack) {
         val game = uiState.game
         if (game == null) {
             AppColors.CardBackground  // Default dark gray when no game loaded
         } else {
-            val searchedUser = viewModel.savedLichessUsername.lowercase()
-            val whitePlayerName = game.players.white.user?.name?.lowercase() ?: ""
-            val blackPlayerName = game.players.black.user?.name?.lowercase() ?: ""
-
-            // Determine which color the user played
-            val userPlayedWhite = searchedUser.isNotEmpty() && searchedUser == whitePlayerName
-            val userPlayedBlack = searchedUser.isNotEmpty() && searchedUser == blackPlayerName
+            val userPlayedBlack = uiState.userPlayedBlack
+            val userPlayedWhite = !uiState.userPlayedBlack
 
             when {
                 game.winner == "white" && userPlayedWhite -> AppColors.ResultWinBackground

@@ -338,8 +338,7 @@ internal class AnalysisOrchestrator(
     /**
      * Calculate move qualities based on evaluation changes.
      */
-    fun calculateMoveQualities(): Map<Int, MoveQuality> {
-        val scores = getMergedScores()
+    fun calculateMoveQualities(scores: Map<Int, MoveScore> = getMergedScores()): Map<Int, MoveQuality> {
         if (scores.isEmpty()) return emptyMap()
 
         val qualities = mutableMapOf<Int, MoveQuality>()
@@ -387,7 +386,7 @@ internal class AnalysisOrchestrator(
         val state = getUiState()
         val filledAnalyseScores = state.previewScores + state.analyseScores
 
-        val moveQualities = calculateMoveQualities()
+        val moveQualities = calculateMoveQualities(filledAnalyseScores)
         val boardHistory = getBoardHistory()
 
         viewModelScope.launch {
