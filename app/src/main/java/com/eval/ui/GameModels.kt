@@ -313,7 +313,6 @@ data class GameUiState(
     val analyseScores: Map<Int, MoveScore> = emptyMap(),     // Analyse stage scores
     val moveQualities: Map<Int, MoveQuality> = emptyMap(),   // Move quality assessments
     val autoAnalysisCurrentScore: MoveScore? = null,
-    val remainingAnalysisMoves: List<Int> = emptyList(),
     // Lichess settings
     val lichessMaxGames: Int = 10,
     // General settings (fullScreenMode is stored here, not persistent)

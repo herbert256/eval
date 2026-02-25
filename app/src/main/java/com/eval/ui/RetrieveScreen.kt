@@ -1070,7 +1070,7 @@ private fun TournamentsScreen(
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        items(uiState.tournamentGames) { game ->
+                        items(uiState.tournamentGames, key = { it.id }) { game ->
                             TournamentGameRow(
                                 game = game,
                                 onClick = { viewModel.selectTournamentGame(game) }
@@ -1084,7 +1084,7 @@ private fun TournamentsScreen(
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(uiState.tournamentsList) { tournament ->
+                    items(uiState.tournamentsList, key = { it.id }) { tournament ->
                         TournamentRow(
                             tournament = tournament,
                             serverColor = serverColor,
@@ -1317,7 +1317,7 @@ private fun BroadcastsScreen(
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        items(uiState.broadcastGames) { game ->
+                        items(uiState.broadcastGames, key = { it.id }) { game ->
                             TournamentGameRow(
                                 game = game,
                                 onClick = { viewModel.selectBroadcastGame(game) }
@@ -1331,7 +1331,7 @@ private fun BroadcastsScreen(
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(uiState.selectedBroadcast.rounds) { round ->
+                    items(uiState.selectedBroadcast.rounds, key = { it.id }) { round ->
                         BroadcastRoundRow(
                             round = round,
                             serverColor = serverColor,
@@ -1345,7 +1345,7 @@ private fun BroadcastsScreen(
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(uiState.broadcastsList) { broadcast ->
+                    items(uiState.broadcastsList, key = { it.id }) { broadcast ->
                         BroadcastRow(
                             broadcast = broadcast,
                             serverColor = serverColor,
@@ -1542,7 +1542,7 @@ private fun PgnFileScreen(
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        items(uiState.pgnGamesForSelectedEvent) { game ->
+                        items(uiState.pgnGamesForSelectedEvent, key = { it.id }) { game ->
                             PgnGameRow(
                                 game = game,
                                 onClick = { viewModel.selectPgnGameFromEvent(game) }
@@ -1556,7 +1556,7 @@ private fun PgnFileScreen(
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(uiState.pgnEvents) { event ->
+                    items(uiState.pgnEvents, key = { it }) { event ->
                         val gameCount = uiState.pgnGamesByEvent[event]?.size ?: 0
                         PgnEventRow(
                             eventName = event,
@@ -1716,7 +1716,7 @@ private fun LichessTvScreen(
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(uiState.tvChannels) { channel ->
+                    items(uiState.tvChannels, key = { it.gameId }) { channel ->
                         TvChannelRow(
                             channel = channel,
                             serverColor = serverColor,
@@ -1848,7 +1848,7 @@ private fun StreamersScreen(
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(uiState.streamersList) { streamer ->
+                    items(uiState.streamersList, key = { it.username }) { streamer ->
                         StreamerRow(
                             streamer = streamer,
                             onClick = { viewModel.selectStreamer(streamer) }
@@ -2292,7 +2292,7 @@ private fun OpeningSelectionScreen(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                items(filteredOpenings) { opening ->
+                items(filteredOpenings, key = { it.eco }) { opening ->
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()

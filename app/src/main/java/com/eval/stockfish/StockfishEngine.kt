@@ -124,7 +124,7 @@ class StockfishEngine(private val context: Context) {
             }
             null
         } catch (e: android.content.pm.PackageManager.NameNotFoundException) {
-            android.util.Log.d("StockfishEngine", "System Stockfish package not installed")
+            if (com.eval.BuildConfig.DEBUG) android.util.Log.d("StockfishEngine", "System Stockfish package not installed")
             null
         } catch (e: Exception) {
             android.util.Log.e("StockfishEngine", "Error finding system Stockfish: ${e.message}")
@@ -191,7 +191,7 @@ class StockfishEngine(private val context: Context) {
         }
         sendCommand("stop")
         sendCommand("ucinewgame")
-        android.util.Log.d("StockfishEngine", "New game started (hash cleared)")
+        if (com.eval.BuildConfig.DEBUG) android.util.Log.d("StockfishEngine", "New game started (hash cleared)")
     }
 
     fun configure(threads: Int, hashMb: Int, multiPv: Int, useNnue: Boolean = true) {
@@ -216,7 +216,7 @@ class StockfishEngine(private val context: Context) {
         sendCommand("setoption name MultiPV value $multiPv")
         sendCommand("setoption name Use NNUE value $useNnue")
 
-        android.util.Log.d("StockfishEngine", "Configured: Threads=$safeThreads, Hash=$safeHashMb, MultiPV=$multiPv, NNUE=$useNnue")
+        if (com.eval.BuildConfig.DEBUG) android.util.Log.d("StockfishEngine", "Configured: Threads=$safeThreads, Hash=$safeHashMb, MultiPV=$multiPv, NNUE=$useNnue")
         // Note: The analysis job will send "isready" and wait for "readyok" before starting
     }
 
@@ -240,7 +240,7 @@ class StockfishEngine(private val context: Context) {
         }
 
         if (!isActive) {
-            android.util.Log.d("StockfishEngine", "$caller: cancelled before analysis")
+            if (com.eval.BuildConfig.DEBUG) android.util.Log.d("StockfishEngine", "$caller: cancelled before analysis")
             return false
         }
         if (line == null) {
@@ -292,7 +292,7 @@ class StockfishEngine(private val context: Context) {
     }
 
     fun analyzeWithTime(fen: String, timeMs: Int) {
-        android.util.Log.d("StockfishEngine", "analyzeWithTime: starting analysis for ${timeMs}ms")
+        if (com.eval.BuildConfig.DEBUG) android.util.Log.d("StockfishEngine", "analyzeWithTime: starting analysis for ${timeMs}ms")
         startAnalysis("analyzeWithTime", fen, "go movetime $timeMs") { linesRead ->
             if (linesRead < 3) {
                 android.util.Log.e("StockfishEngine", "analyzeWithTime: analysis ended early, only $linesRead lines read")

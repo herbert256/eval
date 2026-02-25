@@ -18,7 +18,7 @@ object NavRoutes {
     const val SETTINGS = "settings"
     const val HELP = "help"
     const val RETRIEVE = "retrieve"
-    const val PLAYER_INFO = "player_info"
+
 }
 
 /**
@@ -65,12 +65,6 @@ fun EvalNavHost(
             )
         }
 
-        composable(NavRoutes.PLAYER_INFO) {
-            PlayerInfoScreenNav(
-                viewModel = viewModel,
-                onNavigateBack = { navController.popBackStack() }
-            )
-        }
     }
 }
 

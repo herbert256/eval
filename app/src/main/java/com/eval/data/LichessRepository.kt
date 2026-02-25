@@ -648,7 +648,7 @@ class ChessRepository(
                 }
             }
 
-            android.util.Log.d("ChessRepository", "getLichessTvChannels: returning ${result.size} channels")
+            if (com.eval.BuildConfig.DEBUG) android.util.Log.d("ChessRepository", "getLichessTvChannels: returning ${result.size} channels")
             Result.Success(result)
         } catch (e: Exception) {
             android.util.Log.e("ChessRepository", "getLichessTvChannels: Exception: ${e.message}", e)
@@ -715,9 +715,9 @@ class ChessRepository(
                 // Timeout expected - we've read all available data
             } catch (e: java.net.SocketTimeoutException) {
                 // Timeout expected - we've read all available data
+            } finally {
+                responseBody.close()
             }
-
-            responseBody.close()
 
             if (lines.isEmpty()) {
                 return@withContext Result.Error("No game data in stream")
@@ -850,9 +850,9 @@ class ChessRepository(
                 }
             } catch (e: java.io.IOException) {
                 // Stream closed, possibly game ended
+            } finally {
+                responseBody.close()
             }
-
-            responseBody.close()
             emit(LiveGameEvent.Disconnected)
         } catch (e: Exception) {
             emit(LiveGameEvent.Error(e.message ?: "Stream error"))
@@ -1208,8 +1208,13 @@ class ChessRepository(
 
     companion object {
         private val openingExplorerApi: OpeningExplorerApi by lazy {
+            val client = okhttp3.OkHttpClient.Builder()
+                .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                .build()
             retrofit2.Retrofit.Builder()
                 .baseUrl("https://explorer.lichess.org/")
+                .client(client)
                 .addConverterFactory(retrofit2.converter.gson.GsonConverterFactory.create())
                 .build()
                 .create(OpeningExplorerApi::class.java)

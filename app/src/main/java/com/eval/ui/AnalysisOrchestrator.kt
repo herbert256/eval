@@ -7,6 +7,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.yield
 import java.util.concurrent.atomic.AtomicLong
 
@@ -20,11 +22,11 @@ internal class AnalysisOrchestrator(
     private val updateUiState: (GameUiState.() -> GameUiState) -> Unit,
     private val viewModelScope: CoroutineScope,
     private val getBoardHistory: () -> MutableList<ChessBoard>,
-    private val storeAnalysedGame: () -> Unit,
     private val fetchOpeningExplorer: () -> Unit,
     private val saveManualGame: (AnalysedGame) -> Unit = {},
     private val storeManualGameToList: (AnalysedGame) -> Unit = {}
 ) {
+    private val analysisMutex = Mutex()
     var autoAnalysisJob: Job? = null
     var manualAnalysisJob: Job? = null
     var currentAnalysisFen: String? = null
@@ -79,18 +81,17 @@ internal class AnalysisOrchestrator(
 
                 val boardHistory = getBoardHistory()
                 val expectedBoardHistorySize = boardHistory.size
-                android.util.Log.d("Analysis", "START: moves=${moves.size}, boardHistory=$expectedBoardHistorySize")
+                if (com.eval.BuildConfig.DEBUG) android.util.Log.d("Analysis", "START: moves=${moves.size}, boardHistory=$expectedBoardHistorySize")
 
                 // ===== PREVIEW STAGE =====
-                android.util.Log.d("Analysis", "Starting PREVIEW stage")
+                if (com.eval.BuildConfig.DEBUG) android.util.Log.d("Analysis", "Starting PREVIEW stage")
 
                 updateUiState {
                     copy(
                         currentStage = AnalysisStage.PREVIEW,
                         previewScores = emptyMap(),
                         analyseScores = emptyMap(),
-                        autoAnalysisCurrentScore = null,
-                        remainingAnalysisMoves = buildMoveIndices()
+                        autoAnalysisCurrentScore = null
                     )
                 }
 
@@ -124,18 +125,17 @@ internal class AnalysisOrchestrator(
                 )
 
                 if (!previewComplete) {
-                    android.util.Log.d("Analysis", "Preview stage was interrupted or failed")
+                    if (com.eval.BuildConfig.DEBUG) android.util.Log.d("Analysis", "Preview stage was interrupted or failed")
                     return@launch
                 }
 
                 // ===== ANALYSE STAGE =====
-                android.util.Log.d("Analysis", "Starting ANALYSE stage")
+                if (com.eval.BuildConfig.DEBUG) android.util.Log.d("Analysis", "Starting ANALYSE stage")
 
                 updateUiState {
                     copy(
                         currentStage = AnalysisStage.ANALYSE,
-                        autoAnalysisCurrentScore = null,
-                        remainingAnalysisMoves = buildMoveIndices()
+                        autoAnalysisCurrentScore = null
                     )
                 }
 
@@ -169,14 +169,12 @@ internal class AnalysisOrchestrator(
                 )
 
                 if (!analyseComplete) {
-                    android.util.Log.d("Analysis", "Analyse stage was interrupted")
+                    if (com.eval.BuildConfig.DEBUG) android.util.Log.d("Analysis", "Analyse stage was interrupted")
                     return@launch
                 }
 
                 // ===== MANUAL STAGE =====
-                android.util.Log.d("Analysis", "Analysis complete, entering MANUAL stage")
-
-                storeAnalysedGame()
+                if (com.eval.BuildConfig.DEBUG) android.util.Log.d("Analysis", "Analysis complete, entering MANUAL stage")
 
                 val biggestChangeMoveIndex = findBiggestScoreChangeMove()
                 enterManualStageInternal(biggestChangeMoveIndex)
@@ -207,7 +205,7 @@ internal class AnalysisOrchestrator(
         configureEngine: () -> Unit
     ): Boolean {
         val moveIndices = buildMoveIndices()
-        android.util.Log.d("Analysis", "$stageName: analyzing ${moveIndices.size} moves, time=${timePerMoveMs}ms")
+        if (com.eval.BuildConfig.DEBUG) android.util.Log.d("Analysis", "$stageName: analyzing ${moveIndices.size} moves, time=${timePerMoveMs}ms")
 
         val remainingMoves = moveIndices.toMutableList()
         var analyzedCount = 0
@@ -231,8 +229,7 @@ internal class AnalysisOrchestrator(
                     currentBoard = board,
                     currentMoveIndex = moveIndex,
                     autoAnalysisCurrentScore = null,
-                    analysisResult = null,
-                    remainingAnalysisMoves = remainingMoves.toList()
+                    analysisResult = null
                 )
             }
 
@@ -295,7 +292,7 @@ internal class AnalysisOrchestrator(
             }
         }
 
-        android.util.Log.d("Analysis", "$stageName completed: analyzed=$analyzedCount out of ${moveIndices.size} moves")
+        if (com.eval.BuildConfig.DEBUG) android.util.Log.d("Analysis", "$stageName completed: analyzed=$analyzedCount out of ${moveIndices.size} moves")
         return true
     }
 
@@ -411,7 +408,6 @@ internal class AnalysisOrchestrator(
                     currentMoveIndex = validIndex,
                     currentBoard = board.copy(),
                     autoAnalysisCurrentScore = null,
-                    remainingAnalysisMoves = emptyList(),
                     stockfishReady = false,
                     analysisResult = null,
                     analysisResultFen = null,
@@ -590,26 +586,28 @@ internal class AnalysisOrchestrator(
     fun restartAnalysisForExploringLine() {
         manualAnalysisJob?.cancel()
 
-        viewModelScope.launch {
-            stockfish.stop()
+        manualAnalysisJob = viewModelScope.launch {
+            analysisMutex.withLock {
+                stockfish.stop()
 
-            val thisRequestId = analysisRequestId.incrementAndGet()
+                val thisRequestId = analysisRequestId.incrementAndGet()
 
-            val board = getUiState().currentBoard
-            val fenToAnalyze = board.getFen()
-            currentAnalysisFen = fenToAnalyze
+                val board = getUiState().currentBoard
+                val fenToAnalyze = board.getFen()
+                currentAnalysisFen = fenToAnalyze
 
-            updateUiState {
-                copy(analysisResultFen = null)
-            }
+                updateUiState {
+                    copy(analysisResultFen = null)
+                }
 
-            delay(50)
+                delay(50)
 
-            stockfish.newGame()
-            delay(50)
+                stockfish.newGame()
+                delay(50)
 
-            if (getUiState().currentStage == AnalysisStage.MANUAL) {
-                ensureStockfishAnalysis(fenToAnalyze, thisRequestId)
+                if (getUiState().currentStage == AnalysisStage.MANUAL) {
+                    ensureStockfishAnalysis(fenToAnalyze, thisRequestId)
+                }
             }
         }
     }
@@ -624,36 +622,38 @@ internal class AnalysisOrchestrator(
         val validIndex = moveIndex.coerceIn(-1, boardHistory.size - 2)
         val board = boardHistory.getOrNull(validIndex + 1) ?: ChessBoard()
 
-        viewModelScope.launch {
-            stockfish.stop()
+        manualAnalysisJob = viewModelScope.launch {
+            analysisMutex.withLock {
+                stockfish.stop()
 
-            val thisRequestId = analysisRequestId.incrementAndGet()
+                val thisRequestId = analysisRequestId.incrementAndGet()
 
-            val fenToAnalyze = board.getFen()
-            currentAnalysisFen = fenToAnalyze
+                val fenToAnalyze = board.getFen()
+                currentAnalysisFen = fenToAnalyze
 
-            val state = getUiState()
-            val openingName = if (validIndex >= 0 && state.moves.isNotEmpty()) {
-                com.eval.data.OpeningBook.getOpeningName(state.moves, validIndex)
-            } else null
+                val state = getUiState()
+                val openingName = if (validIndex >= 0 && state.moves.isNotEmpty()) {
+                    com.eval.data.OpeningBook.getOpeningName(state.moves, validIndex)
+                } else null
 
-            updateUiState {
-                copy(
-                    currentMoveIndex = validIndex,
-                    currentBoard = board.copy(),
-                    currentOpeningName = openingName,
-                    analysisResultFen = null
-                )
-            }
+                updateUiState {
+                    copy(
+                        currentMoveIndex = validIndex,
+                        currentBoard = board.copy(),
+                        currentOpeningName = openingName,
+                        analysisResultFen = null
+                    )
+                }
 
-            delay(50)
+                delay(50)
 
-            stockfish.newGame()
-            delay(50)
+                stockfish.newGame()
+                delay(50)
 
-            if (getUiState().currentStage == AnalysisStage.MANUAL) {
-                ensureStockfishAnalysis(fenToAnalyze, thisRequestId)
-                fetchOpeningExplorer()
+                if (getUiState().currentStage == AnalysisStage.MANUAL) {
+                    ensureStockfishAnalysis(fenToAnalyze, thisRequestId)
+                    fetchOpeningExplorer()
+                }
             }
         }
     }

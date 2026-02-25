@@ -16,6 +16,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
@@ -89,6 +90,12 @@ fun ColorPickerDialog(
                 .clip(RoundedCornerShape(8.dp))
                 .border(1.dp, Color.Gray, RoundedCornerShape(8.dp))
         ) {
+            // Cache gradient bitmap to avoid redrawing thousands of rects on every touch
+            var cachedBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+            var cachedBrightness by remember { mutableFloatStateOf(-1f) }
+            var cachedWidth by remember { mutableIntStateOf(0) }
+            var cachedHeight by remember { mutableIntStateOf(0) }
+
             Canvas(
                 modifier = Modifier
                     .fillMaxSize()
@@ -106,17 +113,33 @@ fun ColorPickerDialog(
                         }
                     }
             ) {
-                // Draw hue/saturation gradient
-                val step = 4f
-                for (x in 0 until size.width.toInt() step step.toInt()) {
-                    for (y in 0 until size.height.toInt() step step.toInt()) {
-                        val h = x / size.width * 360f
-                        val s = 1f - y / size.height
-                        val rgb = android.graphics.Color.HSVToColor(floatArrayOf(h, s, brightness))
-                        drawRect(
-                            color = Color(rgb),
-                            topLeft = Offset(x.toFloat(), y.toFloat()),
-                            size = Size(step, step)
+                val w = size.width.toInt()
+                val h = size.height.toInt()
+                if (w > 0 && h > 0) {
+                    // Regenerate bitmap only when brightness or size changes
+                    if (cachedBitmap == null || cachedBrightness != brightness || cachedWidth != w || cachedHeight != h) {
+                        val step = 4
+                        val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+                        val canvas = android.graphics.Canvas(bmp)
+                        val paint = android.graphics.Paint()
+                        val hsvValues = floatArrayOf(0f, 0f, brightness)
+                        for (x in 0 until w step step) {
+                            for (y in 0 until h step step) {
+                                hsvValues[0] = x.toFloat() / w * 360f
+                                hsvValues[1] = 1f - y.toFloat() / h
+                                paint.color = android.graphics.Color.HSVToColor(hsvValues)
+                                canvas.drawRect(x.toFloat(), y.toFloat(), (x + step).toFloat(), (y + step).toFloat(), paint)
+                            }
+                        }
+                        cachedBitmap = bmp
+                        cachedBrightness = brightness
+                        cachedWidth = w
+                        cachedHeight = h
+                    }
+                    cachedBitmap?.let { bmp ->
+                        drawImage(
+                            bmp.asImageBitmap(),
+                            topLeft = Offset.Zero
                         )
                     }
                 }

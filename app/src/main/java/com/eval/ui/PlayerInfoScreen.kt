@@ -28,47 +28,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * Player info screen wrapper for navigation.
- */
-@Composable
-fun PlayerInfoScreenNav(
-    viewModel: GameViewModel,
-    onNavigateBack: () -> Unit
-) {
-    val uiState by viewModel.uiState.collectAsState()
-    val context = LocalContext.current
-
-    PlayerInfoScreen(
-        playerInfo = uiState.playerInfo,
-        isLoading = uiState.playerInfoLoading,
-        error = uiState.playerInfoError,
-        games = uiState.playerGames,
-        gamesLoading = uiState.playerGamesLoading,
-        currentPage = uiState.playerGamesPage,
-        hasMoreGames = uiState.playerGamesHasMore,
-        onNextPage = { pageSize -> viewModel.nextPlayerGamesPage(pageSize) },
-        onPreviousPage = { viewModel.previousPlayerGamesPage() },
-        onGameSelected = { game -> viewModel.selectGameFromPlayerInfo(game) },
-        onAiReportsClick = {
-            uiState.playerInfo?.let { info ->
-                val serverName = if (uiState.playerInfoError != null) {
-                    null
-                } else {
-                    "lichess.org"
-                }
-                if (serverName != null) {
-                    viewModel.launchServerPlayerAnalysis(context, info.username, serverName)
-                } else {
-                    viewModel.launchOtherPlayerAnalysis(context, info.username)
-                }
-            }
-        },
-        hasAiApiKeys = viewModel.isAiAppInstalled(context),
-        onDismiss = onNavigateBack
-    )
-}
-
-/**
  * Full screen showing player information from Lichess.
  */
 @Composable

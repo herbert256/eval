@@ -117,7 +117,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             updateUiState = { transform -> _uiState.value = _uiState.value.transform() },
             viewModelScope = viewModelScope,
             getBoardHistory = { boardHistory },
-            storeAnalysedGame = { },
             fetchOpeningExplorer = { fetchOpeningExplorer() },
             saveManualGame = { game -> gameStorage.saveManualStageGame(game) },
             storeManualGameToList = { game ->

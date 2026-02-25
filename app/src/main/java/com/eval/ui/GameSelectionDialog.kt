@@ -59,7 +59,7 @@ fun GameSelectionScreen(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                items(games) { game ->
+                items(games, key = { it.id }) { game ->
                     GameListItem(
                         game = game,
                         username = username,
@@ -217,7 +217,7 @@ fun PreviousRetrievesScreen(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                items(retrieves) { entry ->
+                items(retrieves, key = { "${it.accountName}|${it.server}" }) { entry ->
                     RetrieveListItem(
                         entry = entry,
                         onClick = { onSelectRetrieve(entry) }
@@ -350,7 +350,7 @@ fun SelectedRetrieveGamesScreen(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    items(currentGames) { game ->
+                    items(currentGames, key = { it.id }) { game ->
                         RetrieveGameListItem(
                             game = game,
                             accountName = entry.accountName,
@@ -596,7 +596,7 @@ fun AnalysedGamesSelectionScreen(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    items(currentGames) { game ->
+                    items(currentGames, key = { it.timestamp }) { game ->
                         AnalysedGameListItem(
                             game = game,
                             dateFormat = dateFormat,
