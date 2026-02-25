@@ -31,7 +31,7 @@ cp app/build/outputs/apk/debug/app-debug.apk /Users/herbert/cloud/eval.apk
 
 Eval is an Android chess analysis app. It fetches games from Lichess.org and Chess.com, parses PGN, and provides three-stage Stockfish 17.1 analysis with an interactive board. AI reports are delegated to an external companion app (`com.ai`).
 
-**Codebase:** 46 Kotlin files, ~22,300 lines | **SDK:** minSdk 26, targetSdk 34 | **UI:** Jetpack Compose + Material 3
+**Codebase:** 47 Kotlin files, ~23,000 lines | **SDK:** minSdk 26, targetSdk 34 | **UI:** Jetpack Compose + Material 3
 
 ## Architecture
 
@@ -45,9 +45,9 @@ com.eval/
 │   └── PgnParser.kt (98) - PGN parsing with clock time extraction
 ├── data/
 │   ├── LichessApi.kt (304) - Retrofit interface for Lichess API
-│   ├── ChessComApi.kt (156) - Retrofit interface for Chess.com API
+│   ├── ChessComApi.kt (178) - Retrofit interface for Chess.com API
 │   ├── LichessModels.kt (40) - Data classes: LichessGame, Players, Clock
-│   ├── LichessRepository.kt (1,280) - Repository with ChessServer enum (Lichess + Chess.com)
+│   ├── LichessRepository.kt (1,365) - Repository with ChessServer enum (Lichess + Chess.com)
 │   ├── OpeningBook.kt (217) - ECO opening identification
 │   └── OpeningExplorerApi.kt (57) - Opening statistics API
 ├── stockfish/
@@ -60,36 +60,36 @@ com.eval/
 ├── audio/
 │   └── MoveSoundPlayer.kt (83) - Move sound effects
 └── ui/
-    ├── GameViewModel.kt (1,213) - Central state management
+    ├── GameViewModel.kt (1,210) - Central state management
     ├── AnalysisOrchestrator.kt (666) - 3-stage analysis pipeline
-    ├── GameLoader.kt (736) - Game loading from APIs, files, storage
+    ├── GameLoader.kt (770) - Game loading from APIs, files, storage
     ├── BoardNavigationManager.kt (324) - Move navigation, line exploration
-    ├── ContentSourceManager.kt (581) - Tournaments, broadcasts, TV, streamers
+    ├── ContentSourceManager.kt (598) - Tournaments, broadcasts, TV, streamers
     ├── LiveGameManager.kt (200) - Real-time game following
     ├── AiAppLauncher.kt (260) - External AI app integration via intents
     ├── AiSettingsModels.kt (80) - AI prompt data classes and defaults
-    ├── GameScreen.kt (974) - Main screen, share/export, AI prompts
+    ├── GameScreen.kt (973) - Main screen, share/export, AI prompts
     ├── GameContent.kt (1,837) - Board, players, moves, result bar, eval bar
     ├── ChessBoardView.kt (661) - Canvas-based interactive chess board
     ├── AnalysisComponents.kt (872) - Evaluation graphs, analysis panel
     ├── MovesDisplay.kt (222) - Move list with scores and piece symbols
     ├── OpeningExplorerPanel.kt (234) - Opening statistics display
-    ├── PlayerInfoScreen.kt (807) - Player profile and game history
-    ├── GameSelectionDialog.kt (799) - Game selection from multiple games
-    ├── RetrieveScreen.kt (2,088) - Game retrieval UI with all sources
+    ├── PlayerInfoScreen.kt (808) - Player profile and game history
+    ├── GameSelectionDialog.kt (801) - Game selection from multiple games
+    ├── RetrieveScreen.kt (2,437) - Game retrieval UI with all sources
     ├── SettingsScreen.kt (631) - Settings navigation + AI prompts list
     ├── StockfishSettingsScreen.kt (441) - Engine settings for 3 stages
     ├── ArrowSettingsScreen.kt (278) - Arrow display configuration
     ├── BoardLayoutSettingsScreen.kt (378) - Board colors, pieces, eval bar
     ├── InterfaceSettingsScreen.kt (329) - UI visibility per stage
     ├── GraphSettingsScreen.kt (447) - Graph color and range settings
-    ├── GeneralSettingsScreen.kt (177) - General app settings
+    ├── GeneralSettingsScreen.kt (143) - General app settings
     ├── HelpScreen.kt (291) - In-app help documentation
     ├── ColorPickerDialog.kt (252) - HSV color picker (full-screen)
-    ├── GameModels.kt (420) - Data classes and enums
-    ├── SettingsPreferences.kt (570) - SharedPreferences persistence
+    ├── GameModels.kt (418) - Data classes and enums
+    ├── SettingsPreferences.kt (576) - SharedPreferences persistence
     ├── GameStorageManager.kt (183) - Game persistence and retrieval
-    ├── SharedComponents.kt (168) - EvalTitleBar, ColorSettingRow, etc.
+    ├── SharedComponents.kt (170) - EvalTitleBar, ColorSettingRow, etc.
     ├── Navigation.kt (126) - Jetpack Navigation routes
     └── theme/Theme.kt (32) - Material3 dark theme
 ```
@@ -134,7 +134,7 @@ data class GameUiState(...)          // ~145 fields - central UI state
 data class StockfishSettings(...)    // Combined settings for 3 stages
 data class BoardLayoutSettings(...)  // Board visual settings + eval bar
 data class GraphSettings(...)        // Graph colors, ranges, scales
-data class GeneralSettings(...)      // Pagination, sounds, username
+data class GeneralSettings(...)      // Sounds, username
 data class MoveScore(...)            // score, isMate, mateIn, depth, nodes, nps
 data class MoveDetails(...)          // san, from, to, isCapture, pieceType, clockTime
 data class AnalysedGame(...)         // Stored game with all analysis data
@@ -186,7 +186,7 @@ All settings via `SettingsPreferences` using SharedPreferences (`eval_prefs`). K
 - Board layout: colors, coordinates, player bars, eval bar
 - Graph: colors, ranges, scales
 - Interface visibility: ~23 toggles across 3 stages
-- General: pagination, move sounds, Lichess username, Chess.com username
+- General: move sounds, Lichess username, Chess.com username
 - AI prompts: JSON list of `AiPromptEntry`
 - Settings export/import: Full JSON round-trip with type preservation
 
@@ -234,13 +234,14 @@ Use `restartAnalysisForExploringLine()` in `AnalysisOrchestrator`: stop -> newGa
 - **Dark theme only**: Hardcoded dark color scheme via `AppColors` object
 - **Title bar always visible**: `EvalTitleBar` shown on every screen
 - **Color pickers**: Full-screen HSV picker with early-return pattern via `activeColorPicker` state
+- **Dynamic pagination**: Page sizes are computed from available screen space (no manual setting). Screens with `weight(1f)` use `BoxWithConstraints`; scrollable screens use `LocalConfiguration.current.screenHeightDp`.
 
 ## Verification Checklist
 
 - [ ] Build: `JAVA_HOME=/opt/homebrew/opt/openjdk@17 ./gradlew assembleDebug`
 - [ ] No `AlertDialog`, `Dialog`, or `ExposedDropdownMenu` in UI code
 - [ ] Title bar visible on all screens
-- [ ] Load game from Lichess
+- [ ] Load game from Lichess and Chess.com
 - [ ] Full analysis pipeline (Preview -> Analyse -> Manual)
 - [ ] Arrow modes cycle correctly
 - [ ] Settings persist across restarts
