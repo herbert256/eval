@@ -164,16 +164,17 @@ private fun GameListItem(
         // Column 4: Result
         Box(
             modifier = Modifier
-                .width(50.dp)
+                .width(56.dp)
                 .background(rowBackgroundColor)
-                .padding(horizontal = 8.dp, vertical = 10.dp),
+                .padding(horizontal = 4.dp, vertical = 10.dp),
             contentAlignment = Alignment.CenterEnd
         ) {
             Text(
                 text = resultText,
                 fontWeight = FontWeight.Bold,
                 fontSize = 14.sp,
-                color = resultColor
+                color = resultColor,
+                maxLines = 1
             )
         }
     }
@@ -304,7 +305,7 @@ fun SelectedRetrieveGamesScreen(
     onDismiss: () -> Unit
 ) {
     val serverName = if (entry.server == ChessServer.LICHESS) "lichess.org" else "chess.com"
-    val serverColor = if (entry.server == ChessServer.LICHESS) AppColors.LichessGreen else Color(0xFF769656)
+    val serverColor = AppColors.PaginationLink
 
     // Handle back navigation
     BackHandler { onDismiss() }
@@ -496,7 +497,7 @@ private fun RetrieveGameListItem(
         // Column 1: Opponent name
         Box(
             modifier = Modifier
-                .weight(1f)
+                .weight(1.2f)
                 .background(rowBackgroundColor)
                 .padding(horizontal = 8.dp, vertical = 10.dp)
         ) {
@@ -512,7 +513,7 @@ private fun RetrieveGameListItem(
         // Column 2: Format/speed
         Box(
             modifier = Modifier
-                .weight(0.6f)
+                .weight(0.7f)
                 .background(rowBackgroundColor)
                 .padding(horizontal = 8.dp, vertical = 10.dp)
         ) {
@@ -527,16 +528,17 @@ private fun RetrieveGameListItem(
         // Column 3: Result
         Box(
             modifier = Modifier
-                .width(50.dp)
+                .width(56.dp)
                 .background(rowBackgroundColor)
-                .padding(horizontal = 8.dp, vertical = 10.dp),
+                .padding(horizontal = 4.dp, vertical = 10.dp),
             contentAlignment = Alignment.CenterEnd
         ) {
             Text(
                 text = resultText,
                 fontWeight = FontWeight.Bold,
                 fontSize = 14.sp,
-                color = resultColor
+                color = resultColor,
+                maxLines = 1
             )
         }
     }
@@ -737,16 +739,17 @@ private fun AnalysedGameListItem(
             // Column 3: Result
             Box(
                 modifier = Modifier
-                    .width(50.dp)
+                    .width(56.dp)
                     .background(Color.White)
-                    .padding(horizontal = 8.dp, vertical = 10.dp),
+                    .padding(horizontal = 4.dp, vertical = 10.dp),
                 contentAlignment = Alignment.CenterEnd
             ) {
                 Text(
                     text = resultText,
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp,
-                    color = resultColor
+                    color = resultColor,
+                    maxLines = 1
                 )
             }
         }
@@ -791,9 +794,9 @@ private fun AnalysedGameListItem(
             // Column 3: Empty spacer to align with result column
             Box(
                 modifier = Modifier
-                    .width(50.dp)
+                    .width(56.dp)
                     .background(Color.Black)
-                    .padding(horizontal = 8.dp, vertical = 10.dp)
+                    .padding(horizontal = 4.dp, vertical = 10.dp)
             )
         }
     }

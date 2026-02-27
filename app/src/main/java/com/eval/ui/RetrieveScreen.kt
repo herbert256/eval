@@ -426,7 +426,7 @@ private fun RetrieveMainScreen(
                     .fillMaxWidth()
                     .clickable { onLichessClick() },
                 colors = CardDefaults.cardColors(
-                    containerColor = AppColors.LichessGreen
+                    containerColor = AppColors.BlueGrayAccent
                 ),
                 shape = RoundedCornerShape(12.dp)
             ) {
@@ -457,7 +457,7 @@ private fun RetrieveMainScreen(
                     .fillMaxWidth()
                     .clickable { onChessComClick() },
                 colors = CardDefaults.cardColors(
-                    containerColor = AppColors.ChessComGreen
+                    containerColor = AppColors.BlueGrayAccent
                 ),
                 shape = RoundedCornerShape(12.dp)
             ) {
