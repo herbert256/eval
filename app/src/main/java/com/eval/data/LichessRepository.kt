@@ -529,7 +529,10 @@ class ChessRepository(
     }
 
     private fun extractPgnTag(pgn: String, tagName: String): String? {
-        val regex = """\[$tagName\s+"([^"]+)"\]""".toRegex()
+        // Pattern.quote escapes any regex metachars so tagName values like
+        // "Foo+Bar" or "A.B" don't get interpreted as quantifiers/wildcards.
+        val quoted = java.util.regex.Pattern.quote(tagName)
+        val regex = """\[$quoted\s+"([^"]+)"\]""".toRegex()
         return regex.find(pgn)?.groupValues?.get(1)
     }
 
