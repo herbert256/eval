@@ -360,8 +360,13 @@ class StockfishEngine(private val context: Context) {
             return
         }
 
-        analysisJob?.cancel()
+        val previousJob = analysisJob
         analysisJob = scope.launch {
+            // Wait for the previous analysis coroutine to fully unwind before we
+            // acquire the mutex. Without the join, the fair mutex would hand us
+            // the lock eventually, but we'd race with the old coroutine's catch/
+            // cleanup and could send a "stop" in parallel with it.
+            previousJob?.cancelAndJoin()
             analysisMutex.withLock {
                 try {
                     // Stop any ongoing analysis
