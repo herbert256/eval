@@ -5,6 +5,7 @@ import com.eval.chess.PieceColor
 import com.eval.stockfish.StockfishEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -583,9 +584,11 @@ internal class AnalysisOrchestrator(
      * Restart Stockfish analysis for exploring line moves.
      */
     fun restartAnalysisForExploringLine() {
-        manualAnalysisJob?.cancel()
-
+        val previousJob = manualAnalysisJob
         manualAnalysisJob = viewModelScope.launch {
+            // Wait for the previous analysis coroutine to unwind before entering
+            // analysisMutex so the two don't interleave stop/newGame commands.
+            previousJob?.cancelAndJoin()
             analysisMutex.withLock {
                 stockfish.stop()
 
@@ -615,13 +618,14 @@ internal class AnalysisOrchestrator(
      * Restart analysis at a specific move.
      */
     fun restartAnalysisAtMove(moveIndex: Int) {
-        manualAnalysisJob?.cancel()
+        val previousJob = manualAnalysisJob
 
         val boardHistory = getBoardHistory()
         val validIndex = moveIndex.coerceIn(-1, boardHistory.size - 2)
         val board = boardHistory.getOrNull(validIndex + 1) ?: ChessBoard()
 
         manualAnalysisJob = viewModelScope.launch {
+            previousJob?.cancelAndJoin()
             analysisMutex.withLock {
                 stockfish.stop()
 
