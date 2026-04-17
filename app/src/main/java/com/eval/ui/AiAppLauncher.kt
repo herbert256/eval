@@ -4,9 +4,23 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import android.widget.Toast
+import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+private fun String.htmlEscape(): String = buildString(length) {
+    for (c in this@htmlEscape) when (c) {
+        '&' -> append("&amp;")
+        '<' -> append("&lt;")
+        '>' -> append("&gt;")
+        '"' -> append("&quot;")
+        '\'' -> append("&#39;")
+        else -> append(c)
+    }
+}
+
+private fun jsString(value: String): String = JSONObject.quote(value)
 
 /**
  * Utility object for launching the external AI app for report generation.
@@ -231,12 +245,12 @@ object AiAppLauncher {
             val isWhiteMove = currentMoveIndex % 2 == 0
             val sideText = if (isWhiteMove) "white" else "black"
             val pieceColor = if (isWhiteMove) "w" else "b"
-            val pieceCode = "${pieceColor}${lastMoveDetails.pieceType}"
+            val pieceCode = "${pieceColor}${lastMoveDetails.pieceType}".htmlEscape()
             val pieceImg = "<img src=\"https://lichess1.org/assets/piece/cburnett/$pieceCode.svg\" style=\"height:20px;vertical-align:text-top;\">"
             val separator = if (lastMoveDetails.isCapture) "x" else "-"
             val dots = if (isWhiteMove) "" else " ....."
             "<div style=\"text-align:center;padding:6px 12px;color:#ccc;font-size:18px;\">" +
-                "Last move $sideText: $moveNumber$dots $pieceImg ${lastMoveDetails.from} $separator ${lastMoveDetails.to}" +
+                "Last move $sideText: $moveNumber$dots $pieceImg ${lastMoveDetails.from.htmlEscape()} $separator ${lastMoveDetails.to.htmlEscape()}" +
                 "</div>"
         } else ""
 
@@ -250,11 +264,11 @@ object AiAppLauncher {
             "<script src=\"https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js\"></script>" +
             "<div style=\"max-width:400px;margin:20px auto;\">" +
             lastMoveHtml +
-            "<div style=\"background:#333;color:white;padding:8px 12px;font-weight:bold;text-align:center;\">$topPlayer</div>" +
+            "<div style=\"background:#333;color:white;padding:8px 12px;font-weight:bold;text-align:center;\">${topPlayer.htmlEscape()}</div>" +
             "<div id=\"board\" style=\"width:100%;\"></div>" +
-            "<div style=\"background:#333;color:white;padding:8px 12px;font-weight:bold;text-align:center;\">$bottomPlayer</div>" +
+            "<div style=\"background:#333;color:white;padding:8px 12px;font-weight:bold;text-align:center;\">${bottomPlayer.htmlEscape()}</div>" +
             toMoveHtml +
             "</div>" +
-            "<script>var board=Chessboard('board',{position:'$fen',orientation:'$orientation',pieceTheme:'https://lichess1.org/assets/piece/cburnett/{piece}.svg'});</script>"
+            "<script>var board=Chessboard('board',{position:${jsString(fen)},orientation:${jsString(orientation)},pieceTheme:'https://lichess1.org/assets/piece/cburnett/{piece}.svg'});</script>"
     }
 }

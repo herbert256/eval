@@ -2,12 +2,26 @@ package com.eval.export
 
 import com.eval.chess.PieceColor
 import com.eval.ui.GameUiState
+import org.json.JSONObject
 
 /**
  * Builds HTML reports for AI analysis results.
  * Contains pure functions that generate HTML strings from game state data.
  */
 object HtmlReportBuilder {
+
+    private fun String.htmlEscape(): String = buildString(length) {
+        for (c in this@htmlEscape) when (c) {
+            '&' -> append("&amp;")
+            '<' -> append("&lt;")
+            '>' -> append("&gt;")
+            '"' -> append("&quot;")
+            '\'' -> append("&#39;")
+            else -> append(c)
+        }
+    }
+
+    private fun jsString(value: String): String = JSONObject.quote(value)
 
     /**
      * Converts markdown text to a styled HTML document with chessboard and game data.
@@ -89,7 +103,7 @@ object HtmlReportBuilder {
         val stockfishHtml = buildStockfishAnalysisHtml(uiState)
 
         // Generate PGN with each move on a new line
-        val pgnHtml = buildPgnHtml(uiState)
+        val pgnHtml = buildPgnHtml(uiState).htmlEscape()
 
         return """
 <!DOCTYPE html>
@@ -97,7 +111,7 @@ object HtmlReportBuilder {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>$serviceName Analysis</title>
+    <title>${serviceName.htmlEscape()} Analysis</title>
     <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
@@ -277,7 +291,7 @@ object HtmlReportBuilder {
     </style>
 </head>
 <body>
-    <h1>$serviceName Analysis</h1>
+    <h1>${serviceName.htmlEscape()} Analysis</h1>
 
     <!-- Chess Board Section -->
     <div class="board-section">
@@ -286,14 +300,14 @@ object HtmlReportBuilder {
             <div class="board-wrapper">
                 <div class="player-bar" id="topPlayer">
                     <div class="player-indicator ${if (flippedBoard) "white" else "black"} ${if ((flippedBoard && isWhiteToMove) || (!flippedBoard && !isWhiteToMove)) "to-move" else ""}"></div>
-                    <span class="player-name">${if (flippedBoard) whiteName else blackName}</span>
-                    <span class="player-rating">${if (flippedBoard) whiteRating else blackRating}</span>
+                    <span class="player-name">${(if (flippedBoard) whiteName else blackName).htmlEscape()}</span>
+                    <span class="player-rating">${(if (flippedBoard) whiteRating else blackRating).htmlEscape()}</span>
                 </div>
                 <div id="board" style="width: 320px;"></div>
                 <div class="player-bar bottom" id="bottomPlayer">
                     <div class="player-indicator ${if (flippedBoard) "black" else "white"} ${if ((flippedBoard && !isWhiteToMove) || (!flippedBoard && isWhiteToMove)) "to-move" else ""}"></div>
-                    <span class="player-name">${if (flippedBoard) blackName else whiteName}</span>
-                    <span class="player-rating">${if (flippedBoard) blackRating else whiteRating}</span>
+                    <span class="player-name">${(if (flippedBoard) blackName else whiteName).htmlEscape()}</span>
+                    <span class="player-rating">${(if (flippedBoard) blackRating else whiteRating).htmlEscape()}</span>
                 </div>
             </div>
         </div>
@@ -304,7 +318,7 @@ object HtmlReportBuilder {
 
     <!-- AI Analysis -->
     <div class="analysis-section">
-        <h2>$serviceName Analysis</h2>
+        <h2>${serviceName.htmlEscape()} Analysis</h2>
         <p>$analysisHtml</p>
     </div>
 
@@ -341,8 +355,8 @@ object HtmlReportBuilder {
     <script>
         // Initialize chessboard
         var board = Chessboard('board', {
-            position: '$fen',
-            orientation: '${if (flippedBoard) "black" else "white"}',
+            position: ${jsString(fen)},
+            orientation: ${jsString(if (flippedBoard) "black" else "white")},
             pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png'
         });
 
@@ -469,9 +483,9 @@ object HtmlReportBuilder {
             val blackCurrent = if (i + 1 == uiState.currentMoveIndex) "current" else ""
 
             sb.append("<div class=\"move-number\">$moveNum.</div>")
-            sb.append("<div class=\"move white-move $whiteCurrent\">${whiteMove.san}</div>")
+            sb.append("<div class=\"move white-move $whiteCurrent\">${whiteMove.san.htmlEscape()}</div>")
             if (blackMove != null) {
-                sb.append("<div class=\"move black-move $blackCurrent\">${blackMove.san}</div>")
+                sb.append("<div class=\"move black-move $blackCurrent\">${blackMove.san.htmlEscape()}</div>")
             } else {
                 sb.append("<div></div>")
             }
@@ -505,7 +519,7 @@ object HtmlReportBuilder {
             }
 
             // Convert UCI moves to readable format (simplified)
-            val movesText = line.pv.split(" ").take(8).joinToString(" ")
+            val movesText = line.pv.split(" ").take(8).joinToString(" ").htmlEscape()
 
             sb.append("""
                 <div class="pv-line">
