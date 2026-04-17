@@ -134,81 +134,117 @@ class ChessBoard {
 
     /**
      * Set the board position from a FEN string.
-     * Returns true if the FEN was valid and successfully applied.
+     * Returns true if the FEN parsed and passed basic legality checks.
+     * Rejects impossible positions (missing kings, pawns on rank 1/8, bad turn).
      */
     fun setFen(fen: String): Boolean {
-        try {
-            val parts = fen.trim().split(" ")
-            if (parts.isEmpty()) return false
+        // Snapshot the previous state so a failed validation can't leave the board
+        // in a half-applied state.
+        val savedBoard = board.copyOf()
+        val savedTurn = turn
+        val savedCastling = castlingRights.toMutableSet()
+        val savedEnPassant = enPassantSquare
+        val savedHalfMove = halfMoveClock
+        val savedFullMove = fullMoveNumber
+        val savedLastMove = lastMove
 
-            // Clear the board first
-            for (i in 0..63) board[i] = null
-
-            // Parse board position (first part)
-            val ranks = parts[0].split("/")
-            if (ranks.size != 8) return false
-
-            for ((rankIndex, rankStr) in ranks.withIndex()) {
-                val rank = 7 - rankIndex  // FEN starts from rank 8 (index 7)
-                var file = 0
-                for (c in rankStr) {
-                    if (c.isDigit()) {
-                        file += c.digitToInt()
-                    } else {
-                        val piece = charToPiece(c) ?: return false
-                        if (file > 7) return false
-                        board[rank * 8 + file] = piece
-                        file++
-                    }
-                }
-                if (file != 8) return false
-            }
-
-            // Parse turn (second part)
-            turn = if (parts.size > 1) {
-                when (parts[1].lowercase()) {
-                    "w" -> PieceColor.WHITE
-                    "b" -> PieceColor.BLACK
-                    else -> PieceColor.WHITE
-                }
-            } else {
-                PieceColor.WHITE
-            }
-
-            // Parse castling rights (third part)
-            castlingRights.clear()
-            if (parts.size > 2 && parts[2] != "-") {
-                for (c in parts[2]) {
-                    if (c in "KQkq") castlingRights.add(c)
-                }
-            }
-
-            // Parse en passant square (fourth part)
-            enPassantSquare = if (parts.size > 3 && parts[3] != "-") {
-                Square.fromAlgebraic(parts[3])
-            } else {
-                null
-            }
-
-            // Parse half-move clock (fifth part)
-            halfMoveClock = if (parts.size > 4) {
-                parts[4].toIntOrNull() ?: 0
-            } else {
-                0
-            }
-
-            // Parse full move number (sixth part)
-            fullMoveNumber = if (parts.size > 5) {
-                parts[5].toIntOrNull() ?: 1
-            } else {
-                1
-            }
-
-            lastMove = null
-            return true
+        val applied = try {
+            applyFenUnchecked(fen)
         } catch (e: Exception) {
-            return false
+            false
         }
+
+        if (!applied) {
+            savedBoard.copyInto(board)
+            turn = savedTurn
+            castlingRights.clear(); castlingRights.addAll(savedCastling)
+            enPassantSquare = savedEnPassant
+            halfMoveClock = savedHalfMove
+            fullMoveNumber = savedFullMove
+            lastMove = savedLastMove
+        }
+        return applied
+    }
+
+    private fun applyFenUnchecked(fen: String): Boolean {
+        val parts = fen.trim().split(" ")
+        if (parts.isEmpty()) return false
+
+        // Clear the board first
+        for (i in 0..63) board[i] = null
+
+        // Parse board position (first part)
+        val ranks = parts[0].split("/")
+        if (ranks.size != 8) return false
+
+        var whiteKings = 0
+        var blackKings = 0
+        for ((rankIndex, rankStr) in ranks.withIndex()) {
+            val rank = 7 - rankIndex  // FEN starts from rank 8 (index 7)
+            var file = 0
+            for (c in rankStr) {
+                if (c.isDigit()) {
+                    file += c.digitToInt()
+                } else {
+                    val piece = charToPiece(c) ?: return false
+                    if (file > 7) return false
+                    // Pawns may never occupy rank 1 (index 0) or rank 8 (index 7)
+                    if (piece.type == PieceType.PAWN && (rank == 0 || rank == 7)) return false
+                    if (piece.type == PieceType.KING) {
+                        if (piece.color == PieceColor.WHITE) whiteKings++ else blackKings++
+                    }
+                    board[rank * 8 + file] = piece
+                    file++
+                }
+            }
+            if (file != 8) return false
+        }
+        // A legal position has exactly one king of each colour.
+        if (whiteKings != 1 || blackKings != 1) return false
+
+        // Parse turn (second part): must be explicitly "w" or "b".
+        val newTurn = when {
+            parts.size <= 1 -> PieceColor.WHITE  // starting-position shorthand
+            parts[1].equals("w", ignoreCase = true) -> PieceColor.WHITE
+            parts[1].equals("b", ignoreCase = true) -> PieceColor.BLACK
+            else -> return false
+        }
+        turn = newTurn
+
+        // Parse castling rights (third part)
+        castlingRights.clear()
+        if (parts.size > 2 && parts[2] != "-") {
+            for (c in parts[2]) {
+                if (c in "KQkq") castlingRights.add(c)
+            }
+        }
+
+        // Parse en passant square (fourth part). When present, the target square
+        // must be on rank 3 (black just pushed, white to move) or rank 6 (white
+        // just pushed, black to move).
+        enPassantSquare = if (parts.size > 3 && parts[3] != "-") {
+            val sq = Square.fromAlgebraic(parts[3]) ?: return false
+            val expectedRank = if (newTurn == PieceColor.WHITE) 5 else 2
+            if (sq.rank != expectedRank) return false
+            sq
+        } else null
+
+        // Half-move clock: non-negative integer when supplied.
+        halfMoveClock = if (parts.size > 4) {
+            val v = parts[4].toIntOrNull() ?: return false
+            if (v < 0) return false
+            v
+        } else 0
+
+        // Full-move number: positive integer when supplied.
+        fullMoveNumber = if (parts.size > 5) {
+            val v = parts[5].toIntOrNull() ?: return false
+            if (v < 1) return false
+            v
+        } else 1
+
+        lastMove = null
+        return true
     }
 
     private fun charToPiece(c: Char): Piece? {
