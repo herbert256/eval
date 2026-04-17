@@ -315,15 +315,19 @@ class StockfishEngine(private val context: Context) {
 
     private suspend fun readLineWithTimeout(timeoutMs: Long): String? {
         val reader = processReader ?: return null
-        val deadline = System.currentTimeMillis() + timeoutMs
-        while (System.currentTimeMillis() < deadline) {
-            if (!kotlinx.coroutines.currentCoroutineContext().isActive) return null
-            if (reader.ready()) {
-                return reader.readLine()
+        // runInterruptible makes the blocking readLine() cancellable: cooperative
+        // coroutine cancellation triggers Thread.interrupt on the IO worker, which
+        // the FileInputStream under a Process stream surfaces as
+        // InterruptedIOException. withTimeoutOrNull provides the timeout bound.
+        return kotlinx.coroutines.withTimeoutOrNull(timeoutMs) {
+            kotlinx.coroutines.runInterruptible(Dispatchers.IO) {
+                try {
+                    reader.readLine()
+                } catch (_: java.io.InterruptedIOException) {
+                    null
+                }
             }
-            delay(20)
         }
-        return null
     }
 
     fun analyze(fen: String, depth: Int = 16) {
