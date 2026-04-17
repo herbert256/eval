@@ -141,7 +141,7 @@ class GameStorageManager(
      * Store a game to the manual games list when entering Manual stage.
      * Deduplicates by whiteName+blackName+pgn, adds at front, trims to MAX_MANUAL_GAMES.
      */
-    fun storeManualGameToList(analysedGame: AnalysedGame) {
+    fun storeManualGameToList(analysedGame: AnalysedGame) = synchronized(writeLock) {
         val list = loadManualGamesList().toMutableList()
         // Remove duplicate (same white, black, pgn)
         list.removeAll {
