@@ -118,7 +118,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         analysisOrchestrator = AnalysisOrchestrator(
             stockfish = stockfish,
             getUiState = { _uiState.value },
-            updateUiState = { transform -> _uiState.value = _uiState.value.transform() },
+            updateUiState = { transform -> _uiState.update { it.transform() } },
             viewModelScope = viewModelScope,
             getBoardHistory = { boardHistory },
             fetchOpeningExplorer = { fetchOpeningExplorer() },
@@ -132,7 +132,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         gameLoader = GameLoader(
             repository = repository,
             getUiState = { _uiState.value },
-            updateUiState = { transform -> _uiState.value = _uiState.value.transform() },
+            updateUiState = { transform -> _uiState.update { it.transform() } },
             viewModelScope = viewModelScope,
             getBoardHistory = { boardHistory },
             getExploringLineHistory = { exploringLineHistory },
@@ -146,7 +146,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         boardNavigationManager = BoardNavigationManager(
             getUiState = { _uiState.value },
-            updateUiState = { transform -> _uiState.value = _uiState.value.transform() },
+            updateUiState = { transform -> _uiState.update { it.transform() } },
             getBoardHistory = { boardHistory },
             getExploringLineHistory = { exploringLineHistory },
             analysisOrchestrator = analysisOrchestrator,
@@ -156,7 +156,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         contentSourceManager = ContentSourceManager(
             repository = repository,
             getUiState = { _uiState.value },
-            updateUiState = { transform -> _uiState.value = _uiState.value.transform() },
+            updateUiState = { transform -> _uiState.update { it.transform() } },
             viewModelScope = viewModelScope,
             loadGame = { game, server, username -> gameLoader.loadGame(game, server, username) }
         )
@@ -164,7 +164,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         liveGameManager = LiveGameManager(
             repository = repository,
             getUiState = { _uiState.value },
-            updateUiState = { transform -> _uiState.value = _uiState.value.transform() },
+            updateUiState = { transform -> _uiState.update { it.transform() } },
             viewModelScope = viewModelScope,
             moveSoundPlayer = moveSoundPlayer,
             appendBoardHistory = { board -> boardHistory.add(board.copy()) }
@@ -172,13 +172,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         exportShareManager = ExportShareManager(
             getUiState = { _uiState.value },
-            updateUiState = { transform -> _uiState.value = _uiState.value.transform() },
+            updateUiState = { transform -> _uiState.update { it.transform() } },
             viewModelScope = viewModelScope
         )
 
         settingsManager = SettingsManager(
             getUiState = { _uiState.value },
-            updateUiState = { transform -> _uiState.value = _uiState.value.transform() },
+            updateUiState = { transform -> _uiState.update { it.transform() } },
             viewModelScope = viewModelScope,
             settingsPrefs = settingsPrefs,
             stockfish = stockfish,
