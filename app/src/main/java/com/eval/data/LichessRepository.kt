@@ -456,8 +456,11 @@ class ChessRepository(
                 return@withContext Result.Error("No games found in this broadcast")
             }
 
-            // Parse PGN - games are separated by double newlines
-            val games = body.split(Regex("\n\n(?=\\[Event)"))
+            // Parse PGN - games are separated by double newlines. Normalize CRLF
+            // to LF first so files saved on Windows don't leave a stray \r on
+            // every header, which would break extractPgnTag further down.
+            val games = body.replace("\r\n", "\n").replace('\r', '\n')
+                .split(Regex("\n\n(?=\\[Event)"))
                 .filter { it.isNotBlank() }
                 .mapNotNull { pgn ->
                     try {
@@ -539,9 +542,11 @@ class ChessRepository(
             return Result.Error("PGN file is empty")
         }
 
-        // Split PGN content into individual games
-        // Games are separated by double newlines followed by [Event
-        val gameStrings = pgnContent.split(Regex("\n\n(?=\\[Event)"))
+        // Split PGN content into individual games. Normalize CRLF line endings
+        // first — Windows-saved PGNs otherwise leave \r characters that break
+        // extractPgnTag regex matches further down.
+        val normalized = pgnContent.replace("\r\n", "\n").replace('\r', '\n')
+        val gameStrings = normalized.split(Regex("\n\n(?=\\[Event)"))
             .filter { it.isNotBlank() }
 
         if (gameStrings.isEmpty()) {
