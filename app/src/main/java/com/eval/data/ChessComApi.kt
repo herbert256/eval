@@ -163,6 +163,24 @@ interface ChessComApi {
                         .build()
                     chain.proceed(request)
                 }
+                // Honour Retry-After on 429 / 503 responses. Chess.com rate-limits
+                // archive endpoints aggressively; without a retry the first burst
+                // of a fresh session fails as an opaque "Failed to fetch".
+                .addInterceptor { chain ->
+                    var response = chain.proceed(chain.request())
+                    var attempts = 0
+                    while ((response.code == 429 || response.code == 503) && attempts < 2) {
+                        val retryAfter = response.header("Retry-After")?.toLongOrNull()
+                        // Fall back to a short backoff if the server doesn't say;
+                        // clamp to 10 s so we don't wedge the UI on a long Retry-After.
+                        val waitMs = ((retryAfter ?: 1L).coerceAtMost(10L)) * 1000L
+                        response.close()
+                        try { Thread.sleep(waitMs) } catch (_: InterruptedException) { break }
+                        response = chain.proceed(chain.request())
+                        attempts++
+                    }
+                    response
+                }
                 .connectTimeout(30, TimeUnit.SECONDS)
                 .readTimeout(30, TimeUnit.SECONDS)
                 .build()
