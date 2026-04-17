@@ -84,12 +84,7 @@ object PgnExporter {
             // Add evaluation comment
             val score = analyseScores[i]
             if (score != null) {
-                val evalText = if (score.isMate) {
-                    if (score.mateIn > 0) "+M${score.mateIn}" else "-M${kotlin.math.abs(score.mateIn)}"
-                } else {
-                    if (score.score >= 0) "+%.2f".format(score.score) else "%.2f".format(score.score)
-                }
-                moveText.append(" {[%eval $evalText]}")
+                moveText.append(" {[%eval ${score.formatDisplay(decimals = 2)}]}")
             }
 
             // Add clock comment if available

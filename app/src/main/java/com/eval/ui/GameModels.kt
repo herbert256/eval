@@ -255,7 +255,22 @@ data class MoveScore(
     val depth: Int = 0,
     val nodes: Long = 0,
     val nps: Long = 0
-)
+) {
+    /**
+     * Format this score for display (e.g. "+1.5", "-M3"). Centralised here
+     * because the same conversion was duplicated across GameContent,
+     * PgnExporter, GifExporter and HtmlReportBuilder.
+     *
+     * @param decimals number of digits after the decimal point for non-mate scores
+     */
+    fun formatDisplay(decimals: Int = 1): String {
+        if (isMate) {
+            return if (mateIn > 0) "+M${mateIn}" else "-M${kotlin.math.abs(mateIn)}"
+        }
+        val fmt = "%.${decimals}f"
+        return if (score >= 0) "+" + fmt.format(score) else fmt.format(score)
+    }
+}
 
 data class MoveDetails(
     val san: String,

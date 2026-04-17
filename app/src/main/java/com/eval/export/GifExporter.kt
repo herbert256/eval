@@ -288,12 +288,8 @@ object GifExporter {
      * Draw the score text on the evaluation bar.
      */
     private fun drawEvalBarText(canvas: Canvas, score: MoveScore, barX: Float) {
-        val scoreText = if (score.isMate) {
-            if (score.mateIn > 0) "M${score.mateIn}" else "M${abs(score.mateIn)}"
-        } else {
-            val s = score.score
-            if (s >= 0) "+%.1f".format(s) else "%.1f".format(s)
-        }
+        // M3 / -M3 style for the eval bar; strip the leading '+' to save space.
+        val scoreText = score.formatDisplay(decimals = 1).removePrefix("+")
 
         // Draw at center of bar
         val textX = barX + EVAL_BAR_WIDTH / 2

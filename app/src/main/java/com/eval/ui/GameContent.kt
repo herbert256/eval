@@ -203,11 +203,7 @@ fun GameContent(
                 val prevDisplayScore: MoveScore? = prevStoredScore
 
                 if (displayScore != null) {
-                    val scoreText = if (displayScore.isMate) {
-                        if (displayScore.mateIn > 0) "+M${displayScore.mateIn}" else "-M${kotlin.math.abs(displayScore.mateIn)}"
-                    } else {
-                        if (displayScore.score >= 0) "+%.1f".format(displayScore.score) else "%.1f".format(displayScore.score)
-                    }
+                    val scoreText = displayScore.formatDisplay(decimals = 1)
                     val scoreColor = when {
                         displayScore.isMate && displayScore.mateIn > 0 -> AppColors.PositiveGreen  // Green for player winning mate
                         displayScore.isMate && displayScore.mateIn < 0 -> AppColors.NegativeRed  // Red for player losing mate
