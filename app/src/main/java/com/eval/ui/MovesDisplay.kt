@@ -50,7 +50,10 @@ fun MovesList(
 
     Column(modifier = Modifier.fillMaxWidth()) {
         movePairs.forEachIndexed { pairIndex, pair ->
-            key(pairIndex) {
+            // Content-based key: when the move list is replaced (e.g. a
+            // variation is loaded), a same-index row with different SAN is
+            // correctly treated as a new identity by Compose.
+            key("$pairIndex-${pair[0].san}-${pair.getOrNull(1)?.san ?: ""}") {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
