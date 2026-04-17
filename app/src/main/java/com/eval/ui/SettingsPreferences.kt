@@ -417,7 +417,12 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         putGraphSettings(editor, snapshot.graphSettings)
         putInterfaceVisibilitySettings(editor, snapshot.interfaceVisibilitySettings)
 
-        return editor.commit()
+        // apply() queues the write to disk on a background worker so we don't
+        // block the UI on fsync. The return value still indicates "we accepted
+        // the import" — the subsequent reload reads via SharedPreferences,
+        // which serialises with the in-flight write internally.
+        editor.apply()
+        return true
     }
 
     private fun importLegacySettings(json: String): Boolean {
@@ -442,7 +447,8 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
                     }
                 }
             }
-            editor.commit()
+            editor.apply()
+            true
         } catch (e: Exception) {
             false
         }
@@ -453,7 +459,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
     // ============================================================================
 
     fun resetAllSettingsToDefaults() {
-        prefs.edit().clear().commit()
+        prefs.edit().clear().apply()
     }
 
     private fun putStockfishSettings(editor: SharedPreferences.Editor, settings: StockfishSettings) {
