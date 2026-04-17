@@ -14,7 +14,12 @@ class MoveSoundPlayer(context: Context) {
     private var captureSound: Int = 0
     private var checkSound: Int = 0
     private var castleSound: Int = 0
-    private var isLoaded = false
+    // Per-sample ready flags. Previously a single isLoaded boolean flipped
+    // to true after the first successful load callback, which meant playMove
+    // could fire for a sound whose sample had not finished decoding yet. It
+    // was also latched to false permanently if init threw, silencing audio
+    // for the rest of the session. Track each sample separately instead.
+    private val ready = java.util.concurrent.ConcurrentHashMap<Int, Boolean>()
 
     init {
         val audioAttributes = AudioAttributes.Builder()
@@ -27,23 +32,29 @@ class MoveSoundPlayer(context: Context) {
             .setAudioAttributes(audioAttributes)
             .build()
 
-        soundPool.setOnLoadCompleteListener { _, _, status ->
-            if (status == 0) {
-                isLoaded = true
+        soundPool.setOnLoadCompleteListener { _, sampleId, status ->
+            ready[sampleId] = (status == 0)
+            if (status != 0) {
+                android.util.Log.w("MoveSoundPlayer", "sample $sampleId failed to load (status=$status)")
             }
         }
 
-        // Load sounds from raw resources (WAV format for broad compatibility)
-        try {
-            moveSound = soundPool.load(context, com.eval.R.raw.move, 1)
-            captureSound = soundPool.load(context, com.eval.R.raw.capture, 1)
-            checkSound = soundPool.load(context, com.eval.R.raw.check, 1)
-            castleSound = soundPool.load(context, com.eval.R.raw.castle, 1)
-        } catch (e: Exception) {
-            android.util.Log.e("MoveSoundPlayer", "Error loading sounds: ${e.message}")
-            isLoaded = false
-        }
+        // Load sounds from raw resources (WAV format for broad compatibility).
+        // A failure here means the resource is missing/corrupt for this specific
+        // sample — other samples still load, and per-sample checks below skip
+        // only the broken ones.
+        try { moveSound = soundPool.load(context, com.eval.R.raw.move, 1) }
+        catch (e: Exception) { android.util.Log.e("MoveSoundPlayer", "move: ${e.message}") }
+        try { captureSound = soundPool.load(context, com.eval.R.raw.capture, 1) }
+        catch (e: Exception) { android.util.Log.e("MoveSoundPlayer", "capture: ${e.message}") }
+        try { checkSound = soundPool.load(context, com.eval.R.raw.check, 1) }
+        catch (e: Exception) { android.util.Log.e("MoveSoundPlayer", "check: ${e.message}") }
+        try { castleSound = soundPool.load(context, com.eval.R.raw.castle, 1) }
+        catch (e: Exception) { android.util.Log.e("MoveSoundPlayer", "castle: ${e.message}") }
     }
+
+    private fun isReady(sampleId: Int): Boolean =
+        sampleId != 0 && ready[sampleId] == true
 
     /**
      * Play the appropriate sound for a move.
@@ -52,13 +63,12 @@ class MoveSoundPlayer(context: Context) {
      * @param isCastle True if the move is castling
      */
     fun playMove(isCapture: Boolean = false, isCheck: Boolean = false, isCastle: Boolean = false) {
-        if (!isLoaded) return
-
         val soundId = when {
-            isCheck && checkSound != 0 -> checkSound
-            isCapture && captureSound != 0 -> captureSound
-            isCastle && castleSound != 0 -> castleSound
-            else -> moveSound
+            isCheck && isReady(checkSound) -> checkSound
+            isCapture && isReady(captureSound) -> captureSound
+            isCastle && isReady(castleSound) -> castleSound
+            isReady(moveSound) -> moveSound
+            else -> 0
         }
 
         if (soundId != 0) {
@@ -70,7 +80,7 @@ class MoveSoundPlayer(context: Context) {
      * Play a simple move sound (used for navigation).
      */
     fun playMoveSound() {
-        if (!isLoaded || moveSound == 0) return
+        if (!isReady(moveSound)) return
         soundPool.play(moveSound, 0.8f, 0.8f, 1, 0, 1.0f)
     }
 
