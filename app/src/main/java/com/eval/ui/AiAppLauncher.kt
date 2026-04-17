@@ -31,6 +31,42 @@ object AiAppLauncher {
     private const val AI_APP_ACTION = "com.ai.ACTION_NEW_REPORT"
     private const val AI_APP_PACKAGE = "com.ai"
 
+    // Optional SHA-256 fingerprint (colon-separated, uppercase) of the com.ai signing
+    // certificate. Leave empty to trust any installation. When set, the launcher
+    // refuses to send data to a package whose signer does not match.
+    // To obtain the fingerprint, run the app once with this empty and copy the value
+    // logged as "observed com.ai signature: ...".
+    private const val AI_APP_SIGNATURE_SHA256 = ""
+
+    private fun observedSignatureSha256(context: Context): String? {
+        return try {
+            val pm = context.packageManager
+            @Suppress("DEPRECATION")
+            val signatures = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                val info = pm.getPackageInfo(AI_APP_PACKAGE, android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES)
+                info.signingInfo?.let {
+                    if (it.hasMultipleSigners()) it.apkContentsSigners else it.signingCertificateHistory
+                } ?: emptyArray()
+            } else {
+                pm.getPackageInfo(AI_APP_PACKAGE, android.content.pm.PackageManager.GET_SIGNATURES).signatures
+                    ?: emptyArray()
+            }
+            if (signatures.isEmpty()) return null
+            val digest = java.security.MessageDigest.getInstance("SHA-256").digest(signatures[0].toByteArray())
+            digest.joinToString(":") { "%02X".format(it) }
+        } catch (e: Exception) {
+            Log.w("AiAppLauncher", "failed to read signature: ${e.message}")
+            null
+        }
+    }
+
+    private fun isSignerTrusted(context: Context): Boolean {
+        val observed = observedSignatureSha256(context)
+        if (observed != null) Log.i("AiAppLauncher", "observed com.ai signature: $observed")
+        if (AI_APP_SIGNATURE_SHA256.isBlank()) return true
+        return observed != null && observed.equals(AI_APP_SIGNATURE_SHA256.trim(), ignoreCase = true)
+    }
+
     /**
      * Check if the AI app is installed.
      */
@@ -70,15 +106,21 @@ object AiAppLauncher {
             if (instructions.isNotBlank()) putExtra("instructions", instructions)
         }
 
-        return if (intent.resolveActivity(context.packageManager) != null) {
-            Log.d("AiAppLauncher", "AI app found, starting activity")
-            context.startActivity(intent)
-            true
-        } else {
+        if (intent.resolveActivity(context.packageManager) == null) {
             Log.e("AiAppLauncher", "AI app not installed!")
             Toast.makeText(context, "AI app not installed", Toast.LENGTH_SHORT).show()
-            false
+            return false
         }
+
+        if (!isSignerTrusted(context)) {
+            Log.e("AiAppLauncher", "AI app signature mismatch — refusing to send prompt")
+            Toast.makeText(context, "AI app signature mismatch", Toast.LENGTH_LONG).show()
+            return false
+        }
+
+        Log.d("AiAppLauncher", "AI app found, starting activity")
+        context.startActivity(intent)
+        return true
     }
 
     /**
