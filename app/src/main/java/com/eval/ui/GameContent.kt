@@ -955,12 +955,14 @@ fun GameContent(
                     fontSize = 13.sp,
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
-                // Use analyse scores if available (they override preview scores)
-                val displayScores = if (uiState.analyseScores.isNotEmpty()) {
-                    // Merge: use analyse score if available, otherwise preview
-                    uiState.previewScores + uiState.analyseScores
-                } else {
-                    uiState.previewScores
+                // Merge analyse scores on top of preview scores. Memoized so
+                // every parent recomposition doesn't allocate a fresh map.
+                val displayScores = remember(uiState.previewScores, uiState.analyseScores) {
+                    if (uiState.analyseScores.isNotEmpty()) {
+                        uiState.previewScores + uiState.analyseScores
+                    } else {
+                        uiState.previewScores
+                    }
                 }
                 MovesList(
                     moveDetails = uiState.moveDetails,
