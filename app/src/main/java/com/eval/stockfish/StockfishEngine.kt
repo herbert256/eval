@@ -364,9 +364,10 @@ class StockfishEngine(private val context: Context) {
                     // Clear previous lines and reset result (synchronized for thread safety)
                     synchronized(pvLinesLock) {
                         pvLines.clear()
+                        currentNodes = 0
+                        currentNps = 0
+                        _analysisResult.value = null
                     }
-                    currentNodes = 0
-                    _analysisResult.value = null
 
                     // Ensure engine is ready (waits for any pending commands to complete)
                     if (!waitForEngineReady(caller)) return@withLock
@@ -509,22 +510,26 @@ class StockfishEngine(private val context: Context) {
      */
     suspend fun restart(): Boolean = withContext(Dispatchers.IO) {
         try {
-            // Stop any ongoing analysis
-            analysisJob?.cancel()
+            // Stop any ongoing analysis and wait for the coroutine to unwind so a
+            // buffered info line from the old engine can't race past the clear.
             _isReady.value = false
-            _analysisResult.value = null
+            analysisJob?.cancelAndJoin()
+            analysisJob = null
 
             // Kill the current process
             cleanupProcess(forceful = true)
 
-            // Clear state
+            // Clear state under pvLinesLock, then publish null as the last write so
+            // any straggler parseInfoLine callback can't overwrite the cleared result.
             process = null
             processWriter = null
             processReader = null
             synchronized(pvLinesLock) {
                 pvLines.clear()
+                currentNodes = 0
+                currentNps = 0
+                _analysisResult.value = null
             }
-            currentNodes = 0
 
             // Delay to ensure process is fully terminated
             kotlinx.coroutines.delay(300)
