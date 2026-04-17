@@ -95,6 +95,10 @@ fun ChessBoardView(
         )
     }
 
+    // Sort arrows once per moveArrows change so Canvas draws don't
+    // re-sort on every frame.
+    val sortedMoveArrows = remember(moveArrows) { moveArrows.sortedByDescending { it.index } }
+
     // Helper function to convert screen position to board square
     fun positionToSquare(x: Float, y: Float, size: Float): Square? {
         if (size <= 0) return null
@@ -215,6 +219,7 @@ fun ChessBoardView(
             squareSize = squareSize,
             flipped = flipped,
             moveArrows = moveArrows,
+            sortedArrows = sortedMoveArrows,
             showArrowNumbers = showArrowNumbers,
             whiteArrowColor = whiteArrowColor,
             blackArrowColor = blackArrowColor
@@ -383,6 +388,7 @@ private fun DrawScope.drawArrows(
     squareSize: Float,
     flipped: Boolean,
     moveArrows: List<MoveArrow>,
+    sortedArrows: List<MoveArrow>,
     showArrowNumbers: Boolean,
     whiteArrowColor: Color,
     blackArrowColor: Color
@@ -390,9 +396,6 @@ private fun DrawScope.drawArrows(
     if (moveArrows.isEmpty()) return
 
     val isMultiLinesMode = moveArrows.any { it.scoreText != null }
-
-    // Pre-sort arrows (avoid re-allocating sorted list each frame)
-    val sortedArrows = moveArrows.sortedByDescending { it.index }
 
     // Draw arrow shafts and heads in reverse order so first arrow (thickest) is on top
     for (arrow in sortedArrows) {
