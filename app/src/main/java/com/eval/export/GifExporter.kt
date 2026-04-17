@@ -87,20 +87,28 @@ object GifExporter {
         val file = File(context.cacheDir, "${filePrefix}_${System.currentTimeMillis()}.gif")
         val encoder = AnimatedGifEncoder()
 
-        FileOutputStream(file).use { fos ->
-            encoder.start(fos)
-            encoder.setDelay(frameDelay)
-            encoder.setRepeat(0) // Loop forever
-            encoder.setQuality(10)
+        var success = false
+        try {
+            FileOutputStream(file).use { fos ->
+                encoder.start(fos)
+                encoder.setDelay(frameDelay)
+                encoder.setRepeat(0) // Loop forever
+                encoder.setQuality(10)
 
-            for (index in 0 until frameCount) {
-                val bitmap = renderFrame(index)
-                encoder.addFrame(bitmap)
-                bitmap.recycle()
-                callback?.onProgress(index + 1, frameCount)
+                for (index in 0 until frameCount) {
+                    val bitmap = renderFrame(index)
+                    encoder.addFrame(bitmap)
+                    bitmap.recycle()
+                    callback?.onProgress(index + 1, frameCount)
+                }
+
+                encoder.finish()
             }
-
-            encoder.finish()
+            success = true
+        } finally {
+            // Delete the (possibly truncated) file if encoding threw, so the
+            // cacheDir doesn't accumulate partial GIFs over time.
+            if (!success && file.exists()) file.delete()
         }
 
         file
