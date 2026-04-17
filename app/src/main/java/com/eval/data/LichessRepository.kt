@@ -901,18 +901,80 @@ class ChessRepository(
             appendLine()
         }
 
-        // Convert UCI moves to numbered format (not SAN, but loadGame uses UCI internally)
+        // Convert UCI → SAN by replaying on a ChessBoard so third-party PGN
+        // tools can read the output. We skip check/mate markers ('+', '#')
+        // since they are optional in the PGN spec and require a post-move
+        // legal-move check that's not worth the cost here.
+        val board = com.eval.chess.ChessBoard()
+        val sanMoves = mutableListOf<String>()
+        for (uci in moves) {
+            val san = uciToSan(board, uci) ?: break
+            sanMoves.add(san)
+            if (!board.makeUciMove(uci)) break
+        }
+
         val moveText = buildString {
-            moves.forEachIndexed { index, move ->
-                if (index % 2 == 0) {
-                    append("${(index / 2) + 1}. ")
-                }
-                append("$move ")
+            sanMoves.forEachIndexed { index, san ->
+                if (index % 2 == 0) append("${(index / 2) + 1}. ")
+                append("$san ")
             }
             append("*")
         }
 
         return headers + moveText
+    }
+
+    private fun uciToSan(board: com.eval.chess.ChessBoard, uci: String): String? {
+        if (uci.length < 4) return null
+        val from = com.eval.chess.Square.fromAlgebraic(uci.substring(0, 2)) ?: return null
+        val to = com.eval.chess.Square.fromAlgebraic(uci.substring(2, 4)) ?: return null
+        val piece = board.getPiece(from) ?: return null
+
+        // Castling: encode by king travel distance.
+        if (piece.type == com.eval.chess.PieceType.KING && kotlin.math.abs(to.file - from.file) == 2) {
+            return if (to.file == 6) "O-O" else "O-O-O"
+        }
+
+        val isCapture = board.getPiece(to) != null ||
+            (piece.type == com.eval.chess.PieceType.PAWN && from.file != to.file)
+
+        val promotion = if (uci.length == 5) {
+            when (uci[4].lowercaseChar()) {
+                'q' -> "=Q"; 'r' -> "=R"; 'b' -> "=B"; 'n' -> "=N"; else -> ""
+            }
+        } else ""
+
+        if (piece.type == com.eval.chess.PieceType.PAWN) {
+            val dest = to.toAlgebraic()
+            return if (isCapture) "${('a' + from.file)}x$dest$promotion" else "$dest$promotion"
+        }
+
+        val letter = when (piece.type) {
+            com.eval.chess.PieceType.KNIGHT -> "N"
+            com.eval.chess.PieceType.BISHOP -> "B"
+            com.eval.chess.PieceType.ROOK -> "R"
+            com.eval.chess.PieceType.QUEEN -> "Q"
+            com.eval.chess.PieceType.KING -> "K"
+            else -> ""
+        }
+
+        // Disambiguate if another piece of the same type could also legally reach `to`.
+        val others = mutableListOf<com.eval.chess.Square>()
+        for (r in 0..7) for (f in 0..7) {
+            val sq = com.eval.chess.Square(f, r)
+            if (sq == from) continue
+            val p = board.getPiece(sq) ?: continue
+            if (p.type != piece.type || p.color != piece.color) continue
+            if (board.isLegalMove(sq, to)) others.add(sq)
+        }
+        val disamb = when {
+            others.isEmpty() -> ""
+            others.none { it.file == from.file } -> "${('a' + from.file)}"
+            others.none { it.rank == from.rank } -> "${('1' + from.rank)}"
+            else -> from.toAlgebraic()
+        }
+
+        return letter + disamb + (if (isCapture) "x" else "") + to.toAlgebraic() + promotion
     }
 
     // ==================== CHESS.COM API METHODS ====================
