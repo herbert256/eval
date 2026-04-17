@@ -44,7 +44,7 @@ class GameStorageManager(
     /**
      * Store retrieved games for a specific account.
      */
-    fun storeRetrievedGames(games: List<LichessGame>, username: String, server: ChessServer) {
+    fun storeRetrievedGames(games: List<LichessGame>, username: String, server: ChessServer) = synchronized(writeLock) {
         // Load existing retrieves list
         val retrievesList = loadRetrievesList().toMutableList()
 
@@ -57,23 +57,29 @@ class GameStorageManager(
         // Add new entry at the beginning
         retrievesList.add(0, newEntry)
 
+        val trimmedKeys = mutableListOf<String>()
         // Trim to max size
         while (retrievesList.size > SettingsPreferences.MAX_RETRIEVES) {
             val removed = retrievesList.removeAt(retrievesList.size - 1)
-            // Also remove the stored games for that entry
-            val key = getRetrievedGamesKey(removed.accountName, removed.server)
-            prefs.edit().remove(key).apply()
+            trimmedKeys.add(getRetrievedGamesKey(removed.accountName, removed.server))
         }
 
-        // Save the retrieves list
-        val retrievesJson = gson.toJson(retrievesList)
-        prefs.edit().putString(SettingsPreferences.KEY_RETRIEVES_LIST, retrievesJson).apply()
-
-        // Save the games for this entry
-        val gamesKey = getRetrievedGamesKey(username, server)
-        val gamesJson = gson.toJson(games)
-        prefs.edit().putString(gamesKey, gamesJson).apply()
+        // Single atomic editor apply — previously the three writes (remove old
+        // entries, write index, write payload) were independent apply() calls,
+        // so an app kill between them could leave the index pointing at a key
+        // whose games blob hadn't been written yet, or referencing a game blob
+        // that had already been evicted.
+        val editor = prefs.edit()
+        for (key in trimmedKeys) editor.remove(key)
+        editor.putString(SettingsPreferences.KEY_RETRIEVES_LIST, gson.toJson(retrievesList))
+        editor.putString(getRetrievedGamesKey(username, server), gson.toJson(games))
+        editor.apply()
     }
+
+    // Serialises read-modify-write for game-list keys so concurrent callers
+    // (e.g. fast successive retrieves across tabs) don't silently drop each
+    // other's updates between load and save.
+    private val writeLock = Any()
 
     /**
      * Load the list of previous retrieves.
