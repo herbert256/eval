@@ -1282,10 +1282,17 @@ class ChessRepository(
 
     /**
      * Get opening explorer data for a position.
+     *
+     * Retrofit's @Query URL-encodes the FEN automatically (space, slash, dash),
+     * so no manual encoding is needed here. We trim in case the caller passes a
+     * FEN with stray whitespace and reject an empty string up front — otherwise
+     * the API returns a 400 that looks like an opaque network failure.
      */
     suspend fun getOpeningExplorer(fen: String): Result<OpeningExplorerResponse> = withContext(Dispatchers.IO) {
+        val trimmed = fen.trim()
+        if (trimmed.isEmpty()) return@withContext Result.Error("FEN is empty")
         try {
-            val response = openingExplorerApi.getLichessOpeningExplorer(fen)
+            val response = openingExplorerApi.getLichessOpeningExplorer(trimmed)
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null) {
