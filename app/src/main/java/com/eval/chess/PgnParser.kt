@@ -22,11 +22,15 @@ class PgnParser {
          * Supports both SAN notation (e4, Nf3) and UCI notation (e2e4, g1f3)
          */
         fun parseMovesWithClock(pgn: String): List<ParsedMove> {
-            // Remove headers (lines starting with [)
-            val movesSection = pgn.lines()
+            // Remove headers (lines starting with [) then strip PGN variations
+            // so the main-line regex doesn't pick up variation moves and emit
+            // them as part of the game. NAGs ("$1", "$5") fall through the
+            // move-pattern regex unchanged and don't match, so they're ignored.
+            val raw = pgn.lines()
                 .dropWhile { it.startsWith("[") || it.isBlank() }
                 .joinToString(" ")
                 .trim()
+            val movesSection = stripVariations(raw)
 
             val result = mutableListOf<ParsedMove>()
 
@@ -80,6 +84,32 @@ class PgnParser {
 
         fun parseMoves(pgn: String): List<String> {
             return parseMovesWithClock(pgn).map { it.san }
+        }
+
+        /**
+         * Remove parenthesised PGN variations, including nested ones, while
+         * preserving comments in braces. Walks the string once counting paren
+         * depth; a comment that spans a paren (unusual but allowed) is kept
+         * because we suspend depth tracking inside '{...}'.
+         */
+        private fun stripVariations(text: String): String {
+            val sb = StringBuilder(text.length)
+            var depth = 0
+            var inComment = false
+            for (c in text) {
+                when {
+                    inComment -> {
+                        sb.append(c)
+                        if (c == '}') inComment = false
+                    }
+                    c == '{' -> { sb.append(c); inComment = true }
+                    c == '(' -> depth++
+                    c == ')' -> if (depth > 0) depth-- else sb.append(c)
+                    depth == 0 -> sb.append(c)
+                    // else: inside a variation, drop char
+                }
+            }
+            return sb.toString()
         }
 
         fun parseHeaders(pgn: String): Map<String, String> {
