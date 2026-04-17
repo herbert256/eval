@@ -252,7 +252,7 @@ private fun SettingsMainScreen(
                 Text("Export")
             }
             Button(
-                onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) },
+                onClick = { importLauncher.launch(arrayOf("application/json")) },
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = AppColors.ButtonGreen
