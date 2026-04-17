@@ -43,6 +43,30 @@ object GifExporter {
         'b' to "\u265D", 'n' to "\u265E", 'p' to "\u265F"
     )
 
+    // Paint instances reused across draws. Export is a sequential user flow
+    // (one GIF at a time) so sharing is safe; reconfigure fields per draw.
+    private val squarePaint = Paint()
+    private val piecePaint = Paint().apply {
+        textAlign = Paint.Align.CENTER
+        isAntiAlias = true
+        typeface = Typeface.DEFAULT
+    }
+    private val evalBarPaint = Paint()
+    private val evalTextPaint = Paint().apply {
+        textSize = 12f
+        textAlign = Paint.Align.CENTER
+        isAntiAlias = true
+        typeface = Typeface.DEFAULT_BOLD
+    }
+    private val annotationBgPaint = Paint().apply { color = 0xFF2D2D2D.toInt() }
+    private val annotationTextPaint = Paint().apply {
+        color = Color.WHITE
+        textSize = 18f
+        textAlign = Paint.Align.CENTER
+        isAntiAlias = true
+        typeface = Typeface.DEFAULT_BOLD
+    }
+
     /**
      * Convert a Piece to its FEN character representation.
      */
@@ -141,8 +165,6 @@ object GifExporter {
      * Draw board squares and pieces onto the canvas.
      */
     private fun drawBoardContent(canvas: Canvas, board: ChessBoard, squareSize: Int, lightColor: Int, darkColor: Int) {
-        // Draw board squares
-        val squarePaint = Paint()
         for (row in 0 until 8) {
             for (col in 0 until 8) {
                 val isLight = (row + col) % 2 == 0
@@ -157,13 +179,7 @@ object GifExporter {
             }
         }
 
-        // Draw pieces
-        val piecePaint = Paint().apply {
-            textSize = squareSize * 0.85f
-            textAlign = Paint.Align.CENTER
-            isAntiAlias = true
-            typeface = Typeface.DEFAULT
-        }
+        piecePaint.textSize = squareSize * 0.85f
 
         for (row in 0 until 8) {
             for (col in 0 until 8) {
@@ -226,29 +242,19 @@ object GifExporter {
      * Draw the move annotation bar at the top of the frame.
      */
     private fun drawAnnotationBar(canvas: Canvas, text: String, height: Int) {
-        val bgPaint = Paint().apply { color = 0xFF2D2D2D.toInt() }
-        canvas.drawRect(0f, 0f, TOTAL_WIDTH.toFloat(), height.toFloat(), bgPaint)
-
-        val textPaint = Paint().apply {
-            color = Color.WHITE
-            textSize = 18f
-            textAlign = Paint.Align.CENTER
-            isAntiAlias = true
-            typeface = Typeface.DEFAULT_BOLD
-        }
-        canvas.drawText(text, TOTAL_WIDTH / 2f, 22f, textPaint)
+        canvas.drawRect(0f, 0f, TOTAL_WIDTH.toFloat(), height.toFloat(), annotationBgPaint)
+        canvas.drawText(text, TOTAL_WIDTH / 2f, 22f, annotationTextPaint)
     }
 
     /**
      * Draw the evaluation bar on the right side.
      */
     private fun drawEvalBar(canvas: Canvas, score: MoveScore?) {
-        val paint = Paint()
         val barX = BOARD_SIZE.toFloat()
 
         // Background (black side)
-        paint.color = EVAL_BLACK
-        canvas.drawRect(barX, 0f, barX + EVAL_BAR_WIDTH, BOARD_SIZE.toFloat(), paint)
+        evalBarPaint.color = EVAL_BLACK
+        canvas.drawRect(barX, 0f, barX + EVAL_BAR_WIDTH, BOARD_SIZE.toFloat(), evalBarPaint)
 
         // Calculate white portion
         val whiteHeight = if (score == null) {
@@ -263,13 +269,13 @@ object GifExporter {
         }
 
         // Draw white portion from bottom
-        paint.color = EVAL_WHITE
+        evalBarPaint.color = EVAL_WHITE
         canvas.drawRect(
             barX,
             BOARD_SIZE - whiteHeight,
             barX + EVAL_BAR_WIDTH,
             BOARD_SIZE.toFloat(),
-            paint
+            evalBarPaint
         )
 
         // Draw score text
@@ -282,13 +288,6 @@ object GifExporter {
      * Draw the score text on the evaluation bar.
      */
     private fun drawEvalBarText(canvas: Canvas, score: MoveScore, barX: Float) {
-        val textPaint = Paint().apply {
-            textSize = 12f
-            textAlign = Paint.Align.CENTER
-            isAntiAlias = true
-            typeface = Typeface.DEFAULT_BOLD
-        }
-
         val scoreText = if (score.isMate) {
             if (score.mateIn > 0) "M${score.mateIn}" else "M${abs(score.mateIn)}"
         } else {
@@ -301,12 +300,13 @@ object GifExporter {
         val textY = BOARD_SIZE / 2f + 4f
 
         // Background for readability
-        textPaint.color = Color.WHITE
-        canvas.drawText(scoreText, textX, textY, textPaint)
-        textPaint.color = Color.BLACK
-        textPaint.style = Paint.Style.STROKE
-        textPaint.strokeWidth = 0.5f
-        canvas.drawText(scoreText, textX, textY, textPaint)
+        evalTextPaint.color = Color.WHITE
+        evalTextPaint.style = Paint.Style.FILL
+        canvas.drawText(scoreText, textX, textY, evalTextPaint)
+        evalTextPaint.color = Color.BLACK
+        evalTextPaint.style = Paint.Style.STROKE
+        evalTextPaint.strokeWidth = 0.5f
+        canvas.drawText(scoreText, textX, textY, evalTextPaint)
     }
 
     /**
