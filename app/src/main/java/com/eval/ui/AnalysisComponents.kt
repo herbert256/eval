@@ -66,6 +66,11 @@ fun EvaluationGraph(
     var graphWidth by remember { mutableStateOf(0f) }
     val isManualStage = currentStage == AnalysisStage.MANUAL
 
+    // Scratch Path reused across draws so the tight filled-area loop doesn't
+    // allocate a fresh Path object for every segment (previously 2 Paths per
+    // pair, sometimes >100 allocations per frame on a long game).
+    val scratchPath = remember { androidx.compose.ui.graphics.Path() }
+
     Canvas(
         modifier = modifier
             .background(Color(graphSettings.backgroundColor.toInt()), RoundedCornerShape(8.dp))
@@ -163,23 +168,21 @@ fun EvaluationGraph(
 
                 // Draw first segment (from p1 to crossing point)
                 val color1 = if (p1.score >= 0) greenColor else redColor
-                val path1 = androidx.compose.ui.graphics.Path().apply {
-                    moveTo(leftX, p1.y)
-                    lineTo(crossX, centerY)
-                    lineTo(leftX, centerY)
-                    close()
-                }
-                drawPath(path1, color1)
+                scratchPath.reset()
+                scratchPath.moveTo(leftX, p1.y)
+                scratchPath.lineTo(crossX, centerY)
+                scratchPath.lineTo(leftX, centerY)
+                scratchPath.close()
+                drawPath(scratchPath, color1)
 
                 // Draw second segment (from crossing point to p2)
                 val color2 = if (p2.score >= 0) greenColor else redColor
-                val path2 = androidx.compose.ui.graphics.Path().apply {
-                    moveTo(crossX, centerY)
-                    lineTo(rightX, p2.y)
-                    lineTo(rightX, centerY)
-                    close()
-                }
-                drawPath(path2, color2)
+                scratchPath.reset()
+                scratchPath.moveTo(crossX, centerY)
+                scratchPath.lineTo(rightX, p2.y)
+                scratchPath.lineTo(rightX, centerY)
+                scratchPath.close()
+                drawPath(scratchPath, color2)
 
                 // Draw solid line on top (two segments with different colors)
                 drawLine(color1, Offset(p1.x, p1.y), Offset(crossX, centerY), strokeWidth = 2f)
@@ -188,14 +191,13 @@ fun EvaluationGraph(
                 // No crossing - draw single colored area
                 val color = if (p1.score >= 0) greenColor else redColor
 
-                val path = androidx.compose.ui.graphics.Path().apply {
-                    moveTo(leftX, p1.y)
-                    lineTo(rightX, p2.y)
-                    lineTo(rightX, centerY)
-                    lineTo(leftX, centerY)
-                    close()
-                }
-                drawPath(path, color)
+                scratchPath.reset()
+                scratchPath.moveTo(leftX, p1.y)
+                scratchPath.lineTo(rightX, p2.y)
+                scratchPath.lineTo(rightX, centerY)
+                scratchPath.lineTo(leftX, centerY)
+                scratchPath.close()
+                drawPath(scratchPath, color)
 
                 // Draw solid line on top
                 drawLine(color, Offset(p1.x, p1.y), Offset(p2.x, p2.y), strokeWidth = 2f)
