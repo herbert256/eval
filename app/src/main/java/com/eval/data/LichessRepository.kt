@@ -60,15 +60,29 @@ class ChessRepository(
     private val gson = Gson()
 
     private inline fun <reified T> parseNdjson(body: String): List<T> {
-        return body.lines()
+        var failed = 0
+        val parsed = body.lines()
             .filter { it.isNotBlank() }
             .mapNotNull { line ->
                 try {
                     gson.fromJson(line, T::class.java)
                 } catch (e: Exception) {
+                    failed++
+                    // Log the first failure (with a snippet) so dropped lines don't
+                    // disappear silently — they used to return null with zero trace.
+                    if (failed == 1) {
+                        android.util.Log.w(
+                            "ChessRepository",
+                            "NDJSON parse failed for ${T::class.simpleName}: ${e.message}; line=${line.take(200)}"
+                        )
+                    }
                     null
                 }
             }
+        if (failed > 1) {
+            android.util.Log.w("ChessRepository", "NDJSON: dropped $failed malformed lines for ${T::class.simpleName}")
+        }
+        return parsed
     }
 
     /**
