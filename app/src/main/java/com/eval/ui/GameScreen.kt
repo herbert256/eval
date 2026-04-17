@@ -395,12 +395,17 @@ fun StockfishNotInstalledScreen(
     val context = LocalContext.current
     val playStoreUrl = "https://play.google.com/store/apps/details?id=com.stockfish141"
 
-    // Check every 2 seconds if Stockfish has been installed
+    // Poll every 2 seconds for the Stockfish package. Use rememberUpdatedState so
+    // the effect always calls the latest versions of the callbacks without
+    // restarting the loop (which would re-fire LaunchedEffect on every
+    // recomposition and potentially leak overlapping polls).
+    val checkState = rememberUpdatedState(onCheckInstalled)
+    val installedState = rememberUpdatedState(onInstalled)
     LaunchedEffect(Unit) {
         while (true) {
             delay(2000)
-            if (onCheckInstalled()) {
-                onInstalled()
+            if (checkState.value()) {
+                installedState.value()
                 break
             }
         }
