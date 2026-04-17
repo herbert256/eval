@@ -32,8 +32,10 @@ data class AnalysisResult(
 
 class StockfishEngine(private val context: Context) {
     companion object {
-        // Maximum number of moves to display in the principal variation line
-        private const val MAX_PV_MOVES_DISPLAY = 8
+        // Hard cap on the number of PV tokens we parse from an info line. Stockfish
+        // can emit very long principal variations at high depth; a generous ceiling
+        // keeps memory bounded without truncating useful mate/forced sequences.
+        private const val MAX_PV_TOKENS = 64
         // Maximum safe hash table size in MB to prevent crashes on mobile devices
         private const val MAX_SAFE_HASH_MB = 256
         // Maximum safe thread count for mobile devices
@@ -425,16 +427,22 @@ class StockfishEngine(private val context: Context) {
                 score = (cpMatch.groupValues[1].toIntOrNull() ?: 0) / 100f
             }
 
-            // Extract PV
-            val pvMatch = Regex(" pv (.+)$").find(line)
-            val pv = pvMatch?.groupValues?.get(1) ?: ""
+            // Extract PV: everything after the literal " pv " token. The UCI spec
+            // places pv last in an info line so this is safe even if future Stockfish
+            // builds reorder earlier fields; we anchor on the token position itself
+            // rather than a greedy regex.
+            val pvMarker = " pv "
+            val pvIdx = line.indexOf(pvMarker)
+            val pv = if (pvIdx >= 0) line.substring(pvIdx + pvMarker.length).trim() else ""
 
-            // Store this PV line
+            // Store this PV line; cap tokens to keep memory bounded but keep enough
+            // to cover long mating sequences (previous 8-move cap silently truncated
+            // mate-in-N lines used by the analysis screen).
             val pvLine = PvLine(
                 score = score,
                 isMate = isMate,
                 mateIn = mateIn,
-                pv = pv.split(" ").take(MAX_PV_MOVES_DISPLAY).joinToString(" "),
+                pv = pv.split(' ').filter { it.isNotEmpty() }.take(MAX_PV_TOKENS).joinToString(" "),
                 multipv = multipv
             )
 
