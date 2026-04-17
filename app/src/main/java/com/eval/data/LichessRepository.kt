@@ -2,6 +2,8 @@ package com.eval.data
 
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -989,28 +991,37 @@ class ChessRepository(
                 return@withContext Result.Error("No games found for this user on Chess.com")
             }
 
-            // Fetch most recent months in reverse order
+            // Fetch most recent months in reverse order. Chess.com returns one
+            // archive URL per month, so a user with long history means 24+ URLs
+            // to pull. Fetch in parallel batches so network latency hides, and
+            // stop early once we have enough games (archives are ordered newest
+            // last after reversed()).
             val allGames = mutableListOf<LichessGame>()
             val reversedArchives = archives.reversed()
+            val batchSize = 4
 
-            for (archiveUrl in reversedArchives) {
-                if (allGames.size >= maxGames) break
-
-                try {
-                    val gamesResponse = chessComApi.getMonthlyGames(archiveUrl)
-                    if (gamesResponse.isSuccessful) {
-                        val monthGames = gamesResponse.body()?.games
-                        if (monthGames != null) {
-                            // Convert and add in reverse order (most recent first)
-                            val converted = monthGames.reversed().mapNotNull { game ->
-                                convertChessComGameToLichessGame(game)
+            kotlinx.coroutines.coroutineScope {
+                var i = 0
+                while (i < reversedArchives.size && allGames.size < maxGames) {
+                    val batch = reversedArchives.subList(i, minOf(i + batchSize, reversedArchives.size))
+                    val results = batch.map { archiveUrl ->
+                        async {
+                            try {
+                                val response = chessComApi.getMonthlyGames(archiveUrl)
+                                if (!response.isSuccessful) return@async emptyList<LichessGame>()
+                                response.body()?.games
+                                    ?.reversed()
+                                    ?.mapNotNull { convertChessComGameToLichessGame(it) }
+                                    ?: emptyList()
+                            } catch (e: Exception) {
+                                android.util.Log.w("ChessRepository", "Failed to fetch archive $archiveUrl: ${e.message}")
+                                emptyList()
                             }
-                            allGames.addAll(converted)
                         }
-                    }
-                } catch (e: Exception) {
-                    // Skip failed months, continue to next
-                    android.util.Log.w("ChessRepository", "Failed to fetch archive $archiveUrl: ${e.message}")
+                    }.awaitAll()
+                    // Preserve newest-first order across the batch.
+                    for (list in results) allGames.addAll(list)
+                    i += batchSize
                 }
             }
 
