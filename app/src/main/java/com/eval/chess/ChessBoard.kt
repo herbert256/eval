@@ -637,24 +637,84 @@ class ChessBoard {
     }
 
     /**
-     * Get all legal target squares for a piece at the given square
+     * Get all legal target squares for a piece at the given square.
+     * Generates pseudo-legal targets directly from the piece type, then filters
+     * by full legality. This avoids a 64-square scan per call.
      */
     fun getLegalMoves(from: Square): List<Square> {
         val piece = getPiece(from) ?: return emptyList()
         if (piece.color != turn) return emptyList()
 
         val legalMoves = mutableListOf<Square>()
+        for (to in pseudoLegalTargets(from, piece)) {
+            if (isLegalMove(from, to)) legalMoves.add(to)
+        }
+        return legalMoves
+    }
 
-        for (rank in 0..7) {
-            for (file in 0..7) {
-                val to = Square(file, rank)
-                if (isLegalMove(from, to)) {
-                    legalMoves.add(to)
+    /**
+     * Enumerates candidate destination squares for a piece without running a full
+     * legality check. Used as a cheap prefilter before isLegalMove.
+     */
+    private fun pseudoLegalTargets(from: Square, piece: Piece): List<Square> {
+        val out = mutableListOf<Square>()
+        when (piece.type) {
+            PieceType.PAWN -> {
+                val dir = if (piece.color == PieceColor.WHITE) 1 else -1
+                val one = from.rank + dir
+                if (one in 0..7) {
+                    out.add(Square(from.file, one))
+                    if (from.file - 1 in 0..7) out.add(Square(from.file - 1, one))
+                    if (from.file + 1 in 0..7) out.add(Square(from.file + 1, one))
+                }
+                val two = from.rank + 2 * dir
+                if (two in 0..7) out.add(Square(from.file, two))
+            }
+            PieceType.KNIGHT -> {
+                val deltas = arrayOf(-2 to -1, -2 to 1, -1 to -2, -1 to 2, 1 to -2, 1 to 2, 2 to -1, 2 to 1)
+                for ((df, dr) in deltas) {
+                    val f = from.file + df; val r = from.rank + dr
+                    if (f in 0..7 && r in 0..7) out.add(Square(f, r))
+                }
+            }
+            PieceType.BISHOP -> addRayTargets(from, piece.color, out, diag = true, ortho = false)
+            PieceType.ROOK -> addRayTargets(from, piece.color, out, diag = false, ortho = true)
+            PieceType.QUEEN -> addRayTargets(from, piece.color, out, diag = true, ortho = true)
+            PieceType.KING -> {
+                for (df in -1..1) for (dr in -1..1) {
+                    if (df == 0 && dr == 0) continue
+                    val f = from.file + df; val r = from.rank + dr
+                    if (f in 0..7 && r in 0..7) out.add(Square(f, r))
+                }
+                // Castling candidates — full legality is verified in isLegalMove.
+                if (from.file == 4) {
+                    val rank = from.rank
+                    out.add(Square(6, rank))
+                    out.add(Square(2, rank))
                 }
             }
         }
+        return out
+    }
 
-        return legalMoves
+    private fun addRayTargets(from: Square, color: PieceColor, out: MutableList<Square>, diag: Boolean, ortho: Boolean) {
+        val directions = buildList {
+            if (ortho) { add(1 to 0); add(-1 to 0); add(0 to 1); add(0 to -1) }
+            if (diag)  { add(1 to 1); add(1 to -1); add(-1 to 1); add(-1 to -1) }
+        }
+        for ((df, dr) in directions) {
+            var f = from.file + df; var r = from.rank + dr
+            while (f in 0..7 && r in 0..7) {
+                val occ = getPiece(f, r)
+                if (occ == null) {
+                    out.add(Square(f, r))
+                } else {
+                    if (occ.color != color) out.add(Square(f, r))
+                    break
+                }
+                f += df; r += dr
+            }
+        }
     }
 
     private fun oppositeColor(color: PieceColor): PieceColor {
