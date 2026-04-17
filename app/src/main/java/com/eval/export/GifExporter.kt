@@ -86,6 +86,9 @@ object GifExporter {
     ): File = withContext(Dispatchers.IO) {
         val file = File(context.cacheDir, "${filePrefix}_${System.currentTimeMillis()}.gif")
         val encoder = AnimatedGifEncoder()
+        // Chess board frames share nearly-identical palettes; reuse the first
+        // frame's palette to skip NeuQuant training on every subsequent frame.
+        encoder.reusePalette = true
 
         var success = false
         try {

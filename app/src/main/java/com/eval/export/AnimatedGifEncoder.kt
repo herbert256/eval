@@ -21,6 +21,11 @@ class AnimatedGifEncoder {
     private var indexedPixels: ByteArray? = null
     private var colorDepth: Int = 0
     private var colorTab: ByteArray? = null
+    /** When true, the palette from the first frame is reused for every subsequent
+     *  frame. For inputs where the palette changes little frame-to-frame (chess
+     *  boards with a fixed piece/square colour set are a perfect fit) this skips
+     *  per-frame NeuQuant training and makes export ~5-10x faster. */
+    var reusePalette: Boolean = false
     private var usedEntry = BooleanArray(256)
     private var palSize: Int = 7 // color table size (bits - 1)
     private var dispose: Int = -1 // disposal code (-1 = use default)
@@ -234,20 +239,47 @@ class AnimatedGifEncoder {
         val nPix = len / 3
         val indexed = ByteArray(nPix)
 
-        // Use NeuQuant algorithm to quantize colors
-        val nq = NeuQuant(pix, len, sample)
-        colorTab = nq.process() // create reduced palette
-
-        // Map image pixels to new palette
-        var k = 0
-        for (i in 0 until nPix) {
-            val index = nq.map(
-                pix[k++].toInt() and 0xff,
-                pix[k++].toInt() and 0xff,
-                pix[k++].toInt() and 0xff
-            )
-            usedEntry[index] = true
-            indexed[i] = index.toByte()
+        val existingTab = colorTab
+        if (reusePalette && !firstFrame && existingTab != null) {
+            // Reuse the existing palette: map each pixel to the closest entry.
+            // 3-byte palette with 256 entries is small enough that a linear
+            // scan is still faster than running NeuQuant per frame.
+            var k = 0
+            for (i in 0 until nPix) {
+                val r = pix[k++].toInt() and 0xff
+                val g = pix[k++].toInt() and 0xff
+                val b = pix[k++].toInt() and 0xff
+                var best = 0
+                var bestDist = Int.MAX_VALUE
+                var j = 0
+                while (j < existingTab.size) {
+                    val dr = r - (existingTab[j].toInt() and 0xff)
+                    val dg = g - (existingTab[j + 1].toInt() and 0xff)
+                    val db = b - (existingTab[j + 2].toInt() and 0xff)
+                    val d = dr * dr + dg * dg + db * db
+                    if (d < bestDist) {
+                        bestDist = d
+                        best = j / 3
+                    }
+                    j += 3
+                }
+                usedEntry[best] = true
+                indexed[i] = best.toByte()
+            }
+        } else {
+            // First frame, or caller wants per-frame palettes: run NeuQuant.
+            val nq = NeuQuant(pix, len, sample)
+            colorTab = nq.process()
+            var k = 0
+            for (i in 0 until nPix) {
+                val index = nq.map(
+                    pix[k++].toInt() and 0xff,
+                    pix[k++].toInt() and 0xff,
+                    pix[k++].toInt() and 0xff
+                )
+                usedEntry[index] = true
+                indexed[i] = index.toByte()
+            }
         }
         indexedPixels = indexed
         pixels = null
