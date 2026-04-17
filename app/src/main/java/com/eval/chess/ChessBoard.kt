@@ -29,7 +29,7 @@ data class Move(
     val san: String = ""
 )
 
-class ChessBoard {
+class ChessBoard private constructor(skipReset: Boolean) {
     private val board = arrayOfNulls<Piece>(64)
     private var turn: PieceColor = PieceColor.WHITE
     private var castlingRights = mutableSetOf('K', 'Q', 'k', 'q')
@@ -38,8 +38,10 @@ class ChessBoard {
     private var fullMoveNumber = 1
     private var lastMove: Move? = null
 
+    constructor() : this(skipReset = false)
+
     init {
-        reset()
+        if (!skipReset) reset()
     }
 
     fun reset() {
@@ -561,10 +563,10 @@ class ChessBoard {
     }
 
     fun copy(): ChessBoard {
-        val newBoard = ChessBoard()
-        for (i in 0..63) {
-            newBoard.board[i] = this.board[i]
-        }
+        // Skip the reset() in the normal constructor since we immediately
+        // overwrite every field. Use Array.copyInto for a faster bulk copy.
+        val newBoard = ChessBoard(skipReset = true)
+        this.board.copyInto(newBoard.board)
         newBoard.turn = this.turn
         newBoard.castlingRights = this.castlingRights.toMutableSet()
         newBoard.enPassantSquare = this.enPassantSquare
