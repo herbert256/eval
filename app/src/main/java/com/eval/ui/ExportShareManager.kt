@@ -79,7 +79,8 @@ internal class ExportShareManager(
             moveDetails = state.moveDetails,
             analyseScores = state.analyseScores,
             moveQualities = state.moveQualities,
-            openingName = openingName
+            openingName = openingName,
+            server = state.gameSelectionServer
         )
 
         val sendIntent = Intent().apply {
@@ -100,7 +101,8 @@ internal class ExportShareManager(
             moveDetails = state.moveDetails,
             analyseScores = state.analyseScores,
             moveQualities = state.moveQualities,
-            openingName = openingName
+            openingName = openingName,
+            server = state.gameSelectionServer
         )
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val clip = ClipData.newPlainText("Chess PGN", pgn)

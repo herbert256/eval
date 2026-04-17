@@ -1,5 +1,6 @@
 package com.eval.export
 
+import com.eval.data.ChessServer
 import com.eval.data.LichessGame
 import com.eval.ui.MoveDetails
 import com.eval.ui.MoveQuality
@@ -18,6 +19,7 @@ object PgnExporter {
      * @param analyseScores Map of move index to score
      * @param moveQualities Map of move index to quality
      * @param openingName Optional opening name
+     * @param server The originating server — used for the Site header
      * @return Formatted PGN string
      */
     fun exportAnnotatedPgn(
@@ -25,13 +27,18 @@ object PgnExporter {
         moveDetails: List<MoveDetails>,
         analyseScores: Map<Int, MoveScore>,
         moveQualities: Map<Int, MoveQuality>,
-        openingName: String?
+        openingName: String?,
+        server: ChessServer = ChessServer.LICHESS
     ): String {
         val sb = StringBuilder()
 
         // PGN Headers
+        val siteName = when (server) {
+            ChessServer.CHESS_COM -> "Chess.com"
+            ChessServer.LICHESS -> "Lichess.org"
+        }
         sb.appendLine("[Event \"${game.perf ?: "Game"}\"]")
-        sb.appendLine("[Site \"${if (game.id.length > 8) "Chess.com" else "Lichess.org"}\"]")
+        sb.appendLine("[Site \"$siteName\"]")
         sb.appendLine("[Date \"${formatDate(game.createdAt)}\"]")
         sb.appendLine("[White \"${game.players.white.user?.name ?: "Unknown"}\"]")
         sb.appendLine("[Black \"${game.players.black.user?.name ?: "Unknown"}\"]")
