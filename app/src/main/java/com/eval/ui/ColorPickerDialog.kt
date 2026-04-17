@@ -115,13 +115,17 @@ fun ColorPickerDialog(
                 val w = size.width.toInt()
                 val h = size.height.toInt()
                 if (w > 0 && h > 0) {
-                    // Regenerate bitmap only when brightness or size changes
-                    if (cachedBitmap == null || cachedBrightness != brightness || cachedWidth != w || cachedHeight != h) {
+                    // Snap brightness to 2% buckets so a slider drag (which emits
+                    // a fresh float on every pointer sample) doesn't rebuild the
+                    // 256x256 bitmap every frame. The visual difference between
+                    // adjacent buckets is imperceptible.
+                    val bucketedBrightness = (kotlin.math.round(brightness * 50f) / 50f).coerceIn(0f, 1f)
+                    if (cachedBitmap == null || cachedBrightness != bucketedBrightness || cachedWidth != w || cachedHeight != h) {
                         val step = 4
                         val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
                         val canvas = android.graphics.Canvas(bmp)
                         val paint = android.graphics.Paint()
-                        val hsvValues = floatArrayOf(0f, 0f, brightness)
+                        val hsvValues = floatArrayOf(0f, 0f, bucketedBrightness)
                         for (x in 0 until w step step) {
                             for (y in 0 until h step step) {
                                 hsvValues[0] = x.toFloat() / w * 360f
@@ -131,7 +135,7 @@ fun ColorPickerDialog(
                             }
                         }
                         cachedBitmap = bmp
-                        cachedBrightness = brightness
+                        cachedBrightness = bucketedBrightness
                         cachedWidth = w
                         cachedHeight = h
                     }
