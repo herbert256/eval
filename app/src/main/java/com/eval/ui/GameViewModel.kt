@@ -43,6 +43,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(GameUiState())
     val uiState: StateFlow<GameUiState> = _uiState.asStateFlow()
 
+    private var analysisResultCollector: Job? = null
+    private var stockfishReadyCollector: Job? = null
+
     private val mainTimeline = GameTimeline()
     private val exploringTimeline = GameTimeline()
     private val boardHistory = mainTimeline.snapshotList
@@ -231,7 +234,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 if (ready) {
                     analysisOrchestrator.configureForManualStage()
                 }
-                _uiState.update { it.copy(stockfishReady = ready) }
+                // stockfishReady is owned by the isReady collector below; no need
+                // to set it explicitly here (was racing with the collector on init).
 
                 // Auto-restore manual stage game from previous session
                 if (ready) {
@@ -242,7 +246,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
-            viewModelScope.launch {
+            analysisResultCollector = viewModelScope.launch {
                 stockfish.analysisResult.collect { result ->
                     if (_uiState.value.currentStage != AnalysisStage.MANUAL) {
                         if (result != null) {
@@ -263,7 +267,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
-            viewModelScope.launch {
+            stockfishReadyCollector = viewModelScope.launch {
                 stockfish.isReady.collect { ready ->
                     _uiState.update { it.copy(stockfishReady = ready) }
                 }
@@ -953,6 +957,8 @@ ${opening.moves} *
 
     override fun onCleared() {
         super.onCleared()
+        analysisResultCollector?.cancel()
+        stockfishReadyCollector?.cancel()
         analysisOrchestrator.autoAnalysisJob?.cancel()
         analysisOrchestrator.manualAnalysisJob?.cancel()
         openingExplorerJob?.cancel()
