@@ -365,12 +365,12 @@ data class GameUiState(
     val gameSelectionHasMore: Boolean = true,
     // Retrieve screen navigation
     val showRetrieveScreen: Boolean = false,
-    // AI Prompts list (prompts are sent to external AI app)
-    val aiPrompts: List<AiPromptEntry> = emptyList(),
+    // Named instructions for the external AI app
+    val aiInstructions: List<AiInstructionEntry> = emptyList(),
     // Share position dialog
     val showSharePositionDialog: Boolean = false,
-    // AI Prompt selection dialog (shown when user clicks "Generate AI Reports")
-    val showAiPromptSelectionDialog: Boolean = false,
+    // Context captured when the user requests an AI report
+    val pendingAiReport: AiReportContext? = null,
     // Opening Explorer
     val openingExplorerData: com.eval.data.OpeningExplorerResponse? = null,
     val openingExplorerLoading: Boolean = false,

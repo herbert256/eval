@@ -27,13 +27,29 @@ internal class GameLoader(
     private val gameStorage: GameStorageManager,
     private val analysisOrchestrator: AnalysisOrchestrator,
     private val fetchOpeningExplorer: () -> Unit,
-    private val restartStockfishAndAnalyze: suspend (String) -> Unit = { },
+    private val analyzeRestoredPosition: suspend (String) -> Unit = { },
     private val getAppVersionCode: () -> Long = { 0L }
 ) {
     // Temporary storage for server/username when showing game selection dialog
     private var pendingGameSelectionServer: ChessServer? = null
     private var pendingGameSelectionUsername: String? = null
     private var isPgnFileSelection: Boolean = false
+    private var gameSelectionGeneration = 0L
+
+    /** A newer local selection owns the screen even if an older download finishes later. */
+    fun invalidatePendingRetrieval() {
+        gameSelectionGeneration++
+        updateUiState {
+            copy(
+                isLoading = false,
+                gameSelectionLoading = false,
+                showGameSelection = false,
+                showSelectedRetrieveGames = false,
+                selectedRetrieveEntry = null,
+                selectedRetrieveGames = emptyList()
+            )
+        }
+    }
 
     val savedLichessUsername: String
         get() = settingsPrefs.savedLichessUsername
@@ -56,8 +72,9 @@ internal class GameLoader(
                 "chess.com" -> ChessServer.CHESS_COM
                 else -> return
             }
+            val generation = ++gameSelectionGeneration
             viewModelScope.launch {
-                fetchLastGameFromServer(server, username)
+                fetchLastGameFromServer(server, username, generation)
             }
         }
     }
@@ -67,6 +84,11 @@ internal class GameLoader(
      */
     suspend fun fetchLastGameFromServer(server: ChessServer, username: String) {
         if (username.isBlank()) return
+        fetchLastGameFromServer(server, username, ++gameSelectionGeneration)
+    }
+
+    private suspend fun fetchLastGameFromServer(server: ChessServer, username: String, generation: Long) {
+        if (username.isBlank() || generation != gameSelectionGeneration) return
 
         updateUiState {
             copy(
@@ -79,6 +101,7 @@ internal class GameLoader(
             ChessServer.LICHESS -> repository.getLichessGames(username, 1)
             ChessServer.CHESS_COM -> repository.getChessComGames(username, 1)
         }
+        if (generation != gameSelectionGeneration) return
 
         when (result) {
             is Result.Success -> {
@@ -114,6 +137,7 @@ internal class GameLoader(
     }
 
     fun fetchGames(server: ChessServer, username: String) {
+        val generation = ++gameSelectionGeneration
         when (server) {
             ChessServer.LICHESS -> {
                 settingsPrefs.saveLichessUsername(username)
@@ -133,6 +157,7 @@ internal class GameLoader(
         val pageSize = 25
 
         viewModelScope.launch {
+            if (generation != gameSelectionGeneration) return@launch
             updateUiState {
                 copy(
                     isLoading = true,
@@ -150,6 +175,7 @@ internal class GameLoader(
                 ChessServer.LICHESS -> repository.getLichessGames(username, pageSize)
                 ChessServer.CHESS_COM -> repository.getChessComGames(username, pageSize)
             }
+            if (generation != gameSelectionGeneration) return@launch
 
             when (result) {
                 is Result.Success -> {
@@ -222,6 +248,7 @@ internal class GameLoader(
     }
 
     fun clearGame() {
+        invalidatePendingRetrieval()
         analysisOrchestrator.stop()
         val boardHistory = getBoardHistory()
         val exploringLineHistory = getExploringLineHistory()
@@ -252,12 +279,7 @@ internal class GameLoader(
         }
     }
 
-    fun loadGame(game: LichessGame, @Suppress("UNUSED_PARAMETER") server: ChessServer?, username: String?) {
-        analysisOrchestrator.autoAnalysisJob?.cancel()
-        analysisOrchestrator.manualAnalysisJob?.cancel()
-        analysisOrchestrator.stop()
-        gameStorage.clearManualStageGame()
-
+    fun loadGame(game: LichessGame, server: ChessServer?, username: String?) {
         val pgn = game.pgn
         if (pgn == null) {
             updateUiState {
@@ -270,6 +292,14 @@ internal class GameLoader(
         }
 
         val pgnHeaders = PgnParser.parseHeaders(pgn)
+        val startingBoard = PgnParser.parseInitialBoard(pgn)
+        if (startingBoard == null) {
+            updateUiState { copy(isLoading = false, errorMessage = "Invalid PGN starting position") }
+            return
+        }
+        invalidatePendingRetrieval()
+        analysisOrchestrator.stop()
+        gameStorage.clearManualStageGame()
         val openingName = pgnHeaders["Opening"] ?: pgnHeaders["ECO"]
 
         val parsedMoves = PgnParser.parseMovesWithClock(pgn)
@@ -277,6 +307,7 @@ internal class GameLoader(
 
         val (boards, validMoves) = buildBoardHistory(
             moves = parsedMoves.map { it.san },
+            initialBoard = startingBoard,
             onMoveApplied = { index, move, boardBefore, boardAfter ->
                 val details = buildMoveDetails(boardAfter, boardBefore, move, parsedMoves[index].clockTime)
                 if (details != null) {
@@ -313,6 +344,8 @@ internal class GameLoader(
             copy(
                 isLoading = false,
                 game = game,
+                gameSelectionServer = server ?: gameSelectionServer,
+                errorMessage = importError(parsedMoves.map { it.san }, validMoves),
                 openingName = openingName,
                 moves = validMoves,
                 moveDetails = moveDetailsList,
@@ -328,6 +361,9 @@ internal class GameLoader(
                 currentStage = AnalysisStage.PREVIEW,
                 previewScores = emptyMap(),
                 analyseScores = emptyMap(),
+                moveQualities = emptyMap(),
+                analysisResult = null,
+                analysisResultFen = null,
                 autoAnalysisIndex = -1
             )
         }
@@ -336,11 +372,17 @@ internal class GameLoader(
     }
 
     fun loadAnalysedGameDirectly(analysedGame: AnalysedGame) {
-        analysisOrchestrator.autoAnalysisJob?.cancel()
+        val startingBoard = PgnParser.parseInitialBoard(analysedGame.pgn)
+        if (startingBoard == null) {
+            updateUiState { copy(isLoading = false, errorMessage = "Invalid PGN starting position") }
+            return
+        }
+        invalidatePendingRetrieval()
+        analysisOrchestrator.stop()
 
         val parsedMoves = PgnParser.parseMoves(analysedGame.pgn)
 
-        val (boards, _) = buildBoardHistory(parsedMoves)
+        val (boards, validMoves) = buildBoardHistory(parsedMoves, initialBoard = startingBoard)
 
         val boardHistory = getBoardHistory()
         val exploringLineHistory = getExploringLineHistory()
@@ -404,8 +446,9 @@ internal class GameLoader(
         updateUiState {
             copy(
                 game = lichessGame,
-                moves = analysedGame.moves,
-                moveDetails = analysedGame.moveDetails,
+                moves = validMoves,
+                moveDetails = analysedGame.moveDetails.take(validMoves.size),
+                errorMessage = importError(parsedMoves, validMoves),
                 currentMoveIndex = validIndex,
                 currentBoard = board.copy(),
                 flippedBoard = userPlayedBlack,
@@ -424,9 +467,9 @@ internal class GameLoader(
 
         val fenToAnalyze = board.getFen()
 
-        viewModelScope.launch {
-            restartStockfishAndAnalyze(fenToAnalyze)
+        analysisOrchestrator.manualAnalysisJob = viewModelScope.launch {
             fetchOpeningExplorer()
+            analyzeRestoredPosition(fenToAnalyze)
         }
     }
 
@@ -478,15 +521,22 @@ internal class GameLoader(
      */
     private fun buildBoardHistory(
         moves: List<String>,
+        initialBoard: ChessBoard = ChessBoard(),
         onMoveApplied: ((index: Int, move: String, boardBefore: ChessBoard, boardAfter: ChessBoard) -> Unit)? = null,
         onMoveFailed: ((index: Int, move: String, boardBefore: ChessBoard) -> Unit)? = null
     ): Pair<List<ChessBoard>, List<String>> {
         val result = BoardHistoryBuilder.build(
             moves = moves,
+            initialBoard = initialBoard,
             onMoveApplied = onMoveApplied,
             onMoveFailed = onMoveFailed
         )
         return Pair(result.boards, result.validMoves)
+    }
+
+    private fun importError(moves: List<String>, validMoves: List<String>): String? {
+        if (moves.size == validMoves.size) return null
+        return "Cannot read move ${validMoves.size + 1}: ${moves[validMoves.size]}. Loaded ${validMoves.size} of ${moves.size} moves."
     }
 
     private fun findBiggestScoreChangeInScores(
@@ -542,18 +592,7 @@ internal class GameLoader(
         if (retrievesList.isEmpty()) return
 
         if (retrievesList.size == 1) {
-            val entry = retrievesList.first()
-            val games = gameStorage.loadGamesForRetrieve(entry)
-            if (games.isNotEmpty()) {
-                updateUiState {
-                    copy(
-                        showRetrieveScreen = false,
-                        showSelectedRetrieveGames = true,
-                        selectedRetrieveEntry = entry,
-                        selectedRetrieveGames = games
-                    )
-                }
-            }
+            selectPreviousRetrieve(retrievesList.first())
         } else {
             updateUiState {
                 copy(
@@ -572,21 +611,30 @@ internal class GameLoader(
     fun selectPreviousRetrieve(entry: RetrievedGamesEntry) {
         val games = gameStorage.loadGamesForRetrieve(entry)
         if (games.isNotEmpty()) {
+            gameSelectionGeneration++
             updateUiState {
                 copy(
+                    showRetrieveScreen = false,
+                    isLoading = false,
                     showPreviousRetrievesSelection = false,
                     showSelectedRetrieveGames = true,
                     selectedRetrieveEntry = entry,
-                    selectedRetrieveGames = games
+                    selectedRetrieveGames = games,
+                    gameSelectionPage = 0,
+                    gameSelectionLoading = false,
+                    gameSelectionHasMore = games.size >= 25,
+                    errorMessage = null
                 )
             }
         }
     }
 
     fun dismissSelectedRetrieveGames() {
+        gameSelectionGeneration++
         updateUiState {
             copy(
                 showSelectedRetrieveGames = false,
+                gameSelectionLoading = false,
                 selectedRetrieveEntry = null,
                 selectedRetrieveGames = emptyList()
             )
@@ -595,6 +643,7 @@ internal class GameLoader(
 
     fun nextGameSelectionPage(pageSize: Int) {
         val state = getUiState()
+        if (state.gameSelectionLoading) return
         val currentPage = state.gameSelectionPage
 
         // Handle analysed games selection (no API fetching needed)
@@ -611,20 +660,24 @@ internal class GameLoader(
         val entry = state.selectedRetrieveEntry ?: return
 
         val nextPageStartIndex = (currentPage + 1) * pageSize
+        val nextPageEndIndex = nextPageStartIndex + pageSize
 
-        if (nextPageStartIndex >= currentGames.size && hasMore) {
-            updateUiState { copy(gameSelectionLoading = true) }
+        // Fill the next page before showing it. Otherwise a partial page from
+        // the initial batch skips its missing games when the user taps Next again.
+        if (nextPageEndIndex > currentGames.size && hasMore) {
+            val generation = gameSelectionGeneration
+            updateUiState { copy(gameSelectionLoading = true, errorMessage = null) }
 
             viewModelScope.launch {
-                val newCount = currentGames.size + pageSize
+                val newCount = nextPageEndIndex
                 val gamesResult = when (entry.server) {
                     ChessServer.LICHESS -> repository.getLichessGames(entry.accountName, newCount)
                     ChessServer.CHESS_COM -> repository.getChessComGames(entry.accountName, newCount)
                 }
+                if (generation != gameSelectionGeneration) return@launch
                 when (gamesResult) {
                     is Result.Success -> {
                         val fetchedGames = gamesResult.data
-                        val gotMoreGames = fetchedGames.size > currentGames.size
                         if (fetchedGames.isNotEmpty()) {
                             storeRetrievedGames(fetchedGames, entry.accountName, entry.server)
                         }
@@ -632,7 +685,7 @@ internal class GameLoader(
                             copy(
                                 selectedRetrieveGames = fetchedGames,
                                 gameSelectionLoading = false,
-                                gameSelectionPage = if (gotMoreGames) currentPage + 1 else currentPage,
+                                gameSelectionPage = if (nextPageStartIndex < fetchedGames.size) currentPage + 1 else currentPage,
                                 gameSelectionHasMore = fetchedGames.size >= newCount
                             )
                         }
@@ -641,7 +694,7 @@ internal class GameLoader(
                         updateUiState {
                             copy(
                                 gameSelectionLoading = false,
-                                gameSelectionHasMore = false
+                                errorMessage = gamesResult.message
                             )
                         }
                     }
@@ -663,6 +716,7 @@ internal class GameLoader(
     fun loadGamesFromPgnContent(pgnContent: String, onMultipleEvents: ((Boolean) -> Unit)? = null) {
         when (val result = repository.parseGamesFromPgnContent(pgnContent)) {
             is Result.Success -> {
+                invalidatePendingRetrieval()
                 val games = result.data
                 if (games.size == 1) {
                     selectPgnGame(games.first())

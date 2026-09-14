@@ -254,6 +254,11 @@ internal class BoardNavigationManager(
         if (!newBoard.makeMoveFromSquares(from, to, promotion)) return
 
         if (state.isExploringLine) {
+            // Rewinding and making a different move starts a new continuation.
+            val retainedBoards = state.exploringLineMoveIndex + 2
+            while (exploringLineHistory.size > retainedBoards) {
+                exploringLineHistory.removeAt(exploringLineHistory.lastIndex)
+            }
             exploringLineHistory.add(newBoard.copy())
             val newMoveIndex = state.exploringLineMoveIndex + 1
             val uciMove = from.toAlgebraic() + to.toAlgebraic() + promotionToUciSuffix(promotion)
@@ -261,7 +266,7 @@ internal class BoardNavigationManager(
             updateUiState {
                 copy(
                     currentBoard = newBoard,
-                    exploringLineMoves = exploringLineMoves + uciMove,
+                    exploringLineMoves = exploringLineMoves.take(newMoveIndex) + uciMove,
                     exploringLineMoveIndex = newMoveIndex
                 )
             }

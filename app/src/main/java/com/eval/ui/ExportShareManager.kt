@@ -6,14 +6,22 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.content.FileProvider
 import com.eval.chess.ChessBoard
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 internal class ExportShareManager(
     private val getUiState: () -> GameUiState,
     private val updateUiState: (GameUiState.() -> GameUiState) -> Unit,
     private val viewModelScope: CoroutineScope
 ) {
+    private var gifExportJob: Job? = null
+
     fun showSharePositionDialog() {
         updateUiState { copy(showSharePositionDialog = true) }
     }
@@ -33,28 +41,36 @@ internal class ExportShareManager(
     fun sharePositionAsText(context: Context) {
         val state = getUiState()
         val fen = state.currentBoard.getFen()
-        val moveIndex = state.currentMoveIndex
+        val fenFields = fen.split(' ')
+        val whiteToMove = fenFields[1] == "w"
+        val turn = if (whiteToMove) "White" else "Black"
         val game = state.game
-        val analysis = state.analysisResult
+        val analysis = state.analysisResult.takeIf { state.analysisResultFen == fen }
 
         val shareText = buildString {
             if (game != null) {
                 appendLine("${game.players.white.user?.name ?: "White"} vs ${game.players.black.user?.name ?: "Black"}")
                 appendLine()
             }
-            appendLine("Position after move ${(moveIndex + 2) / 2}${if (moveIndex % 2 == 0) "." else "..."}")
+            appendLine("Position: $turn to move (move ${fenFields[5]})")
             appendLine()
             appendLine("FEN: $fen")
             if (analysis != null && analysis.lines.isNotEmpty()) {
                 val topLine = analysis.lines.first()
                 val evalText = if (topLine.isMate) {
-                    "Mate in ${kotlin.math.abs(topLine.mateIn)}"
+                    val winnerIsWhite = if (topLine.mateIn > 0) whiteToMove else !whiteToMove
+                    val winner = if (winnerIsWhite) "White" else "Black"
+                    if (topLine.mateIn == 0) "$winner wins by checkmate"
+                    else "$winner mates in ${kotlin.math.abs(topLine.mateIn)}"
                 } else {
-                    "%.2f".format(topLine.score)
+                    val whiteScore = if (whiteToMove) topLine.score else -topLine.score
+                    String.format(Locale.US, "%+.2f", whiteScore)
                 }
                 appendLine()
-                appendLine("Evaluation: $evalText (depth ${analysis.depth})")
-                appendLine("Best move: ${topLine.pv.split(" ").firstOrNull() ?: "N/A"}")
+                val perspective = if (topLine.isMate) "" else "White's perspective; "
+                appendLine("Evaluation: $evalText (${perspective}depth ${analysis.depth})")
+                val bestMove = topLine.pv.trim().split(Regex("\\s+")).firstOrNull().orEmpty()
+                if (bestMove.isNotEmpty()) appendLine("Best move: $bestMove")
             }
             appendLine()
             val lichessFen = fen.replace(' ', '_')
@@ -110,6 +126,7 @@ internal class ExportShareManager(
     }
 
     fun exportAsGif(context: Context) {
+        if (gifExportJob?.isActive == true) return
         val state = getUiState()
         if (state.game == null) return
         val moveDetails = state.moveDetails
@@ -121,18 +138,15 @@ internal class ExportShareManager(
 
         updateUiState { copy(showGifExportDialog = true, gifExportProgress = 0f) }
 
-        viewModelScope.launch {
+        gifExportJob = viewModelScope.launch {
+            val exportContext = currentCoroutineContext()
             try {
-                val boards = mutableListOf<ChessBoard>()
-                var board = ChessBoard()
-                boards.add(board.copy())
-
-                for (move in moveDetails) {
-                    val success = board.makeMove(move.san) || board.makeUciMove(move.san)
-                    if (success) {
-                        boards.add(board.copy())
-                    }
+                val initialBoard = requireNotNull(com.eval.chess.PgnParser.parseInitialBoard(state.game.pgn.orEmpty())) {
+                    "Invalid PGN starting position"
                 }
+                val history = BoardHistoryBuilder.build(moveDetails.map { it.san }, initialBoard)
+                require(history.failedMoveIndex == null) { "Invalid move: ${history.failedMove}" }
+                val boards = history.boards
 
                 val boardScores = mutableMapOf<Int, MoveScore>()
                 analyseScores.forEach { (moveIndex, score) ->
@@ -148,7 +162,11 @@ internal class ExportShareManager(
                     frameDelay = 1000,
                     callback = object : com.eval.export.GifExporter.ProgressCallback {
                         override fun onProgress(current: Int, total: Int) {
-                            updateUiState { copy(gifExportProgress = current.toFloat() / total) }
+                            updateUiState {
+                                if (exportContext.isActive && showGifExportDialog) {
+                                    copy(gifExportProgress = current.toFloat() / total)
+                                } else this
+                            }
                         }
                     }
                 )
@@ -167,7 +185,10 @@ internal class ExportShareManager(
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
                 context.startActivity(Intent.createChooser(shareIntent, "Share GIF"))
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
+                currentCoroutineContext().ensureActive()
                 updateUiState {
                     copy(
                         showGifExportDialog = false,
@@ -180,7 +201,7 @@ internal class ExportShareManager(
     }
 
     fun cancelGifExport() {
+        gifExportJob?.cancel()
         updateUiState { copy(showGifExportDialog = false, gifExportProgress = null) }
     }
 }
-

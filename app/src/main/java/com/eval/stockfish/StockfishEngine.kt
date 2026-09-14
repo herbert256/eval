@@ -40,6 +40,7 @@ class StockfishEngine(private val context: Context) {
         private const val MAX_SAFE_HASH_MB = 256
         // Maximum safe thread count for mobile devices
         private const val MAX_SAFE_THREADS = 4
+        internal const val READY_TIMEOUT_MS = 15000L
     }
 
     private var process: Process? = null
@@ -59,6 +60,7 @@ class StockfishEngine(private val context: Context) {
         get() = _scope ?: CoroutineScope(Dispatchers.IO + SupervisorJob()).also { _scope = it }
     // Mutex to ensure only one analysis runs at a time
     private val analysisMutex = kotlinx.coroutines.sync.Mutex()
+    private val lifecycleMutex = kotlinx.coroutines.sync.Mutex()
     // Lock for thread-safe access to pvLines
     private val pvLinesLock = Any()
 
@@ -82,24 +84,27 @@ class StockfishEngine(private val context: Context) {
     }
 
     suspend fun initialize(): Boolean = withContext(Dispatchers.IO) {
-        try {
-            // Use system-installed Stockfish (com.stockfish141 package)
-            val systemStockfishPath = findSystemStockfish()
-            if (systemStockfishPath != null) {
-                android.util.Log.i("StockfishEngine", "Using system Stockfish: $systemStockfishPath")
-                stockfishPath = systemStockfishPath
-            } else {
-                android.util.Log.e("StockfishEngine", "Stockfish Chess Engine app not installed")
-                return@withContext false
+        lifecycleMutex.withLock {
+            try {
+                // Use system-installed Stockfish (com.stockfish141 package)
+                val systemStockfishPath = findSystemStockfish()
+                if (systemStockfishPath != null) {
+                    android.util.Log.i("StockfishEngine", "Using system Stockfish: $systemStockfishPath")
+                    stockfishPath = systemStockfishPath
+                } else {
+                    android.util.Log.e("StockfishEngine", "Stockfish Chess Engine app not installed")
+                    return@withContext false
+                }
+
+                // Start the process
+                startProcess()
+                _isReady.value
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                e.printStackTrace()
+                false
             }
-
-            // Start the process
-            startProcess()
-
-            true
-        } catch (e: Exception) {
-            e.printStackTrace()
-            false
         }
     }
 
@@ -148,7 +153,12 @@ class StockfishEngine(private val context: Context) {
         val path = stockfishPath ?: return
 
         try {
-            process = ProcessBuilder(path)
+            // Keep CPU-bound engine workers below the UI's scheduling priority.
+            // In particular, several normal-priority workers can starve input
+            // delivery on devices with few available CPUs.
+            val nice = File("/system/bin/nice")
+            val command = if (nice.canExecute()) listOf(nice.path, "-n", "10", path) else listOf(path)
+            process = ProcessBuilder(command)
                 .redirectErrorStream(true)
                 .start()
 
@@ -160,11 +170,17 @@ class StockfishEngine(private val context: Context) {
             sendCommand("uci")
 
             // Read until uciok
-            var line = readLineWithTimeout(5000)
+            // Loading the engine's neural network can take several seconds on
+            // a cold device. Bound the whole handshake, not each output line.
+            val uciDeadline = android.os.SystemClock.elapsedRealtime() + 15000
+            var line = readLineWithTimeout(15000)
             while (line != null && line != "uciok") {
-                line = readLineWithTimeout(5000)
+                val remaining = uciDeadline - android.os.SystemClock.elapsedRealtime()
+                if (remaining <= 0) break
+                line = readLineWithTimeout(remaining)
             }
             if (line != "uciok") {
+                android.util.Log.e("StockfishEngine", "Engine did not complete the UCI handshake")
                 _isReady.value = false
                 return
             }
@@ -172,7 +188,7 @@ class StockfishEngine(private val context: Context) {
             // Send isready and wait for readyok (with timeout)
             sendCommand("isready")
             var readyAttempts = 0
-            line = readLineWithTimeout(3000)
+            line = readLineWithTimeout(10000)
             while (line != null && line != "readyok" && readyAttempts < 50) {
                 line = readLineWithTimeout(3000)
                 readyAttempts++
@@ -180,6 +196,8 @@ class StockfishEngine(private val context: Context) {
 
             _isReady.value = line == "readyok"
 
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             e.printStackTrace()
             _isReady.value = false
@@ -221,8 +239,9 @@ class StockfishEngine(private val context: Context) {
 
         // Cap hash size to prevent memory-related crashes
         // On mobile devices, large hash tables can cause the process to die
-        val safeHashMb = hashMb.coerceAtMost(MAX_SAFE_HASH_MB)
-        val safeThreads = threads.coerceAtMost(MAX_SAFE_THREADS)
+        val safeHashMb = hashMb.coerceIn(1, MAX_SAFE_HASH_MB)
+        val availableCpus = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+        val safeThreads = threads.coerceIn(1, minOf(MAX_SAFE_THREADS, availableCpus))
         if (safeHashMb != hashMb || safeThreads != threads) {
             android.util.Log.w("StockfishEngine", "Settings capped for stability: Hash ${hashMb}→${safeHashMb}MB, Threads ${threads}→${safeThreads}")
         }
@@ -238,39 +257,22 @@ class StockfishEngine(private val context: Context) {
 
     /**
      * Sends "isready" and reads until "readyok", discarding leftover info/bestmove lines.
-     * Returns true if readyok was received, false otherwise (null read or max attempts exceeded).
+     * Uses one deadline for the handshake, including any leftover output.
      * Must be called from a coroutine context (checks isActive).
      */
-    private suspend fun CoroutineScope.waitForEngineReady(caller: String, maxAttempts: Int = 50): Boolean {
+    private suspend fun CoroutineScope.waitForEngineReady(caller: String): Boolean {
         sendCommand("isready")
-
-        var line = readLineWithTimeout(3000)
-        var readyAttempts = 0
-        while (line != null && line != "readyok" && isActive && readyAttempts < maxAttempts) {
-            // Skip info lines from previous analysis that might still be in buffer
-            if (line.startsWith("info ") || line.startsWith("bestmove")) {
-                // Discard leftover output
-            }
-            line = readLineWithTimeout(3000)
-            readyAttempts++
+        val deadline = android.os.SystemClock.elapsedRealtime() + READY_TIMEOUT_MS
+        while (isActive) {
+            val remaining = deadline - android.os.SystemClock.elapsedRealtime()
+            if (remaining <= 0) break
+            val line = readLineWithTimeout(remaining) ?: break
+            if (line == "readyok") return true
         }
-
-        if (!isActive) {
-            if (com.eval.BuildConfig.DEBUG) android.util.Log.d("StockfishEngine", "$caller: cancelled before analysis")
-            return false
-        }
-        if (line == null) {
-            val isAlive = try { process?.isAlive == true } catch (e: Exception) { false }
-            android.util.Log.e("StockfishEngine", "$caller: processReader returned null (EOF?), process.isAlive=$isAlive")
-            _isReady.value = false
-            return false
-        }
-        if (readyAttempts >= maxAttempts) {
-            android.util.Log.e("StockfishEngine", "$caller: timeout waiting for readyok after $readyAttempts attempts")
-            return false
-        }
-
-        return true
+        val alive = process?.isAlive == true
+        android.util.Log.e("StockfishEngine", "$caller: ${if (alive) "Timed out waiting for readyok" else "Engine closed its output"}")
+        _isReady.value = false
+        return false
     }
 
     /**
@@ -500,18 +502,24 @@ class StockfishEngine(private val context: Context) {
      * simply calls destroy().
      */
     private fun cleanupProcess(forceful: Boolean) {
+        val oldProcess = process
+        val oldWriter = processWriter
+        val oldReader = processReader
+        process = null
+        processWriter = null
+        processReader = null
         try {
-            sendCommand("quit")
-            processWriter?.close()
-            processReader?.close()
+            runCatching { oldWriter?.apply { write("quit"); newLine(); flush() } }
+            runCatching { oldWriter?.close() }
+            runCatching { oldReader?.close() }
             if (forceful) {
-                val terminated = process?.waitFor(500, java.util.concurrent.TimeUnit.MILLISECONDS) ?: true
+                val terminated = oldProcess?.waitFor(500, java.util.concurrent.TimeUnit.MILLISECONDS) ?: true
                 if (!terminated) {
-                    process?.destroyForcibly()
-                    process?.waitFor(500, java.util.concurrent.TimeUnit.MILLISECONDS)
+                    oldProcess?.destroyForcibly()
+                    oldProcess?.waitFor(500, java.util.concurrent.TimeUnit.MILLISECONDS)
                 }
             } else {
-                process?.destroy()
+                oldProcess?.destroy()
             }
         } catch (e: Exception) {
             if (!forceful) {
@@ -526,42 +534,47 @@ class StockfishEngine(private val context: Context) {
      * Returns true if the restart was successful.
      */
     suspend fun restart(): Boolean = withContext(Dispatchers.IO) {
-        try {
-            // Stop any ongoing analysis and wait for the coroutine to unwind so a
-            // buffered info line from the old engine can't race past the clear.
-            _isReady.value = false
-            analysisJob?.cancelAndJoin()
-            analysisJob = null
+        lifecycleMutex.withLock {
+            try {
+                // Stop any ongoing analysis and wait for the coroutine to unwind so a
+                // buffered info line from the old engine can't race past the clear.
+                _isReady.value = false
+                analysisJob?.cancelAndJoin()
+                analysisJob = null
 
-            // Kill the current process
-            cleanupProcess(forceful = true)
+                // Kill the current process
+                cleanupProcess(forceful = true)
 
-            // Clear state under pvLinesLock, then publish null as the last write so
-            // any straggler parseInfoLine callback can't overwrite the cleared result.
-            process = null
-            processWriter = null
-            processReader = null
-            synchronized(pvLinesLock) {
-                pvLines.clear()
-                currentNodes = 0
-                currentNps = 0
-                _analysisResult.value = null
+                // Clear state under pvLinesLock, then publish null as the last write so
+                // any straggler parseInfoLine callback can't overwrite the cleared result.
+                process = null
+                processWriter = null
+                processReader = null
+                synchronized(pvLinesLock) {
+                    pvLines.clear()
+                    currentNodes = 0
+                    currentNps = 0
+                    _analysisResult.value = null
+                }
+
+                // Delay to ensure process is fully terminated
+                kotlinx.coroutines.delay(300)
+
+                // Start new process
+                startProcess()
+
+                _isReady.value
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                e.printStackTrace()
+                false
             }
-
-            // Delay to ensure process is fully terminated
-            kotlinx.coroutines.delay(300)
-
-            // Start new process
-            startProcess()
-
-            _isReady.value
-        } catch (e: Exception) {
-            e.printStackTrace()
-            false
         }
     }
 
     fun shutdown() {
+        _isReady.value = false
         analysisJob?.cancel()
         _scope?.cancel()
         _scope = null  // Allow scope to be recreated if engine is restarted

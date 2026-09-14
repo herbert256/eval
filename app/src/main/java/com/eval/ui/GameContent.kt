@@ -1,5 +1,7 @@
 package com.eval.ui
 
+import com.eval.chess.ChessBoard
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -66,6 +68,9 @@ fun GameContent(
     viewModel: GameViewModel
 ) {
     val game = uiState.game ?: return
+    val startingBoard = remember(game.pgn) { com.eval.chess.PgnParser.parseInitialBoard(game.pgn.orEmpty()) ?: ChessBoard() }
+    val firstPly = if (startingBoard.getTurn() == PieceColor.BLACK) 1 else 0
+    val firstMoveNumber = startingBoard.getFen().substringAfterLast(' ').toInt()
 
     // Determine whose turn it is
     val turn = uiState.currentBoard.getTurn()
@@ -82,10 +87,10 @@ fun GameContent(
     }
 
     // Get clock times for each player (find most recent clock for each color)
-    val whiteClockTime = remember(uiState.currentMoveIndex, uiState.moveDetails, initialClockTime) {
+    val whiteClockTime = remember(uiState.currentMoveIndex, uiState.moveDetails, initialClockTime, firstPly) {
         // White moves are at even indices (0, 2, 4, ...)
         // Start from most recent even index
-        val startIdx = if (uiState.currentMoveIndex % 2 == 0) uiState.currentMoveIndex else uiState.currentMoveIndex - 1
+        val startIdx = if ((uiState.currentMoveIndex + firstPly) % 2 == 0) uiState.currentMoveIndex else uiState.currentMoveIndex - 1
         if (startIdx >= 0) {
             (startIdx downTo 0 step 2)
                 .firstNotNullOfOrNull { idx -> uiState.moveDetails.getOrNull(idx)?.clockTime }
@@ -94,12 +99,12 @@ fun GameContent(
             initialClockTime
         }
     }
-    val blackClockTime = remember(uiState.currentMoveIndex, uiState.moveDetails, initialClockTime) {
+    val blackClockTime = remember(uiState.currentMoveIndex, uiState.moveDetails, initialClockTime, firstPly) {
         // Black moves are at odd indices (1, 3, 5, ...)
         // Start from most recent odd index
-        val startIdx = if (uiState.currentMoveIndex % 2 == 1) uiState.currentMoveIndex else uiState.currentMoveIndex - 1
-        if (startIdx >= 1) {
-            (startIdx downTo 1 step 2)
+        val startIdx = if ((uiState.currentMoveIndex + firstPly) % 2 == 1) uiState.currentMoveIndex else uiState.currentMoveIndex - 1
+        if (startIdx >= 0) {
+            (startIdx downTo 0 step 2)
                 .firstNotNullOfOrNull { idx -> uiState.moveDetails.getOrNull(idx)?.clockTime }
         } else {
             // At start position, use initial time from game settings
@@ -128,7 +133,7 @@ fun GameContent(
         ) {
             val moveIndex = uiState.currentMoveIndex
             val currentMove = uiState.moves.getOrNull(moveIndex)
-            val isWhiteMove = moveIndex % 2 == 0
+            val isWhiteMove = (moveIndex + firstPly) % 2 == 0
             val lastMove = uiState.currentBoard.getLastMove()
 
             // Determine which score/analysis to show - prefer analyse scores, fall back to preview
@@ -137,8 +142,8 @@ fun GameContent(
             val isManualMode = uiState.currentStage == AnalysisStage.MANUAL
 
             if (currentMove != null && moveIndex >= 0) {
-                val completeMoveNumber = (moveIndex / 2) + 1
-                val totalCompleteMoves = (uiState.moves.size + 1) / 2
+                val completeMoveNumber = firstMoveNumber + (moveIndex + firstPly) / 2
+                val totalCompleteMoves = firstMoveNumber + (uiState.moves.size - 1 + firstPly) / 2
 
                 val pieceSymbol = getPieceSymbolFromSan(currentMove, isWhiteMove)
                 val fromSquare = lastMove?.from?.toAlgebraic() ?: ""
@@ -961,6 +966,8 @@ fun GameContent(
                     }
                 }
                 MovesList(
+                    startsWithBlack = firstPly == 1,
+                    firstMoveNumber = firstMoveNumber,
                     moveDetails = uiState.moveDetails,
                     currentMoveIndex = uiState.currentMoveIndex,
                     moveScores = displayScores,

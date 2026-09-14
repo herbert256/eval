@@ -43,9 +43,16 @@ fun MovesList(
     currentStage: AnalysisStage,
     autoAnalysisIndex: Int,
     userPlayedBlack: Boolean,
+    startsWithBlack: Boolean = false,
+    firstMoveNumber: Int = 1,
     onMoveClick: (Int) -> Unit
 ) {
-    val movePairs = remember(moveDetails) { moveDetails.chunked(2) }
+    val movePairs = remember(moveDetails, startsWithBlack) {
+        buildList<MoveDetails?> {
+            if (startsWithBlack) add(null)
+            addAll(moveDetails)
+        }.chunked(2)
+    }
     val isAutoAnalyzing = currentStage != AnalysisStage.MANUAL
 
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -53,7 +60,7 @@ fun MovesList(
             // Content-based key: when the move list is replaced (e.g. a
             // variation is loaded), a same-index row with different SAN is
             // correctly treated as a new identity by Compose.
-            key("$pairIndex-${pair[0].san}-${pair.getOrNull(1)?.san ?: ""}") {
+            key("$pairIndex-${pair[0]?.san}-${pair.getOrNull(1)?.san ?: ""}") {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -62,7 +69,7 @@ fun MovesList(
                 ) {
                     // Move number
                     Text(
-                        text = "${pairIndex + 1}.",
+                        text = "${pairIndex + firstMoveNumber}.",
                         color = AppColors.DimGray,
                         fontFamily = FontFamily.Monospace,
                         fontSize = 15.sp,
@@ -70,25 +77,30 @@ fun MovesList(
                     )
 
                     // White move
-                    val whiteIndex = pairIndex * 2
-                    MoveChip(
-                        moveDetails = pair[0],
-                        isWhite = true,
-                        isActive = whiteIndex == currentMoveIndex,
-                        isAnalyzing = isAutoAnalyzing && autoAnalysisIndex == whiteIndex,
-                        score = moveScores[whiteIndex],
-                        quality = moveQualities[whiteIndex],
-                        userPlayedBlack = userPlayedBlack,
-                        onClick = { onMoveClick(whiteIndex) },
-                        modifier = Modifier.weight(1f)
-                    )
+                    val whiteIndex = pairIndex * 2 - if (startsWithBlack) 1 else 0
+                    val whiteMove = pair[0]
+                    if (whiteMove != null) {
+                        MoveChip(
+                            moveDetails = whiteMove,
+                            isWhite = true,
+                            isActive = whiteIndex == currentMoveIndex,
+                            isAnalyzing = isAutoAnalyzing && autoAnalysisIndex == whiteIndex,
+                            score = moveScores[whiteIndex],
+                            quality = moveQualities[whiteIndex],
+                            userPlayedBlack = userPlayedBlack,
+                            onClick = { onMoveClick(whiteIndex) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    } else {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
 
                     // Black move
                     if (pair.size > 1) {
                         Spacer(modifier = Modifier.width(4.dp))
-                        val blackIndex = pairIndex * 2 + 1
+                        val blackIndex = whiteIndex + 1
                         MoveChip(
-                            moveDetails = pair[1],
+                            moveDetails = requireNotNull(pair[1]),
                             isWhite = false,
                             isActive = blackIndex == currentMoveIndex,
                             isAnalyzing = isAutoAnalyzing && autoAnalysisIndex == blackIndex,

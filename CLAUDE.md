@@ -77,7 +77,7 @@ com.eval/
     ├── PlayerInfoScreen.kt (808) - Player profile and game history
     ├── GameSelectionDialog.kt (801) - Game selection from multiple games
     ├── RetrieveScreen.kt (2,437) - Game retrieval UI with all sources
-    ├── SettingsScreen.kt (631) - Settings navigation + AI prompts list
+    ├── SettingsScreen.kt (631) - Settings navigation + AI instructions list
     ├── StockfishSettingsScreen.kt (441) - Engine settings for 3 stages
     ├── ArrowSettingsScreen.kt (278) - Arrow display configuration
     ├── BoardLayoutSettingsScreen.kt (378) - Board colors, pieces, eval bar
@@ -125,7 +125,6 @@ object NavRoutes {
 | `PlayerBarMode` | `NONE`, `TOP`, `BOTTOM`, `BOTH` |
 | `EvalBarPosition` | `NONE`, `LEFT`, `RIGHT` |
 | `MoveQuality` | `BRILLIANT`, `GOOD`, `INTERESTING`, `DUBIOUS`, `MISTAKE`, `BLUNDER`, `BOOK`, `NORMAL` |
-| `AiPromptCategory` | `GAME`, `CHESS_SERVER_PLAYER`, `PLAYER` |
 
 ### Key Data Classes
 
@@ -138,7 +137,7 @@ data class GeneralSettings(...)      // Sounds, username
 data class MoveScore(...)            // score, isMate, mateIn, depth, nodes, nps
 data class MoveDetails(...)          // san, from, to, isCapture, pieceType, clockTime
 data class AnalysedGame(...)         // Stored game with all analysis data
-data class AiPromptEntry(...)        // Prompt with id, name, system, prompt, instructions
+data class AiInstructionEntry(...)        // Prompt with id, name, system, prompt, instructions
 data class AnalysisResult(...)       // Engine output: depth, nodes, nps, lines
 data class PvLine(...)               // Principal variation: score, isMate, pv, multipv
 ```
@@ -163,13 +162,17 @@ data class PvLine(...)               // Principal variation: score, isMate, pv, 
 
 ## AI Integration
 
-AI features use Android intents to the external `com.ai` app:
+AI reports use Android intents to the external `com.ai` app:
 - **Intent action**: `com.ai.ACTION_NEW_REPORT`
-- **Extras**: title, system prompt, prompt text, instructions
-- **Placeholders**: `@FEN@`, `@BOARD@`, `@PLAYER@`, `@SERVER@`, `@DATE@`
-- `@BOARD@` generates full HTML with chessboard.js and piece images from Lichess CDN
-
-Three prompt categories: `GAME` (position analysis), `CHESS_SERVER_PLAYER` (online player), `PLAYER` (general player profile)
+- **Extras**: `title`, `instructions`; no `prompt` or `system` extra
+- Eval stores `AiInstructionEntry(id, name, instructions)` in `ai_instructions_list`.
+- Every position or player report requires selection of a named instruction.
+- Prompts and system prompts are created/stored in the AI app.
+- Append `<fen>`, `<color>`, `<server>`, `<player>`, `<pgn>`, `<board>` in that order, including empty fields when unavailable.
+- FEN/color describe the current position. For position reports player is the side-to-move player's name; for profile reports it is the selected player. PGN is the available full game; board is generated HTML/JavaScript.
+- Plain context values use XML escaping; `<board>` contains raw generated HTML/JavaScript. Receivers must treat all six fields as data, not control tags, and decode plain values once.
+- Instructions may use `@FEN@`, `@COLOR@`, `@SERVER@`, `@PLAYER@`, `@PGN@`, `@BOARD@`, `@DATE@`.
+- Settings schema v3 imports v2 and legacy maps. Legacy names/instructions migrate, email becomes an instruction tag, and prompt/system/category fields are removed from active storage.
 
 ## Content Sources
 
@@ -187,7 +190,7 @@ All settings via `SettingsPreferences` using SharedPreferences (`eval_prefs`). K
 - Graph: colors, ranges, scales
 - Interface visibility: ~23 toggles across 3 stages
 - General: move sounds, Lichess username, Chess.com username
-- AI prompts: JSON list of `AiPromptEntry`
+- AI instructions: JSON list of `AiInstructionEntry`
 - Settings export/import: Full JSON round-trip with type preservation
 
 ## Common Tasks

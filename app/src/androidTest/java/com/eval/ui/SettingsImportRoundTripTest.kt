@@ -28,14 +28,11 @@ class SettingsImportRoundTripTest {
                 manualStage = ManualStageSettings(depth = 28, threads = 2, hashMb = 96, multiPv = 4, useNnue = true)
             )
         )
-        settings.saveAiPrompts(
+        settings.saveAiInstructions(
             listOf(
-                AiPromptEntry(
+                AiInstructionEntry(
                     name = "RoundTrip",
-                    prompt = "Prompt @FEN@",
-                    system = "System",
-                    instructions = "Instructions",
-                    category = AiPromptCategory.GAME
+                    instructions = "<type>Classic</type><select>"
                 )
             )
         )
@@ -58,7 +55,7 @@ class SettingsImportRoundTripTest {
         assertEquals(true, settings.getAiAppDontAskAgain())
         assertEquals("TesterLichess", settings.lastServerUser)
         assertEquals("lichess.org", settings.lastServerName)
-        assertEquals(1, settings.loadAiPrompts().size)
+        assertEquals(1, settings.loadAiInstructions().size)
         assertEquals(1, settings.loadFenHistory().size)
     }
 }

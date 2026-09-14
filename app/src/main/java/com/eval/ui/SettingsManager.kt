@@ -79,24 +79,24 @@ internal class SettingsManager(
         updateUiState { copy(generalSettings = settings) }
     }
 
-    fun updateAiPrompts(prompts: List<AiPromptEntry>) {
-        settingsPrefs.saveAiPrompts(prompts)
-        updateUiState { copy(aiPrompts = prompts) }
+    fun updateAiInstructions(instructions: List<AiInstructionEntry>) {
+        settingsPrefs.saveAiInstructions(instructions)
+        updateUiState { copy(aiInstructions = instructions) }
     }
 
-    fun addAiPrompt(prompt: AiPromptEntry) {
-        val updated = getUiState().aiPrompts + prompt
-        updateAiPrompts(updated)
+    fun addAiInstruction(entry: AiInstructionEntry) {
+        val updated = getUiState().aiInstructions + entry
+        updateAiInstructions(updated)
     }
 
-    fun updateAiPrompt(prompt: AiPromptEntry) {
-        val updated = getUiState().aiPrompts.map { if (it.id == prompt.id) prompt else it }
-        updateAiPrompts(updated)
+    fun updateAiInstruction(entry: AiInstructionEntry) {
+        val updated = getUiState().aiInstructions.map { if (it.id == entry.id) entry else it }
+        updateAiInstructions(updated)
     }
 
-    fun deleteAiPrompt(id: String) {
-        val updated = getUiState().aiPrompts.filter { it.id != id }
-        updateAiPrompts(updated)
+    fun deleteAiInstruction(id: String) {
+        val updated = getUiState().aiInstructions.filter { it.id != id }
+        updateAiInstructions(updated)
     }
 
     fun exportSettings(context: Context) {

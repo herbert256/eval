@@ -30,6 +30,10 @@ data class Move(
 )
 
 class ChessBoard private constructor(skipReset: Boolean) {
+    companion object {
+        private val UCI_PATTERN = Regex("[a-h][1-8][a-h][1-8][qrbn]?")
+        private val SAN_PATTERN = Regex("(?:[KQRBN][a-h]?[1-8]?x?[a-h][1-8]|[a-h](?:x[a-h])?[1-8](?:=[QRBN])?|O-O(?:-O)?|0-0(?:-0)?)[+#]?")
+    }
     private val board = arrayOfNulls<Piece>(64)
     private var turn: PieceColor = PieceColor.WHITE
     private var castlingRights = mutableSetOf('K', 'Q', 'k', 'q')
@@ -169,7 +173,7 @@ class ChessBoard private constructor(skipReset: Boolean) {
     }
 
     private fun applyFenUnchecked(fen: String): Boolean {
-        val parts = fen.trim().split(" ")
+        val parts = fen.trim().split(Regex("\\s+"))
         if (parts.isEmpty()) return false
 
         // Clear the board first
@@ -276,12 +280,15 @@ class ChessBoard private constructor(skipReset: Boolean) {
     }
 
     fun makeMove(san: String): Boolean {
-        val move = parseSanMove(san) ?: return false
+        val notation = san.trimEnd('!', '?')
+        if (!SAN_PATTERN.matches(notation)) return false
+        val move = parseSanMove(notation) ?: return false
+        if (!isLegalMove(move.from, move.to) || !isValidPromotion(move)) return false
         return executeMove(move.copy(san = san))
     }
 
     fun makeUciMove(uci: String): Boolean {
-        if (uci.length < 4) return false
+        if (!UCI_PATTERN.matches(uci)) return false
 
         val from = Square.fromAlgebraic(uci.substring(0, 2)) ?: return false
         val to = Square.fromAlgebraic(uci.substring(2, 4)) ?: return false
@@ -296,7 +303,9 @@ class ChessBoard private constructor(skipReset: Boolean) {
             }
         } else null
 
-        return executeMove(Move(from, to, promotion, uci))
+        val move = Move(from, to, promotion, uci)
+        if (!isLegalMove(from, to) || !isValidPromotion(move)) return false
+        return executeMove(move)
     }
 
     private fun parseSanMove(san: String): Move? {
@@ -359,6 +368,9 @@ class ChessBoard private constructor(skipReset: Boolean) {
         // Find the piece that can make this move
         val from = findPiece(pieceType, to, disambiguation) ?: return null
 
+        val isCapture = getPiece(to) != null || (pieceType == PieceType.PAWN && from.file != to.file)
+        if (san.contains('x') != isCapture) return null
+
         return Move(from, to, promotion)
     }
 
@@ -371,26 +383,19 @@ class ChessBoard private constructor(skipReset: Boolean) {
                 if (piece.color != turn || piece.type != type) continue
 
                 val from = Square(file, rank)
-                if (canMove(from, to, piece)) {
+                val matchesSource = when (disambiguation.length) {
+                    0 -> true
+                    1 -> disambiguation[0] == ('a' + file) || disambiguation[0] == ('1' + rank)
+                    2 -> from.toAlgebraic() == disambiguation
+                    else -> false
+                }
+                if (matchesSource && isLegalMove(from, to)) {
                     candidates.add(from)
                 }
             }
         }
 
-        if (candidates.isEmpty()) return null
-        if (candidates.size == 1) return candidates[0]
-
-        // Apply disambiguation
-        return candidates.find { square ->
-            val fileChar = ('a' + square.file)
-            val rankChar = ('1' + square.rank)
-            when {
-                disambiguation.length == 2 -> square.toAlgebraic() == disambiguation
-                disambiguation.length == 1 && disambiguation[0].isDigit() -> disambiguation[0] == rankChar
-                disambiguation.length == 1 -> disambiguation[0] == fileChar
-                else -> true
-            }
-        }
+        return candidates.singleOrNull()
     }
 
     private fun canMove(from: Square, to: Square, piece: Piece): Boolean {
@@ -580,8 +585,10 @@ class ChessBoard private constructor(skipReset: Boolean) {
      * Check if a move from one square to another is legal
      */
     fun isLegalMove(from: Square, to: Square): Boolean {
+        if (from.file !in 0..7 || from.rank !in 0..7 || to.file !in 0..7 || to.rank !in 0..7) return false
         val piece = getPiece(from) ?: return false
         if (piece.color != turn) return false
+        if (getPiece(to)?.type == PieceType.KING) return false
 
         // Check for castling
         if (piece.type == PieceType.KING && kotlin.math.abs(to.file - from.file) == 2) {
@@ -610,6 +617,8 @@ class ChessBoard private constructor(skipReset: Boolean) {
     private fun canCastle(from: Square, to: Square): Boolean {
         val piece = getPiece(from) ?: return false
         if (piece.type != PieceType.KING) return false
+        val homeRank = if (piece.color == PieceColor.WHITE) 0 else 7
+        if (from != Square(4, homeRank) || to.rank != homeRank || to.file !in listOf(2, 6)) return false
 
         val isKingside = to.file == 6
         val rank = from.rank
@@ -787,6 +796,7 @@ class ChessBoard private constructor(skipReset: Boolean) {
      */
     fun makeMoveFromSquares(from: Square, to: Square, promotion: PieceType? = null): Boolean {
         if (!isLegalMove(from, to)) return false
+        if (!isValidPromotion(Move(from, to, promotion))) return false
         val uci = from.toAlgebraic() + to.toAlgebraic() + (promotion?.let {
             when (it) {
                 PieceType.QUEEN -> "q"
@@ -797,5 +807,10 @@ class ChessBoard private constructor(skipReset: Boolean) {
             }
         } ?: "")
         return executeMove(Move(from, to, promotion, uci))
+    }
+
+    private fun isValidPromotion(move: Move): Boolean {
+        if (!needsPromotion(move.from, move.to)) return move.promotion == null
+        return move.promotion in setOf(PieceType.QUEEN, PieceType.ROOK, PieceType.BISHOP, PieceType.KNIGHT)
     }
 }

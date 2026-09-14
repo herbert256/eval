@@ -287,6 +287,13 @@ interface LichessApi {
             }
 
             val okHttpClient = OkHttpClient.Builder()
+                .addInterceptor { chain ->
+                    // Lichess rejects anonymous generic-client user agents on game exports.
+                    val request = chain.request().newBuilder()
+                        .header("User-Agent", "Eval/${com.eval.BuildConfig.VERSION_NAME} (Android; ${com.eval.BuildConfig.APPLICATION_ID})")
+                        .build()
+                    chain.proceed(request)
+                }
                 .addInterceptor(loggingInterceptor)
                 .connectTimeout(30, TimeUnit.SECONDS)
                 .readTimeout(30, TimeUnit.SECONDS)

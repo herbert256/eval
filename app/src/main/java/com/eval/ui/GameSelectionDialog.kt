@@ -299,6 +299,7 @@ fun SelectedRetrieveGamesScreen(
     currentPage: Int,
     isLoading: Boolean,
     hasMoreGames: Boolean,
+    errorMessage: String?,
     onNextPage: (Int) -> Unit,
     onPreviousPage: () -> Unit,
     onSelectGame: (LichessGame) -> Unit,
@@ -345,6 +346,13 @@ fun SelectedRetrieveGamesScreen(
             Column(
                 modifier = Modifier.fillMaxWidth()
             ) {
+                if (errorMessage != null) {
+                    Text(
+                        text = errorMessage,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
                 // Games list
                 LazyColumn(
                     modifier = Modifier.weight(1f),

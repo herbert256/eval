@@ -28,8 +28,8 @@ enum class SettingsSubScreen {
     BOARD_LAYOUT,
     GRAPH_SETTINGS,
     INTERFACE_VISIBILITY,
-    AI_PROMPTS,          // Prompts list for external AI app
-    AI_PROMPT_EDIT       // Edit a single prompt
+    AI_INSTRUCTIONS,          // Instructions list for external AI app
+    AI_INSTRUCTION_EDIT       // Edit a single instruction
 }
 
 /**
@@ -43,27 +43,27 @@ fun SettingsScreen(
     graphSettings: GraphSettings,
     interfaceVisibility: InterfaceVisibilitySettings,
     generalSettings: GeneralSettings,
-    aiPrompts: List<AiPromptEntry>,
+    aiInstructions: List<AiInstructionEntry>,
     onBack: () -> Unit,
     onSaveStockfish: (StockfishSettings) -> Unit,
     onSaveBoardLayout: (BoardLayoutSettings) -> Unit,
     onSaveGraph: (GraphSettings) -> Unit,
     onSaveInterfaceVisibility: (InterfaceVisibilitySettings) -> Unit,
     onSaveGeneral: (GeneralSettings) -> Unit,
-    onAddAiPrompt: (AiPromptEntry) -> Unit,
-    onUpdateAiPrompt: (AiPromptEntry) -> Unit,
-    onDeleteAiPrompt: (String) -> Unit,
+    onAddAiInstruction: (AiInstructionEntry) -> Unit,
+    onUpdateAiInstruction: (AiInstructionEntry) -> Unit,
+    onDeleteAiInstruction: (String) -> Unit,
     onExportSettings: () -> Unit,
     onImportSettings: (Uri) -> Unit
 ) {
     var currentSubScreen by remember { mutableStateOf(SettingsSubScreen.MAIN) }
-    var editingPromptId by remember { mutableStateOf<String?>(null) }
+    var editingInstructionId by remember { mutableStateOf<String?>(null) }
 
     // Handle Android back button
     BackHandler {
         when (currentSubScreen) {
             SettingsSubScreen.MAIN -> onBack()
-            SettingsSubScreen.AI_PROMPT_EDIT -> currentSubScreen = SettingsSubScreen.AI_PROMPTS
+            SettingsSubScreen.AI_INSTRUCTION_EDIT -> currentSubScreen = SettingsSubScreen.AI_INSTRUCTIONS
             else -> currentSubScreen = SettingsSubScreen.MAIN
         }
     }
@@ -111,42 +111,42 @@ fun SettingsScreen(
             onBackToGame = onBack,
             onSave = onSaveInterfaceVisibility
         )
-        SettingsSubScreen.AI_PROMPTS -> AiPromptsListScreen(
-            prompts = aiPrompts,
+        SettingsSubScreen.AI_INSTRUCTIONS -> AiInstructionsListScreen(
+            instructions = aiInstructions,
             onBackToSettings = { currentSubScreen = SettingsSubScreen.MAIN },
             onBackToGame = onBack,
-            onEditPrompt = { id ->
-                editingPromptId = id
-                currentSubScreen = SettingsSubScreen.AI_PROMPT_EDIT
+            onEditInstruction = { id ->
+                editingInstructionId = id
+                currentSubScreen = SettingsSubScreen.AI_INSTRUCTION_EDIT
             },
-            onAddPrompt = {
-                editingPromptId = null
-                currentSubScreen = SettingsSubScreen.AI_PROMPT_EDIT
+            onAddInstruction = {
+                editingInstructionId = null
+                currentSubScreen = SettingsSubScreen.AI_INSTRUCTION_EDIT
             },
-            onCopyPrompt = { prompt ->
-                val copy = prompt.copy(
+            onCopyInstruction = { instruction ->
+                val copy = instruction.copy(
                     id = java.util.UUID.randomUUID().toString(),
-                    name = prompt.name + " (copy)"
+                    name = instruction.name + " (copy)"
                 )
-                onAddAiPrompt(copy)
-                editingPromptId = copy.id
-                currentSubScreen = SettingsSubScreen.AI_PROMPT_EDIT
+                onAddAiInstruction(copy)
+                editingInstructionId = copy.id
+                currentSubScreen = SettingsSubScreen.AI_INSTRUCTION_EDIT
             },
-            onDeletePrompt = onDeleteAiPrompt
+            onDeleteInstruction = onDeleteAiInstruction
         )
-        SettingsSubScreen.AI_PROMPT_EDIT -> {
-            val existingPrompt = editingPromptId?.let { id -> aiPrompts.firstOrNull { it.id == id } }
-            AiPromptEditScreen(
-                existingPrompt = existingPrompt,
-                onBackToList = { currentSubScreen = SettingsSubScreen.AI_PROMPTS },
+        SettingsSubScreen.AI_INSTRUCTION_EDIT -> {
+            val existingInstruction = editingInstructionId?.let { id -> aiInstructions.firstOrNull { it.id == id } }
+            AiInstructionEditScreen(
+                existingInstruction = existingInstruction,
+                onBackToList = { currentSubScreen = SettingsSubScreen.AI_INSTRUCTIONS },
                 onBackToGame = onBack,
-                onSave = { prompt ->
-                    if (existingPrompt != null) {
-                        onUpdateAiPrompt(prompt)
+                onSave = { instruction ->
+                    if (existingInstruction != null) {
+                        onUpdateAiInstruction(instruction)
                     } else {
-                        onAddAiPrompt(prompt)
+                        onAddAiInstruction(instruction)
                     }
-                    currentSubScreen = SettingsSubScreen.AI_PROMPTS
+                    currentSubScreen = SettingsSubScreen.AI_INSTRUCTIONS
                 }
             )
         }
@@ -228,11 +228,11 @@ private fun SettingsMainScreen(
             onClick = { onNavigate(SettingsSubScreen.INTERFACE_VISIBILITY) }
         )
 
-        // AI Prompts settings card
+        // AI Instructions settings card
         SettingsNavigationCard(
-            title = "AI Prompts",
-            description = "Configure prompts for AI analysis",
-            onClick = { onNavigate(SettingsSubScreen.AI_PROMPTS) }
+            title = "AI Instructions",
+            description = "Configure instructions for AI analysis",
+            onClick = { onNavigate(SettingsSubScreen.AI_INSTRUCTIONS) }
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -310,22 +310,22 @@ private fun SettingsNavigationCard(
 }
 
 /**
- * AI Prompts list screen - shows all prompts with edit/delete actions.
+ * AI Instructions list screen - shows all instructions with edit/delete actions.
  */
 @Composable
-fun AiPromptsListScreen(
-    prompts: List<AiPromptEntry>,
+fun AiInstructionsListScreen(
+    instructions: List<AiInstructionEntry>,
     onBackToSettings: () -> Unit,
     onBackToGame: () -> Unit,
-    onEditPrompt: (String) -> Unit,
-    onAddPrompt: () -> Unit,
-    onCopyPrompt: (AiPromptEntry) -> Unit,
-    onDeletePrompt: (String) -> Unit
+    onEditInstruction: (String) -> Unit,
+    onAddInstruction: () -> Unit,
+    onCopyInstruction: (AiInstructionEntry) -> Unit,
+    onDeleteInstruction: (String) -> Unit
 ) {
-    var promptToDelete by remember { mutableStateOf<AiPromptEntry?>(null) }
+    var entryToDelete by remember { mutableStateOf<AiInstructionEntry?>(null) }
 
     // Delete confirmation (full screen, early return pattern)
-    promptToDelete?.let { prompt ->
+    entryToDelete?.let { entry ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -334,15 +334,15 @@ fun AiPromptsListScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             EvalTitleBar(
-                title = "Delete Prompt",
-                onBackClick = { promptToDelete = null },
+                title = "Delete Instruction",
+                onBackClick = { entryToDelete = null },
                 onEvalClick = onBackToGame
             )
 
             Spacer(modifier = Modifier.height(24.dp))
 
             Text(
-                text = "Delete \"${prompt.name}\"?",
+                text = "Delete \"${entry.name}\"?",
                 style = MaterialTheme.typography.bodyLarge,
                 color = Color.White
             )
@@ -351,8 +351,8 @@ fun AiPromptsListScreen(
 
             Button(
                 onClick = {
-                    onDeletePrompt(prompt.id)
-                    promptToDelete = null
+                    onDeleteInstruction(entry.id)
+                    entryToDelete = null
                 },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
@@ -361,7 +361,7 @@ fun AiPromptsListScreen(
             }
 
             TextButton(
-                onClick = { promptToDelete = null },
+                onClick = { entryToDelete = null },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Cancel")
@@ -379,27 +379,26 @@ fun AiPromptsListScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         EvalTitleBar(
-            title = "AI Prompts",
+            title = "AI Instructions",
             onBackClick = onBackToSettings,
             onEvalClick = onBackToGame
         )
 
-        // Info text
         Text(
-            text = "Prompts are sent to the external AI app. Use placeholders: @FEN@, @BOARD@, @PLAYER@, @SERVER@, @DATE@",
+            text = "Choose a named instruction when requesting an AI report. Create and store prompts and system prompts in the AI app. Eval automatically sends the position and player context.",
             style = MaterialTheme.typography.bodySmall,
             color = AppColors.MediumGray
         )
 
-        // Prompt list (sorted by name)
-        prompts.sortedBy { it.name.lowercase() }.forEach { prompt ->
+        // Instruction list (sorted by name)
+        instructions.sortedBy { it.name.lowercase() }.forEach { entry ->
             Card(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onEditPrompt(prompt.id) }
+                    .clickable { onEditInstruction(entry.id) }
             ) {
                 Row(
                     modifier = Modifier
@@ -410,17 +409,12 @@ fun AiPromptsListScreen(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = prompt.name,
+                            text = entry.name,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            text = prompt.safeCategory.displayName,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = AppColors.ButtonGreen
-                        )
-                        Text(
-                            text = prompt.prompt.take(80).replace("\n", " ") + if (prompt.prompt.length > 80) "..." else "",
+                            text = entry.instructions.take(80).replace("\n", " ") + if (entry.instructions.length > 80) "..." else "",
                             style = MaterialTheme.typography.bodySmall,
                             color = AppColors.SubtleText,
                             maxLines = 2
@@ -428,11 +422,11 @@ fun AiPromptsListScreen(
                     }
                     Row {
                         TextButton(onClick = {
-                            onCopyPrompt(prompt)
+                            onCopyInstruction(entry)
                         }) {
                             Text("\u2398", color = AppColors.ButtonGreen)
                         }
-                        TextButton(onClick = { promptToDelete = prompt }) {
+                        TextButton(onClick = { entryToDelete = entry }) {
                             Text("X", color = AppColors.NegativeRed)
                         }
                         Text(
@@ -445,187 +439,74 @@ fun AiPromptsListScreen(
             }
         }
 
-        // Add prompt button
+        // Add entry button
         Button(
-            onClick = onAddPrompt,
+            onClick = onAddInstruction,
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.buttonColors(
                 containerColor = AppColors.ButtonGreen
             )
         ) {
-            Text("+ Add Prompt")
+            Text("+ Add Instruction")
         }
 
         Spacer(modifier = Modifier.height(16.dp))
     }
 }
 
-/**
- * AI Prompt edit screen - edit name, prompt template, and instructions.
- */
+/** Create or edit a named set of AI app instructions. */
 @Composable
-fun AiPromptEditScreen(
-    existingPrompt: AiPromptEntry?,
+fun AiInstructionEditScreen(
+    existingInstruction: AiInstructionEntry?,
     onBackToList: () -> Unit,
     onBackToGame: () -> Unit,
-    onSave: (AiPromptEntry) -> Unit
+    onSave: (AiInstructionEntry) -> Unit
 ) {
-    var name by remember { mutableStateOf(existingPrompt?.name ?: "") }
-    var category by remember { mutableStateOf(existingPrompt?.safeCategory ?: AiPromptCategory.GAME) }
-    var system by remember { mutableStateOf(existingPrompt?.system ?: "") }
-    var prompt by remember { mutableStateOf(existingPrompt?.prompt ?: "") }
-    var instructions by remember { mutableStateOf(existingPrompt?.instructions ?: "") }
-    var email by remember { mutableStateOf(existingPrompt?.email ?: "") }
+    var name by remember { mutableStateOf(existingInstruction?.name ?: "") }
+    var instructions by remember { mutableStateOf(existingInstruction?.instructions ?: "") }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(16.dp)
-            .verticalScroll(rememberScrollState()),
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
+            .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         EvalTitleBar(
-            title = if (existingPrompt != null) "Edit Prompt" else "New Prompt",
+            title = if (existingInstruction != null) "Edit Instruction" else "New Instruction",
             onBackClick = onBackToList,
             onEvalClick = onBackToGame
         )
-
-        // Name field
-        Text(
-            text = "Name",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold
-        )
-        OutlinedTextField(
-            value = name,
-            onValueChange = { name = it },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            placeholder = { Text("e.g. Game Analysis") },
-            textStyle = MaterialTheme.typography.bodyMedium
-        )
-
-        // Category selector
-        Text(
-            text = "Category",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        Column(
+            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            AiPromptCategory.entries.forEach { cat ->
-                FilterChip(
-                    selected = category == cat,
-                    onClick = { category = cat },
-                    label = { Text(cat.displayName) }
-                )
-            }
+            Text("Name", style = MaterialTheme.typography.titleSmall)
+            OutlinedTextField(
+                value = name, onValueChange = { name = it },
+                modifier = Modifier.fillMaxWidth(), singleLine = true,
+                placeholder = { Text("e.g. Position report") }
+            )
+            Text("Instructions", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Prompts and system prompts are managed in the AI app. Enter its report instructions here, such as <type>Classic</type><select>. " +
+                    "Eval appends <fen>, <color>, <server>, <player>, <pgn> and <board> automatically. " +
+                    "Unavailable values are empty. @FEN@, @COLOR@, @SERVER@, @PLAYER@, @PGN@, @BOARD@ and @DATE@ also work in instructions.",
+                style = MaterialTheme.typography.bodySmall, color = AppColors.MediumGray
+            )
+            OutlinedTextField(
+                value = instructions, onValueChange = { instructions = it },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 240.dp),
+                textStyle = MaterialTheme.typography.bodySmall
+            )
         }
-
-        // System prompt field
-        Text(
-            text = "System Prompt",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold
-        )
-        Text(
-            text = "Sent as system prompt to AI models (fallback when agent has none configured)",
-            style = MaterialTheme.typography.bodySmall,
-            color = AppColors.MediumGray
-        )
-        OutlinedTextField(
-            value = system,
-            onValueChange = { system = it },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(120.dp),
-            placeholder = { Text("e.g. You are an expert chess analyst.") },
-            textStyle = MaterialTheme.typography.bodySmall
-        )
-
-        // Prompt field
-        Text(
-            text = "Prompt",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold
-        )
-        Text(
-            text = "Placeholders: @FEN@, @BOARD@, @PLAYER@, @SERVER@, @DATE@",
-            style = MaterialTheme.typography.bodySmall,
-            color = AppColors.MediumGray
-        )
-        OutlinedTextField(
-            value = prompt,
-            onValueChange = { prompt = it },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(200.dp),
-            textStyle = MaterialTheme.typography.bodySmall
-        )
-
-        // Instructions field
-        Text(
-            text = "Instructions",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold
-        )
-        Text(
-            text = "Control tags sent to AI app: <agent>, <flock>, <swarm>, <model>, <type>, <next>, <email>, etc.",
-            style = MaterialTheme.typography.bodySmall,
-            color = AppColors.MediumGray
-        )
-        OutlinedTextField(
-            value = instructions,
-            onValueChange = { instructions = it },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(150.dp),
-            textStyle = MaterialTheme.typography.bodySmall
-        )
-
-        // Email field
-        Text(
-            text = "Email",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold
-        )
-        OutlinedTextField(
-            value = email,
-            onValueChange = { email = it },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            placeholder = { Text("e.g. user@example.com") },
-            textStyle = MaterialTheme.typography.bodyMedium
-        )
-
-        // Save button
         Button(
             onClick = {
-                if (name.isNotBlank() && prompt.isNotBlank()) {
-                    val entry = AiPromptEntry(
-                        id = existingPrompt?.id ?: java.util.UUID.randomUUID().toString(),
-                        name = name.trim(),
-                        system = system,
-                        prompt = prompt,
-                        instructions = instructions,
-                        email = email.trim(),
-                        category = category
-                    )
-                    onSave(entry)
-                }
+                onSave(AiInstructionEntry(
+                    id = existingInstruction?.id ?: java.util.UUID.randomUUID().toString(),
+                    name = name.trim(), instructions = instructions
+                ))
             },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = name.isNotBlank() && prompt.isNotBlank(),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = AppColors.ButtonGreen
-            )
-        ) {
-            Text("Save")
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
+            enabled = name.isNotBlank(), modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = AppColors.ButtonGreen)
+        ) { Text("Save") }
     }
 }

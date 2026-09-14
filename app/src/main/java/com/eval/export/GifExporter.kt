@@ -12,6 +12,11 @@ import com.eval.chess.PieceColor
 import com.eval.chess.PieceType
 import com.eval.ui.MoveScore
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
@@ -21,6 +26,7 @@ import kotlin.math.abs
  * Exports a chess game as an animated GIF.
  */
 object GifExporter {
+    private val exportMutex = Mutex()
 
     private const val BOARD_SIZE = 400
     private const val SQUARE_SIZE = BOARD_SIZE / 8
@@ -107,8 +113,37 @@ object GifExporter {
         frameDelay: Int,
         renderFrame: (Int) -> Bitmap,
         callback: ProgressCallback?
-    ): File = withContext(Dispatchers.IO) {
-        val file = File(context.cacheDir, "${filePrefix}_${System.currentTimeMillis()}.gif")
+    ): File {
+        var outputFile: File? = null
+        try {
+            return withContext(Dispatchers.IO) {
+                exportMutex.withLock {
+                    encodeFrames(context, frameCount, filePrefix, frameDelay, renderFrame, callback) {
+                        outputFile = it
+                    }
+                }
+            }
+        } catch (e: CancellationException) {
+            // Also clean up if cancellation happens while dispatching the
+            // completed file back to the caller.
+            outputFile?.delete()
+            throw e
+        }
+    }
+
+    private suspend fun encodeFrames(
+        context: Context,
+        frameCount: Int,
+        filePrefix: String,
+        frameDelay: Int,
+        renderFrame: (Int) -> Bitmap,
+        callback: ProgressCallback?,
+        onFileCreated: (File) -> Unit
+    ): File {
+        val directory = File(context.cacheDir, "gif_exports")
+        check(directory.isDirectory || directory.mkdirs()) { "Cannot create GIF export folder" }
+        val file = File.createTempFile("${filePrefix}_", ".gif", directory)
+        onFileCreated(file)
         val encoder = AnimatedGifEncoder()
         // Chess board frames share nearly-identical palettes; reuse the first
         // frame's palette to skip NeuQuant training on every subsequent frame.
@@ -117,19 +152,25 @@ object GifExporter {
         var success = false
         try {
             FileOutputStream(file).use { fos ->
-                encoder.start(fos)
+                check(encoder.start(fos)) { "Cannot start GIF encoder" }
                 encoder.setDelay(frameDelay)
                 encoder.setRepeat(0) // Loop forever
                 encoder.setQuality(10)
 
                 for (index in 0 until frameCount) {
+                    currentCoroutineContext().ensureActive()
                     val bitmap = renderFrame(index)
-                    encoder.addFrame(bitmap)
-                    bitmap.recycle()
+                    try {
+                        check(encoder.addFrame(bitmap)) { "Cannot encode GIF frame" }
+                    } finally {
+                        bitmap.recycle()
+                    }
+                    currentCoroutineContext().ensureActive()
                     callback?.onProgress(index + 1, frameCount)
                 }
 
-                encoder.finish()
+                currentCoroutineContext().ensureActive()
+                check(encoder.finish()) { "Cannot finish GIF" }
             }
             success = true
         } finally {
@@ -138,7 +179,7 @@ object GifExporter {
             if (!success && file.exists()) file.delete()
         }
 
-        file
+        return file
     }
 
     /**
@@ -317,9 +358,10 @@ object GifExporter {
         callback: ProgressCallback? = null
     ): File = encodeGif(context, boards.size, "game_annotated", frameDelay, { index ->
         val moveText = if (index > 0 && index <= moves.size) {
-            val moveNum = (index + 1) / 2
-            val isWhite = index % 2 == 1
-            if (isWhite) "$moveNum. ${moves[index - 1]}" else "${moves[index - 1]}"
+            val before = boards[index - 1]
+            val moveNum = before.getFen().substringAfterLast(' ')
+            val isWhite = before.getTurn() == PieceColor.WHITE
+            if (isWhite) "$moveNum. ${moves[index - 1]}" else "$moveNum... ${moves[index - 1]}"
         } else null
         renderFrame(boards[index], scores[index], moveText)
     }, callback)

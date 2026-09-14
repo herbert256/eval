@@ -16,12 +16,13 @@ object BoardHistoryBuilder {
      */
     fun build(
         moves: List<String>,
+        initialBoard: ChessBoard = ChessBoard(),
         onMoveApplied: ((index: Int, move: String, boardBefore: ChessBoard, boardAfter: ChessBoard) -> Unit)? = null,
         onMoveFailed: ((index: Int, move: String, boardBefore: ChessBoard) -> Unit)? = null
     ): BoardHistoryResult {
         val boards = mutableListOf<ChessBoard>()
         val validMoves = mutableListOf<String>()
-        val tempBoard = ChessBoard()
+        val tempBoard = initialBoard.copy()
         boards.add(tempBoard.copy())
 
         for ((index, move) in moves.withIndex()) {
@@ -45,4 +46,3 @@ object BoardHistoryBuilder {
         return BoardHistoryResult(boards = boards, validMoves = validMoves)
     }
 }
-

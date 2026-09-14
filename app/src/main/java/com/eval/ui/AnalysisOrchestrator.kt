@@ -11,6 +11,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.yield
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -67,12 +69,22 @@ internal class AnalysisOrchestrator(
      * Start the three-stage analysis flow: Preview → Analyse → Manual.
      */
     fun startAnalysis() {
-        if (!getUiState().stockfishReady) return
-
         autoAnalysisJob?.cancel()
 
         autoAnalysisJob = viewModelScope.launch {
             try {
+                // A game selected during engine startup must not remain stuck
+                // in Preview. Keep this request queued until initialization ends.
+                if (!stockfish.isReady.value) {
+                    val ready = withTimeoutOrNull(StockfishEngine.READY_TIMEOUT_MS) {
+                        stockfish.isReady.first { it }
+                    } ?: stockfish.restart()
+                    updateUiState { copy(stockfishReady = ready) }
+                    if (!ready) {
+                        updateUiState { copy(errorMessage = "Stockfish could not start analysis") }
+                        return@launch
+                    }
+                }
                 val moves = getUiState().moves
                 if (moves.isEmpty()) {
                     android.util.Log.e("Analysis", "EXIT: moves list is empty")
@@ -238,7 +250,7 @@ internal class AnalysisOrchestrator(
 
             stockfish.analyzeWithTime(fen, timePerMoveMs)
 
-            val completed = stockfish.waitForCompletion(timePerMoveMs.toLong() + 2000)
+            val completed = stockfish.waitForCompletion(timePerMoveMs.toLong() + StockfishEngine.READY_TIMEOUT_MS + 2000)
             if (!completed) {
                 stockfish.stop()
                 delay(100)
@@ -253,7 +265,7 @@ internal class AnalysisOrchestrator(
                     delay(100)
 
                     stockfish.analyzeWithTime(fen, timePerMoveMs)
-                    val retryCompleted = stockfish.waitForCompletion(timePerMoveMs.toLong() + 2000)
+                    val retryCompleted = stockfish.waitForCompletion(timePerMoveMs.toLong() + StockfishEngine.READY_TIMEOUT_MS + 2000)
                     if (!retryCompleted) {
                         stockfish.stop()
                         delay(100)
@@ -358,7 +370,7 @@ internal class AnalysisOrchestrator(
             // Scores are from WHITE's perspective. For move quality:
             // White move: positive change = good for white (the mover)
             // Black move: negative change = good for black (the mover)
-            val isWhiteMove = moveIndex % 2 == 0
+            val isWhiteMove = getBoardHistory().getOrNull(moveIndex)?.getTurn() == PieceColor.WHITE
             val change = currentScore - prevScore
             val adjustedChange = if (isWhiteMove) change else -change
 
@@ -503,7 +515,7 @@ internal class AnalysisOrchestrator(
             stockfish.analyze(fen, depth)
 
             var waitTime = 0
-            val maxWaitTime = 2000
+            val maxWaitTime = StockfishEngine.READY_TIMEOUT_MS + 2000
             val checkInterval = 50L
 
             var gotFirstResult = false
@@ -621,32 +633,33 @@ internal class AnalysisOrchestrator(
         val previousJob = manualAnalysisJob
 
         val boardHistory = getBoardHistory()
+        if (boardHistory.isEmpty()) return
         val validIndex = moveIndex.coerceIn(-1, boardHistory.size - 2)
-        val board = boardHistory.getOrNull(validIndex + 1) ?: ChessBoard()
+        val board = boardHistory[validIndex + 1].copy()
+        val fenToAnalyze = board.getFen()
+        val thisRequestId = analysisRequestId.incrementAndGet()
+        currentAnalysisFen = fenToAnalyze
+
+        // Navigation is immediate even while the previous engine search unwinds.
+        // Otherwise consecutive taps all read the same old move index.
+        val state = getUiState()
+        val openingName = if (validIndex >= 0 && state.moves.isNotEmpty()) {
+            com.eval.data.OpeningBook.getOpeningName(state.moves, validIndex)
+        } else null
+        updateUiState {
+            copy(
+                currentMoveIndex = validIndex,
+                currentBoard = board,
+                currentOpeningName = openingName,
+                analysisResult = null,
+                analysisResultFen = null
+            )
+        }
 
         manualAnalysisJob = viewModelScope.launch {
             previousJob?.cancelAndJoin()
             analysisMutex.withLock {
                 stockfish.stop()
-
-                val thisRequestId = analysisRequestId.incrementAndGet()
-
-                val fenToAnalyze = board.getFen()
-                currentAnalysisFen = fenToAnalyze
-
-                val state = getUiState()
-                val openingName = if (validIndex >= 0 && state.moves.isNotEmpty()) {
-                    com.eval.data.OpeningBook.getOpeningName(state.moves, validIndex)
-                } else null
-
-                updateUiState {
-                    copy(
-                        currentMoveIndex = validIndex,
-                        currentBoard = board.copy(),
-                        currentOpeningName = openingName,
-                        analysisResultFen = null
-                    )
-                }
 
                 delay(50)
 

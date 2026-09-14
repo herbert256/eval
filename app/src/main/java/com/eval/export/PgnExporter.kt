@@ -1,6 +1,8 @@
 package com.eval.export
 
 import com.eval.data.ChessServer
+import com.eval.chess.PgnParser
+import com.eval.chess.PieceColor
 import com.eval.data.LichessGame
 import com.eval.ui.MoveDetails
 import com.eval.ui.MoveQuality
@@ -31,21 +33,33 @@ object PgnExporter {
         server: ChessServer = ChessServer.LICHESS
     ): String {
         val sb = StringBuilder()
+        val originalHeaders = PgnParser.parseHeaders(game.pgn.orEmpty())
+        val startingBoard = requireNotNull(PgnParser.parseInitialBoard(game.pgn.orEmpty()))
+        val startsWithBlack = startingBoard.getTurn() == PieceColor.BLACK
+        val firstMoveNumber = startingBoard.getFen().substringAfterLast(' ').toInt()
+        fun tag(name: String, value: String) {
+            val escaped = value.replace("\\", "\\\\").replace("\"", "\\\"").replace('\n', ' ').replace('\r', ' ')
+            sb.appendLine("[$name \"$escaped\"]")
+        }
 
         // PGN Headers
         val siteName = when (server) {
             ChessServer.CHESS_COM -> "Chess.com"
             ChessServer.LICHESS -> "Lichess.org"
         }
-        sb.appendLine("[Event \"${game.perf ?: "Game"}\"]")
-        sb.appendLine("[Site \"$siteName\"]")
-        sb.appendLine("[Date \"${formatDate(game.createdAt)}\"]")
-        sb.appendLine("[White \"${game.players.white.user?.name ?: "Unknown"}\"]")
-        sb.appendLine("[Black \"${game.players.black.user?.name ?: "Unknown"}\"]")
+        tag("Event", originalHeaders["Event"] ?: game.perf ?: "Game")
+        tag("Site", originalHeaders["Site"] ?: siteName)
+        tag("Date", originalHeaders["Date"] ?: formatDate(game.createdAt))
+        tag("White", game.players.white.user?.name ?: "Unknown")
+        tag("Black", game.players.black.user?.name ?: "Unknown")
         sb.appendLine("[Result \"${formatResult(game.winner, game.status)}\"]")
         game.players.white.rating?.let { sb.appendLine("[WhiteElo \"$it\"]") }
         game.players.black.rating?.let { sb.appendLine("[BlackElo \"$it\"]") }
-        openingName?.let { sb.appendLine("[Opening \"$it\"]") }
+        openingName?.let { tag("Opening", it) }
+        if (originalHeaders["FEN"] != null) {
+            tag("SetUp", "1")
+            tag("FEN", startingBoard.getFen())
+        }
         sb.appendLine("[Annotator \"Eval App - Stockfish 17.1\"]")
         sb.appendLine()
 
@@ -54,8 +68,9 @@ object PgnExporter {
 
         for (i in moveDetails.indices) {
             val detail = moveDetails[i]
-            val moveNum = (i / 2) + 1
-            val isWhite = i % 2 == 0
+            val ply = i + if (startsWithBlack) 1 else 0
+            val moveNum = firstMoveNumber + ply / 2
+            val isWhite = ply % 2 == 0
 
             val moveText = StringBuilder()
 
@@ -67,7 +82,7 @@ object PgnExporter {
             }
 
             // Add move notation
-            moveText.append(detail.san)
+            moveText.append(detail.san.trimEnd('!', '?'))
 
             // Add quality symbol (NAG)
             val quality = moveQualities[i]
@@ -84,7 +99,9 @@ object PgnExporter {
             // Add evaluation comment
             val score = analyseScores[i]
             if (score != null) {
-                moveText.append(" {[%eval ${score.formatDisplay(decimals = 2)}]}")
+                val evaluation = if (score.isMate) "#${score.mateIn}"
+                    else String.format(java.util.Locale.US, "%.2f", score.score)
+                moveText.append(" {[%eval $evaluation]}")
             }
 
             // Add clock comment if available
@@ -129,7 +146,7 @@ object PgnExporter {
         return when {
             winner == "white" -> "1-0"
             winner == "black" -> "0-1"
-            status == "draw" || status == "stalemate" -> "1/2-1/2"
+            status == "draw" || status == "stalemate" || status == "1/2-1/2" -> "1/2-1/2"
             else -> "*"
         }
     }

@@ -103,6 +103,7 @@ fun RetrieveScreen(
             currentPage = uiState.gameSelectionPage,
             isLoading = uiState.gameSelectionLoading,
             hasMoreGames = uiState.gameSelectionHasMore,
+            errorMessage = uiState.errorMessage,
             onNextPage = { pageSize -> viewModel.nextGameSelectionPage(pageSize) },
             onPreviousPage = { viewModel.previousGameSelectionPage() },
             onSelectGame = { viewModel.selectGameFromRetrieve(it) },
@@ -117,6 +118,15 @@ fun RetrieveScreen(
             retrieves = uiState.previousRetrievesList,
             onSelectRetrieve = { viewModel.selectPreviousRetrieve(it) },
             onDismiss = { viewModel.dismissPreviousRetrievesSelection() }
+        )
+        return
+    }
+
+    if (uiState.pendingAiReport != null) {
+        AiInstructionSelectionScreen(
+            instructions = uiState.aiInstructions,
+            onSelectInstruction = { viewModel.launchSelectedAiInstruction(context, it) },
+            onDismiss = { viewModel.dismissAiInstructionSelection() }
         )
         return
     }
@@ -136,21 +146,11 @@ fun RetrieveScreen(
             onGameSelected = { game -> viewModel.selectGameFromPlayerInfo(game) },
             onAiReportsClick = {
                 uiState.playerInfo?.let { info ->
-                    // If there's a profile error (e.g., "Profile not found"), use null for server
-                    // to trigger the "Other Player Prompt" instead of "Server Player Prompt"
-                    val serverName = if (uiState.playerInfoError != null) {
-                        null
-                    } else {
-                        when (info.server) {
-                            ChessServer.LICHESS -> "lichess.org"
-                            ChessServer.CHESS_COM -> "chess.com"
-                        }
+                    val serverName = if (uiState.playerInfoError != null) "" else when (info.server) {
+                        ChessServer.LICHESS -> "lichess.org"
+                        ChessServer.CHESS_COM -> "chess.com"
                     }
-                    if (serverName != null) {
-                        viewModel.launchServerPlayerAnalysis(context, info.username, serverName)
-                    } else {
-                        viewModel.launchOtherPlayerAnalysis(context, info.username)
-                    }
+                    viewModel.requestPlayerAiReport(info.username, serverName)
                 }
             },
             hasAiApiKeys = viewModel.isAiAppInstalled(context),
@@ -325,17 +325,22 @@ fun RetrieveScreen(
                 SettingsPreferences(prefs)
             }
             var fenInput by remember { mutableStateOf("") }
+            var fenError by remember { mutableStateOf<String?>(null) }
             var fenHistory by remember { mutableStateOf(fenSettingsPrefs.loadFenHistory()) }
             FenInputScreen(
                 fenInput = fenInput,
-                onFenInputChange = { fenInput = it },
+                onFenInputChange = { fenInput = it; fenError = null },
                 fenHistory = fenHistory,
+                errorMessage = fenError,
                 onStart = {
                     if (fenInput.isNotBlank()) {
                         val trimmedFen = fenInput.trim()
-                        fenSettingsPrefs.saveFenToHistory(trimmedFen)
-                        viewModel.startFromFen(trimmedFen)
-                        currentScreen = RetrieveSubScreen.MAIN
+                        if (viewModel.startFromFen(trimmedFen)) {
+                            fenSettingsPrefs.saveFenToHistory(trimmedFen)
+                            currentScreen = RetrieveSubScreen.MAIN
+                        } else {
+                            fenError = "Invalid FEN position"
+                        }
                     }
                 },
                 onDismiss = { currentScreen = RetrieveSubScreen.MAIN }
@@ -2345,6 +2350,7 @@ fun FenInputScreen(
     fenInput: String,
     onFenInputChange: (String) -> Unit,
     fenHistory: List<String>,
+    errorMessage: String? = null,
     onStart: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -2375,8 +2381,11 @@ fun FenInputScreen(
             modifier = Modifier.fillMaxWidth(),
             placeholder = { Text("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", fontSize = 11.sp) },
             singleLine = false,
-            maxLines = 3
+            maxLines = 3,
+            isError = errorMessage != null
         )
+
+        errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
 
         // FEN History
         if (fenHistory.isNotEmpty()) {

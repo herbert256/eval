@@ -1,17 +1,18 @@
 package com.eval.ui
 
 import android.content.SharedPreferences
+import com.google.gson.JsonParser
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 
-data class SettingsSnapshotV2(
-    val schemaVersion: Int = 2,
+data class SettingsSnapshotV3(
+    val schemaVersion: Int = 3,
     val stockfishSettings: StockfishSettings = StockfishSettings(),
     val boardLayoutSettings: BoardLayoutSettings = BoardLayoutSettings(),
     val graphSettings: GraphSettings = GraphSettings(),
     val interfaceVisibilitySettings: InterfaceVisibilitySettings = InterfaceVisibilitySettings(),
     val generalSettings: GeneralSettings = GeneralSettings(),
-    val aiPrompts: List<AiPromptEntry> = emptyList(),
+    val aiInstructions: List<AiInstructionEntry> = emptyList(),
     val lichessUsername: String = "DrNykterstein",
     val chessComUsername: String = "MagnusCarlsen",
     val lichessMaxGames: Int = 10,
@@ -308,24 +309,46 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
     }
 
     // ============================================================================
-    // AI Prompts List (CRUD - uses external AI app)
+    // AI Instructions List (CRUD - uses external AI app)
     // ============================================================================
 
     /**
-     * Load AI prompts list from JSON storage.
+     * Load AI instructions list from JSON storage.
      * Returns empty list if none configured.
      */
-    fun loadAiPrompts(): List<AiPromptEntry> {
-        return loadJsonList(KEY_AI_PROMPTS_LIST)
+    fun loadAiInstructions(): List<AiInstructionEntry> {
+        if (prefs.contains(KEY_AI_INSTRUCTIONS_LIST)) return loadJsonList(KEY_AI_INSTRUCTIONS_LIST)
+        val legacy = prefs.getString(KEY_LEGACY_AI_PROMPTS_LIST, null) ?: return emptyList()
+        return try {
+            decodeAiInstructions(legacy).also { saveAiInstructions(it) }
+        } catch (_: Exception) {
+            emptyList() // Preserve malformed legacy data rather than overwriting it.
+        }
     }
 
     /**
-     * Save AI prompts list as JSON.
+     * Save AI instructions list as JSON.
      */
-    fun saveAiPrompts(prompts: List<AiPromptEntry>) {
-        val json = gson.toJson(prompts)
-        prefs.edit().putString(KEY_AI_PROMPTS_LIST, json).apply()
+    fun saveAiInstructions(instructions: List<AiInstructionEntry>) {
+        val json = gson.toJson(instructions)
+        prefs.edit().putString(KEY_AI_INSTRUCTIONS_LIST, json).remove(KEY_LEGACY_AI_PROMPTS_LIST).apply()
     }
+
+    /** Read both the instruction schema and old prompt entries, retaining only control data. */
+    private fun decodeAiInstructions(json: String): List<AiInstructionEntry> =
+        JsonParser().parse(json).asJsonArray.map { element ->
+            val obj = element.asJsonObject
+            fun text(key: String) = obj.get(key)?.takeUnless { it.isJsonNull }?.asString.orEmpty()
+            var instructions = text("instructions")
+            val email = text("email").trim()
+            if (email.isNotEmpty() && !instructions.contains("<email>")) {
+                instructions += "\n<email>$email</email>"
+            }
+            AiInstructionEntry(
+                id = text("id").ifBlank { java.util.UUID.randomUUID().toString() },
+                name = text("name"), instructions = instructions
+            )
+        }
 
     /**
      * Check if user chose "Don't ask again" for AI app not installed warning.
@@ -358,16 +381,16 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
     // ============================================================================
 
     /**
-     * Export settings in typed schema v2 for safe round-trip and migration.
+     * Export settings in typed schema v3 for safe round-trip and migration.
      */
     fun exportAllSettings(): String {
-        val snapshot = SettingsSnapshotV2(
+        val snapshot = SettingsSnapshotV3(
             stockfishSettings = loadStockfishSettings(),
             boardLayoutSettings = loadBoardLayoutSettings(),
             graphSettings = loadGraphSettings(),
             interfaceVisibilitySettings = loadInterfaceVisibilitySettings(),
             generalSettings = loadGeneralSettings(),
-            aiPrompts = loadAiPrompts(),
+            aiInstructions = loadAiInstructions(),
             lichessUsername = savedLichessUsername,
             chessComUsername = savedChessComUsername,
             lichessMaxGames = lichessMaxGames,
@@ -381,31 +404,49 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
     }
 
     /**
-     * Import settings from typed schema v2, with legacy map migration fallback.
+     * Import settings from typed schema v3 (also accepts v2), with legacy map migration fallback.
      */
     fun importAllSettings(json: String): Boolean {
         return try {
-            val snapshot = gson.fromJson(json, SettingsSnapshotV2::class.java)
-            if (snapshot != null && snapshot.schemaVersion >= 2) {
-                importFromTypedSnapshot(snapshot)
+            val root = JsonParser().parse(json).asJsonObject
+            if (root.has("schemaVersion")) {
+                SettingsImportValidation.typed(root)
+                // Gson supplies default constructor values for an empty object;
+                // require an explicit supported version before treating it as a snapshot.
+                require(root.get("schemaVersion").asInt in 2..3)
+                val snapshot = gson.fromJson(root, SettingsSnapshotV3::class.java)
+                val entries = root.get("aiInstructions") ?: root.get("aiPrompts")
+                importFromTypedSnapshot(snapshot.copy(
+                    aiInstructions = entries?.takeUnless { it.isJsonNull }
+                        ?.let { decodeAiInstructions(it.toString()) } ?: emptyList()
+                ))
             } else {
-                importLegacySettings(json)
+                importLegacySettings(root)
             }
         } catch (e: Exception) {
-            importLegacySettings(json)
+            false
         }
     }
 
-    private fun importFromTypedSnapshot(snapshot: SettingsSnapshotV2): Boolean {
-        val editor = prefs.edit()
-        editor.clear()
+    private fun isGameStorageKey(key: String): Boolean =
+        key == KEY_CURRENT_MANUAL_GAME || key == KEY_LIST_MANUAL_GAMES ||
+            key == KEY_RETRIEVES_LIST || key.startsWith(KEY_RETRIEVED_GAMES_PREFIX)
+
+    private fun replacingSettingsEditor(): SharedPreferences.Editor = prefs.edit().also { editor ->
+        // GameStorageManager shares this preferences file, but games are not
+        // included in a settings export and must survive settings replacement.
+        prefs.all.keys.filterNot(::isGameStorageKey).forEach { editor.remove(it) }
+    }
+
+    private fun importFromTypedSnapshot(snapshot: SettingsSnapshotV3): Boolean {
+        val editor = replacingSettingsEditor()
 
         editor.putString(KEY_LICHESS_USERNAME, snapshot.lichessUsername)
         editor.putString(KEY_CHESSCOM_USERNAME, snapshot.chessComUsername)
         editor.putInt(KEY_LICHESS_MAX_GAMES, snapshot.lichessMaxGames.coerceIn(1, 25))
 
         editor.putBoolean(KEY_MOVE_SOUNDS_ENABLED, snapshot.generalSettings.moveSoundsEnabled)
-        editor.putString(KEY_AI_PROMPTS_LIST, gson.toJson(snapshot.aiPrompts))
+        editor.putString(KEY_AI_INSTRUCTIONS_LIST, gson.toJson(snapshot.aiInstructions))
         editor.putBoolean(KEY_AI_APP_DONT_ASK_AGAIN, snapshot.aiAppDontAskAgain)
         editor.putLong(KEY_FIRST_GAME_RETRIEVED_VERSION, snapshot.firstGameRetrievedVersion)
         editor.putString(KEY_LAST_SERVER_USER, snapshot.lastServerUser)
@@ -425,28 +466,34 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         return true
     }
 
-    private fun importLegacySettings(json: String): Boolean {
+    private fun importLegacySettings(root: com.google.gson.JsonObject): Boolean {
         return try {
-            val type = object : TypeToken<Map<String, Map<String, Any>>>() {}.type
-            val importMap: Map<String, Map<String, Any>> = gson.fromJson(json, type)
-            val editor = prefs.edit()
-            editor.clear()
+            val importMap = root.entrySet()
+            require(importMap.isNotEmpty())
+            val editor = replacingSettingsEditor()
+            var imported = 0
             for ((key, typed) in importMap) {
-                val valueType = typed["_type"] as? String ?: continue
-                val rawValue = typed["_value"] ?: continue
+                // Old exports could include game blobs. Importing settings must
+                // neither remove nor overwrite the device's game collection.
+                if (isGameStorageKey(key)) continue
+                val entry = typed.asJsonObject
+                val valueType = entry.get("_type").asString
+                val rawValue = requireNotNull(entry.get("_value"))
+                SettingsImportValidation.legacy(key, valueType, rawValue)
                 when (valueType) {
-                    "Boolean" -> editor.putBoolean(key, rawValue as Boolean)
-                    "Int" -> editor.putInt(key, (rawValue as Number).toInt())
-                    "Long" -> editor.putLong(key, (rawValue as Number).toLong())
-                    "Float" -> editor.putFloat(key, (rawValue as Number).toFloat())
-                    "String" -> editor.putString(key, rawValue as String)
+                    "Boolean" -> editor.putBoolean(key, rawValue.asBoolean)
+                    "Int" -> editor.putInt(key, rawValue.asInt)
+                    "Long" -> editor.putLong(key, rawValue.asLong)
+                    "Float" -> editor.putFloat(key, rawValue.asFloat)
+                    "String" -> editor.putString(key, rawValue.asString)
                     "StringSet" -> {
-                        @Suppress("UNCHECKED_CAST")
-                        val list = rawValue as? List<String> ?: emptyList()
-                        editor.putStringSet(key, list.toSet())
+                        editor.putStringSet(key, rawValue.asJsonArray.map { it.asString }.toSet())
                     }
+                    else -> error("Unsupported preference type")
                 }
+                imported++
             }
+            require(imported > 0)
             editor.apply()
             true
         } catch (e: Exception) {
@@ -459,7 +506,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
     // ============================================================================
 
     fun resetAllSettingsToDefaults() {
-        prefs.edit().clear().apply()
+        replacingSettingsEditor().apply()
     }
 
     private fun putStockfishSettings(editor: SharedPreferences.Editor, settings: StockfishSettings) {
@@ -646,8 +693,9 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         // General settings
         private const val KEY_MOVE_SOUNDS_ENABLED = "move_sounds_enabled"
 
-        // AI prompts list (CRUD)
-        private const val KEY_AI_PROMPTS_LIST = "ai_prompts_list"
+        // AI instructions list (CRUD)
+        private const val KEY_AI_INSTRUCTIONS_LIST = "ai_instructions_list"
+        private const val KEY_LEGACY_AI_PROMPTS_LIST = "ai_prompts_list"
 
         // AI app not installed - don't ask again
         private const val KEY_AI_APP_DONT_ASK_AGAIN = "ai_app_dont_ask_again"

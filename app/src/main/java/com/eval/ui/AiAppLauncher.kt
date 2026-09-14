@@ -77,179 +77,70 @@ object AiAppLauncher {
         return intent.resolveActivity(context.packageManager) != null
     }
 
-    /**
-     * Launch the AI app with a prompt for report generation.
-     *
-     * @param context Android context
-     * @param title Report title (optional, appears in report header)
-     * @param system System prompt for AI models (optional)
-     * @param prompt The prompt to send to AI agents
-     * @param instructions Control tags for report behavior (optional)
-     * @return true if launched successfully, false if AI app not installed
-     */
+    /** Send only named instructions and context; the AI app owns both kinds of prompt. */
     fun launchAiReport(
         context: Context,
-        title: String,
-        prompt: String,
-        system: String = "",
-        instructions: String = ""
+        entry: AiInstructionEntry,
+        reportContext: AiReportContext
     ): Boolean {
-        Log.d("AiAppLauncher", "Launching AI report with title: $title")
-        Log.d("AiAppLauncher", "Prompt (first 200 chars): ${prompt.take(200)}")
-
-        val intent = Intent().apply {
-            action = AI_APP_ACTION
+        val intent = Intent(AI_APP_ACTION).apply {
             setPackage(AI_APP_PACKAGE)
-            putExtra("title", title)
-            putExtra("prompt", prompt)
-            if (system.isNotBlank()) putExtra("system", system)
-            if (instructions.isNotBlank()) putExtra("instructions", instructions)
+            putExtra("title", reportContext.title)
+            putExtra("instructions", buildInstructions(entry.instructions, reportContext))
         }
-
         if (intent.resolveActivity(context.packageManager) == null) {
-            Log.e("AiAppLauncher", "AI app not installed!")
             Toast.makeText(context, "AI app not installed", Toast.LENGTH_SHORT).show()
             return false
         }
-
         if (!isSignerTrusted(context)) {
-            Log.e("AiAppLauncher", "AI app signature mismatch — refusing to send prompt")
             Toast.makeText(context, "AI app signature mismatch", Toast.LENGTH_LONG).show()
             return false
         }
-
-        Log.d("AiAppLauncher", "AI app found, starting activity")
         context.startActivity(intent)
         return true
     }
 
-    /**
-     * Launch AI report for game position analysis.
-     *
-     * @param context Android context
-     * @param fen The FEN string of the position to analyze
-     * @param promptTemplate The prompt template (with @FEN@, @BOARD@ placeholders)
-     * @param whiteName White player name (for title and board)
-     * @param blackName Black player name (for title and board)
-     */
-    fun launchGameAnalysis(
-        context: Context,
+    fun gameContext(
         fen: String,
-        promptTemplate: String,
-        systemPrompt: String = "",
         whiteName: String = "",
         blackName: String = "",
-        currentMoveIndex: Int = -1,
-        lastMoveDetails: MoveDetails? = null,
-        instructions: String = ""
-    ): Boolean {
-        val title = if (whiteName.isNotEmpty() && blackName.isNotEmpty()) {
-            "Game Analysis: $whiteName vs $blackName"
-        } else {
-            "Chess Position Analysis"
-        }
-
-        val prompt = processPrompt(
-            template = promptTemplate,
-            fen = fen,
-            whiteName = whiteName,
-            blackName = blackName,
-            currentMoveIndex = currentMoveIndex,
-            lastMoveDetails = lastMoveDetails
-        )
-        val system = processPrompt(
-            template = systemPrompt,
-            fen = fen,
-            whiteName = whiteName,
-            blackName = blackName,
-            currentMoveIndex = currentMoveIndex,
-            lastMoveDetails = lastMoveDetails
-        )
-        return launchAiReport(context, title, prompt, system, instructions)
-    }
-
-    /**
-     * Launch AI report for player analysis (Lichess/Chess.com player).
-     *
-     * @param context Android context
-     * @param playerName The player's username
-     * @param server The chess server (e.g., "lichess.org", "chess.com")
-     * @param promptTemplate The prompt template (with @PLAYER@ and @SERVER@ placeholders)
-     */
-    fun launchServerPlayerAnalysis(
-        context: Context,
-        playerName: String,
-        server: String,
-        promptTemplate: String,
-        systemPrompt: String = "",
-        instructions: String = ""
-    ): Boolean {
-        val title = "Player Analysis: $playerName"
-        val prompt = processPrompt(promptTemplate, player = playerName, server = server)
-        val system = processPrompt(systemPrompt, player = playerName, server = server)
-        return launchAiReport(context, title, prompt, system, instructions)
-    }
-
-    /**
-     * Launch AI report for general player analysis (not tied to a server).
-     *
-     * @param context Android context
-     * @param playerName The player's name
-     * @param promptTemplate The prompt template (with @PLAYER@ placeholder)
-     */
-    fun launchOtherPlayerAnalysis(
-        context: Context,
-        playerName: String,
-        promptTemplate: String,
-        systemPrompt: String = "",
-        instructions: String = ""
-    ): Boolean {
-        val title = "Player Profile: $playerName"
-        val prompt = processPrompt(promptTemplate, player = playerName)
-        val system = processPrompt(systemPrompt, player = playerName)
-        return launchAiReport(context, title, prompt, system, instructions)
-    }
-
-    /**
-     * Process a prompt template by replacing placeholders.
-     *
-     * Supported placeholders:
-     * - @FEN@ - Chess position in FEN notation
-     * - @BOARD@ - HTML code for interactive chess board with position
-     * - @PLAYER@ - Player name
-     * - @SERVER@ - Chess server name
-     * - @DATE@ - Current date
-     */
-    private fun processPrompt(
-        template: String,
-        fen: String? = null,
-        player: String? = null,
-        server: String? = null,
-        whiteName: String? = null,
-        blackName: String? = null,
+        server: String = "",
+        pgn: String = "",
         currentMoveIndex: Int = -1,
         lastMoveDetails: MoveDetails? = null
-    ): String {
-        var result = template
+    ): AiReportContext {
+        val color = if (fen.split(" ").getOrNull(1) == "b") "Black" else "White"
+        return AiReportContext(
+            title = if (whiteName.isNotBlank() && blackName.isNotBlank())
+                "Game Analysis: $whiteName vs $blackName" else "Chess Position Analysis",
+            fen = fen, color = color, server = server,
+            player = if (color == "White") whiteName else blackName,
+            pgn = pgn,
+            board = generateBoardHtml(fen, whiteName, blackName, currentMoveIndex, lastMoveDetails)
+        )
+    }
 
-        if (fen != null) {
-            result = result.replace("@FEN@", fen)
-            // Generate HTML board code for @BOARD@ placeholder
-            val boardHtml = generateBoardHtml(fen, whiteName ?: "", blackName ?: "", currentMoveIndex, lastMoveDetails)
-            result = result.replace("@BOARD@", boardHtml)
+    /** Plain context fields are XML-escaped; board is the generated HTML/JavaScript. */
+    internal fun buildInstructions(instructions: String, data: AiReportContext): String {
+        val values = linkedMapOf(
+            "FEN" to data.fen, "COLOR" to data.color, "SERVER" to data.server,
+            "PLAYER" to data.player, "PGN" to data.pgn, "BOARD" to data.board,
+            "DATE" to SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+        )
+        // A single pass prevents tokens inside PGN or player names being expanded again.
+        val expanded = Regex("@(FEN|COLOR|SERVER|PLAYER|PGN|BOARD|DATE)@").replace(instructions) {
+            values.getValue(it.groupValues[1])
         }
-        if (player != null) {
-            result = result.replace("@PLAYER@", player)
+        return buildString {
+            append(expanded)
+            if (isNotEmpty() && last() != '\n') append('\n')
+            for (tag in listOf("fen", "color", "server", "player", "pgn", "board")) {
+                val value = values.getValue(tag.uppercase(Locale.US))
+                append("<$tag>")
+                append(if (tag == "board") value else value.htmlEscape())
+                append("</$tag>\n")
+            }
         }
-        if (server != null) {
-            result = result.replace("@SERVER@", server)
-        }
-
-        // Always replace @DATE@ with current date
-        val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        result = result.replace("@DATE@", dateFormat.format(Date()))
-
-        return result
     }
 
     /**

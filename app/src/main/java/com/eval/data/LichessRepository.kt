@@ -1,9 +1,12 @@
 package com.eval.data
 
 import com.google.gson.Gson
+import com.google.gson.JsonParser
+import com.google.gson.JsonObject
+import com.eval.chess.PgnParser
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -122,7 +125,8 @@ class ChessRepository(
             if (!response.isSuccessful) {
                 return@withContext when (response.code()) {
                     404 -> Result.Error("User not found on Lichess")
-                    else -> Result.Error("Failed to fetch game data from Lichess")
+                    429 -> Result.Error("Lichess is limiting requests. Please try again later (HTTP 429).")
+                    else -> Result.Error("Failed to fetch games from Lichess (HTTP ${response.code()}). Please try again.")
                 }
             }
 
@@ -456,12 +460,7 @@ class ChessRepository(
                 return@withContext Result.Error("No games found in this broadcast")
             }
 
-            // Parse PGN - games are separated by double newlines. Normalize CRLF
-            // to LF first so files saved on Windows don't leave a stray \r on
-            // every header, which would break extractPgnTag further down.
-            val games = body.replace("\r\n", "\n").replace('\r', '\n')
-                .split(Regex("\n\n(?=\\[Event)"))
-                .filter { it.isNotBlank() }
+            val games = PgnParser.splitGames(body)
                 .mapNotNull { pgn ->
                     try {
                         convertPgnToLichessGame(pgn.trim())
@@ -487,9 +486,10 @@ class ChessRepository(
     private fun convertPgnToLichessGame(pgn: String): LichessGame? {
         if (pgn.isBlank()) return null
 
-        val whiteName = extractPgnTag(pgn, "White") ?: "White"
-        val blackName = extractPgnTag(pgn, "Black") ?: "Black"
-        val result = extractPgnTag(pgn, "Result")
+        val headers = PgnParser.parseHeaders(pgn)
+        val whiteName = headers["White"] ?: "White"
+        val blackName = headers["Black"] ?: "Black"
+        val result = headers["Result"] ?: PgnParser.parseResult(pgn)
 
         val winner = when (result) {
             "1-0" -> "white"
@@ -497,7 +497,7 @@ class ChessRepository(
             else -> null
         }
 
-        val gameUrl = extractPgnTag(pgn, "GameURL")
+        val gameUrl = headers["GameURL"]
         val gameId = gameUrl?.substringAfterLast("/") ?: java.util.UUID.randomUUID().toString()
 
         return LichessGame(
@@ -506,17 +506,17 @@ class ChessRepository(
             variant = "standard",
             speed = "classical",
             perf = "classical",
-            status = result ?: "unknown",
+            status = if (result == "1/2-1/2") "draw" else result ?: "unknown",
             winner = winner,
             players = Players(
                 white = Player(
                     user = User(name = whiteName, id = whiteName.lowercase().replace(" ", "_")),
-                    rating = extractPgnTag(pgn, "WhiteElo")?.toIntOrNull(),
+                    rating = headers["WhiteElo"]?.toIntOrNull(),
                     aiLevel = null
                 ),
                 black = Player(
                     user = User(name = blackName, id = blackName.lowercase().replace(" ", "_")),
-                    rating = extractPgnTag(pgn, "BlackElo")?.toIntOrNull(),
+                    rating = headers["BlackElo"]?.toIntOrNull(),
                     aiLevel = null
                 )
             ),
@@ -528,29 +528,16 @@ class ChessRepository(
         )
     }
 
-    private fun extractPgnTag(pgn: String, tagName: String): String? {
-        // Pattern.quote escapes any regex metachars so tagName values like
-        // "Foo+Bar" or "A.B" don't get interpreted as quantifiers/wildcards.
-        val quoted = java.util.regex.Pattern.quote(tagName)
-        val regex = """\[$quoted\s+"([^"]+)"\]""".toRegex()
-        return regex.find(pgn)?.groupValues?.get(1)
-    }
-
     /**
      * Parse multiple games from a PGN file content.
-     * Games are separated by double newlines before [Event tag.
+     * Uses PGN syntax rather than requiring a particular blank-line separator.
      */
     fun parseGamesFromPgnContent(pgnContent: String): Result<List<LichessGame>> {
         if (pgnContent.isBlank()) {
             return Result.Error("PGN file is empty")
         }
 
-        // Split PGN content into individual games. Normalize CRLF line endings
-        // first — Windows-saved PGNs otherwise leave \r characters that break
-        // extractPgnTag regex matches further down.
-        val normalized = pgnContent.replace("\r\n", "\n").replace('\r', '\n')
-        val gameStrings = normalized.split(Regex("\n\n(?=\\[Event)"))
-            .filter { it.isNotBlank() }
+        val gameStrings = PgnParser.splitGames(pgnContent)
 
         if (gameStrings.isEmpty()) {
             return Result.Error("No games found in PGN file")
@@ -765,8 +752,18 @@ class ChessRepository(
                 }
             }
 
-            // Build a pseudo-PGN from the moves
-            val pgn = buildPgnFromMoves(moves, gameInfo)
+            val ending = lines.asReversed().firstNotNullOfOrNull { line ->
+                try {
+                    gameEndFromJson(JsonParser().parse(line).asJsonObject)
+                } catch (_: Exception) { null }
+            }
+            val result = when {
+                ending?.winner == "white" -> "1-0"
+                ending?.winner == "black" -> "0-1"
+                ending?.status in setOf("draw", "stalemate") -> "1/2-1/2"
+                else -> "*"
+            }
+            val pgn = buildPgnFromMoves(moves, gameInfo, result)
 
             // Create LichessGame from streamed data
             val game = LichessGame(
@@ -775,8 +772,8 @@ class ChessRepository(
                 variant = gameInfo.variant?.key ?: "standard",
                 speed = gameInfo.speed ?: "rapid",
                 perf = gameInfo.perf,
-                status = "started",
-                winner = null,
+                status = ending?.status ?: "started",
+                winner = ending?.winner,
                 players = Players(
                     white = Player(
                         user = gameInfo.players?.white?.user?.let {
@@ -815,8 +812,6 @@ class ChessRepository(
      */
     fun streamLiveGame(gameId: String): Flow<LiveGameEvent> = flow {
         try {
-            emit(LiveGameEvent.Connected)
-
             val response = lichessApi.streamGame(gameId)
 
             if (!response.isSuccessful) {
@@ -831,46 +826,35 @@ class ChessRepository(
                 emit(LiveGameEvent.Disconnected)
                 return@flow
             }
+            emit(LiveGameEvent.Connected)
 
             val reader = responseBody.source()
             var isFirstLine = true
-            var isSecondLine = true
 
             try {
                 while (!reader.exhausted()) {
                     val line = reader.readUtf8Line() ?: break
                     if (line.isBlank()) continue
-
-                    if (isFirstLine) {
-                        // First line is game info
-                        try {
-                            val gameInfo = gson.fromJson(line, StreamGameInfo::class.java)
-                            emit(LiveGameEvent.GameInfo(gameInfo))
-                        } catch (e: Exception) {
-                            emit(LiveGameEvent.Error("Failed to parse game info"))
+                    // The terminal message is another game description, with
+                    // status.name. Gson also accepts it as an empty move object,
+                    // so checking for completion only on a parse error loses it.
+                    val event = try {
+                        val json = JsonParser().parse(line).asJsonObject
+                        val ending = gameEndFromJson(json)
+                        when {
+                            ending != null -> LiveGameEvent.GameEnd(ending.winner, ending.status)
+                            isFirstLine -> LiveGameEvent.GameInfo(gson.fromJson(json, StreamGameInfo::class.java))
+                            json.get("lm")?.isJsonNull == false -> LiveGameEvent.Move(gson.fromJson(json, StreamMoveData::class.java))
+                            else -> null // Initial position and keep-alive messages have no move.
                         }
-                        isFirstLine = false
-                    } else if (isSecondLine) {
-                        // Second line is starting position, skip it
-                        isSecondLine = false
-                    } else {
-                        // Subsequent lines are moves
-                        try {
-                            val moveData = gson.fromJson(line, StreamMoveData::class.java)
-                            if (moveData.lm != null) {
-                                emit(LiveGameEvent.Move(moveData))
-                            }
-                        } catch (e: Exception) {
-                            // May be game end info or other data
-                            // Check for game end
-                            if (line.contains("\"status\":") && (line.contains("\"winner\":") || line.contains("draw"))) {
-                                try {
-                                    val endData = gson.fromJson(line, GameEndData::class.java)
-                                    emit(LiveGameEvent.GameEnd(endData.winner, endData.status))
-                                } catch (ignored: Exception) {}
-                            }
-                        }
+                    } catch (e: Exception) {
+                        LiveGameEvent.Error("Failed to parse stream message")
                     }
+                    isFirstLine = false
+                    // Keep emit outside the parse catch so cancellation is never
+                    // reinterpreted as invalid JSON or a stream error.
+                    if (event != null) emit(event)
+                    if (event is LiveGameEvent.GameEnd) break
                 }
             } catch (e: java.io.IOException) {
                 // Stream closed, possibly game ended
@@ -878,16 +862,26 @@ class ChessRepository(
                 responseBody.close()
             }
             emit(LiveGameEvent.Disconnected)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             emit(LiveGameEvent.Error(e.message ?: "Stream error"))
             emit(LiveGameEvent.Disconnected)
         }
     }.flowOn(Dispatchers.IO)
 
+    private fun gameEndFromJson(json: JsonObject): GameEndData? {
+        val value = json.get("status")?.takeUnless { it.isJsonNull } ?: return null
+        val status = if (value.isJsonObject) value.asJsonObject.get("name")?.asString else value.asString
+        if (status == null || status in setOf("created", "started")) return null
+        val winner = json.get("winner")?.takeUnless { it.isJsonNull }?.asString
+        return GameEndData(winner, status)
+    }
+
     /**
      * Build a minimal PGN from UCI moves
      */
-    private fun buildPgnFromMoves(moves: List<String>, gameInfo: StreamGameInfo): String {
+    private fun buildPgnFromMoves(moves: List<String>, gameInfo: StreamGameInfo, result: String = "*"): String {
         val whiteName = gameInfo.players?.white?.user?.name ?: "White"
         val blackName = gameInfo.players?.black?.user?.name ?: "Black"
         val whiteRating = gameInfo.players?.white?.rating
@@ -900,7 +894,7 @@ class ChessRepository(
             appendLine("[Black \"$blackName\"]")
             whiteRating?.let { appendLine("[WhiteElo \"$it\"]") }
             blackRating?.let { appendLine("[BlackElo \"$it\"]") }
-            appendLine("[Result \"*\"]")
+            appendLine("[Result \"$result\"]")
             appendLine()
         }
 
@@ -921,7 +915,7 @@ class ChessRepository(
                 if (index % 2 == 0) append("${(index / 2) + 1}. ")
                 append("$san ")
             }
-            append("*")
+            append(result)
         }
 
         return headers + moveText
@@ -1061,11 +1055,9 @@ class ChessRepository(
                 return@withContext Result.Error("No games found for this user on Chess.com")
             }
 
-            // Fetch most recent months in reverse order. Chess.com returns one
-            // archive URL per month, so a user with long history means 24+ URLs
-            // to pull. Fetch in parallel batches so network latency hides, and
-            // stop early once we have enough games (archives are ordered newest
-            // last after reversed()).
+            // Prefetch a small batch, but consume newest first and cancel older
+            // downloads as soon as enough games are available. Waiting for the
+            // entire batch lets an unnecessary stalled archive block retrieval.
             val allGames = mutableListOf<LichessGame>()
             val reversedArchives = archives.reversed()
             val batchSize = 4
@@ -1074,7 +1066,7 @@ class ChessRepository(
                 var i = 0
                 while (i < reversedArchives.size && allGames.size < maxGames) {
                     val batch = reversedArchives.subList(i, minOf(i + batchSize, reversedArchives.size))
-                    val results = batch.map { archiveUrl ->
+                    val requests = batch.map { archiveUrl ->
                         async {
                             try {
                                 val response = chessComApi.getMonthlyGames(archiveUrl)
@@ -1083,14 +1075,22 @@ class ChessRepository(
                                     ?.reversed()
                                     ?.mapNotNull { convertChessComGameToLichessGame(it) }
                                     ?: emptyList()
+                            } catch (e: CancellationException) {
+                                throw e
                             } catch (e: Exception) {
                                 android.util.Log.w("ChessRepository", "Failed to fetch archive $archiveUrl: ${e.message}")
                                 emptyList()
                             }
                         }
-                    }.awaitAll()
+                    }
                     // Preserve newest-first order across the batch.
-                    for (list in results) allGames.addAll(list)
+                    for ((index, request) in requests.withIndex()) {
+                        allGames.addAll(request.await())
+                        if (allGames.size >= maxGames) {
+                            requests.drop(index + 1).forEach { it.cancel() }
+                            break
+                        }
+                    }
                     i += batchSize
                 }
             }
@@ -1100,6 +1100,8 @@ class ChessRepository(
             }
 
             Result.Success(allGames.take(maxGames))
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.Error("${e.javaClass.simpleName}: ${e.message ?: "unknown"}")
         }

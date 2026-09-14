@@ -1,171 +1,349 @@
-# Calling the AI App from External Applications
+# Calling the AI App
 
-This document describes how to call the AI app from another Android application (e.g., the chess Eval app) to generate AI reports.
+Eval's sender-side guide to `com.ai.ACTION_NEW_REPORT`.
 
-## Overview
+Companion: [AI repo — doc/custom-intent.md](../ai/doc/custom-intent.md)
+([GitHub](https://github.com/herbert256/ai/blob/master/doc/custom-intent.md)).
+The local link assumes sibling `eval` and `ai` checkouts. Keep the shared
+contract and examples between the marked comments identical in both files
+when either side changes. The implementation notes below are repo-specific.
 
-The AI app accepts external intents with a title, prompt, optional system prompt, and optional instructions. When launched with instructions containing agent/model selection tags, it goes directly to report generation. Otherwise it opens the "New AI Report" screen with the provided data pre-filled.
+<!-- BEGIN SHARED AI INTENT CONTRACT -->
+## Intent contract
 
-## Intent Details
+Send action `com.ai.ACTION_NEW_REPORT` restricted to package `com.ai`.
+This is separate from Android's `ACTION_SEND` share-sheet flow.
 
-### Action
+| String extra | Requirement | Meaning |
+|---|---|---|
+| `title` | Optional | Report title; generation uses `AI Report` when the title is blank. |
+| `instructions` | Required for Eval's current handoff | Paired instruction/data tags and standalone control flags. AI calls this state `externalInstructions` internally; the actual extra key is **`instructions`**. |
+| `prompt` | Optional | Explicit question, for other/older callers. It can be omitted when `instructions` is present. |
+| `system` | Optional | Literal system-prompt text, for other/older callers. It is a fallback below configured worker/provider/report prompts. |
+
+**Eval currently sends only `title` and `instructions`.** It stores named
+instruction entries; prompts, system prompts, parameter presets and worker
+configurations belong to the AI app. Do not send an extra named
+`externalInstructions`.
+
+A bare `prompt` without instructions pre-fills the New Report editor.
+Instruction-bearing requests first resolve their saved definitions, then
+show **External request** confirmation. They never generate before that
+confirmation. When no explicit prompt, named default or Agent/Flock/Swarm
+selection supplies the question, AI opens its saved-prompt picker first.
+
+For older callers, `prompt` can contain `-- end prompt --`: text before the
+marker is the question and text after it is instructions. A supplied
+`instructions` extra takes precedence over this split, even when empty.
+
+## Instruction tags
+
+Use paired tags for values and standalone tags for flags. Use lowercase
+control tags as shown; the three new saved-definition selectors also accept
+uppercase/mixed-case tag names.
+
+| Tag | Meaning |
+|---|---|
+| `<system>Name</system>` | Select a saved **System prompt** as the report-level override for all selected models. |
+| `<parameters>Name</parameters>` | Select a saved **Parameters** preset as the report-level generation settings. |
+| `<default>Name</default>` | Select a saved **Default prompt** for every selected model when no explicit question is present, ahead of worker defaults. Works with bare models too. |
+| `<systemprompt>Name</systemprompt>` | Older alias for selecting a saved system prompt; `<system>` wins when both are present. |
+| `<prompt>Name</prompt>` | Select an existing Example Prompt or eligible Internal Prompt, by ID or unique name. This is a different catalog from Default prompts. |
+| `<agent>Name</agent>` | Select a configured Agent by name; repeatable. |
+| `<flock>Name</flock>` | Select a configured Flock by name; repeatable. |
+| `<swarm>Name</swarm>` | Select a configured Swarm by name; repeatable. |
+| `<model>Provider/model-id</model>` | Select a model directly; repeatable. The first slash separates provider from model, so the model ID may contain more slashes. |
+| `<type>Classic</type>` / `<type>Table</type>` | Choose the report format. |
+| `<open>content</open>` / `<close>content</close>` | Opening/closing report presentation, including HTML, CSS and JavaScript. |
+| `<next>View</next>` | Completion action: `View`, `Share`, `Browser` or `Email`. `Email` uses AI's configured default email address. |
+| `<email>recipient@example.com</email>` | Open the email chooser with the completed HTML report attached and the recipient filled in. This does not silently send email. |
+| `<edit>` | After confirmation, open New Report for editing; a named default is pre-filled for editing when no explicit question was supplied. |
+| `<select>` | After confirmation, open model selection rather than immediately generating. |
+| `<return>` | Finish the AI activity after the requested email/next action; no report data is returned as an Android activity result. |
+| `<name>value</name>` | Supply a custom value for matching `@name@` placeholders in templates. |
+
+Names in `<system>`, `<parameters>` and `<default>` are trimmed and matched
+ignoring case. Stable definition IDs also work and take priority over name
+matches. XML-escape names containing special characters, for example
+`Research &amp; writing`. Missing, ambiguous or empty names, and an empty
+saved default prompt, are shown on confirmation and disable continuation.
+An unresolved legacy `<prompt>` reference instead opens the saved-prompt
+picker.
+
+Prompt precedence is: a template selected with `<prompt>` (when supplied),
+otherwise explicit `prompt` text, then `<default>`, then the selected
+workers' assigned defaults. Without a named default, a selected Flock falls
+back to its members' Agent defaults; directly selected Agents use their own
+defaults, and Swarm members use their Swarm's default. Bare models have no
+worker default.
+
+`<system>` / `<systemprompt>` set the report-level system choice, above
+worker/provider defaults, the literal `system` extra and system text inside
+a Parameters preset. The parameter preset applies above worker/provider
+parameter defaults. Users can change report-level choices in report setup.
+Saved definitions and worker assignments are unchanged by a request.
+Generation captures the resolved prompt and parameters for retry/regenerate.
+
+After confirmation, immediate generation requires a `<type>`, at least one
+worker/model source, and neither `<edit>` nor `<select>`. Otherwise the user
+continues through editing/selection. A valid model selection, prompt and
+provider configuration are still required. Completion actions run only after
+generation; Share and Email open Android choosers, and Browser opens an HTML
+viewer.
+
+## Context and placeholder substitution
+
+There are two stages:
+
+1. **Eval prepares instructions.** In its saved instruction text, Eval
+   expands the exact uppercase tokens `@FEN@`, `@COLOR@`, `@SERVER@`,
+   `@PLAYER@`, `@PGN@`, `@BOARD@` and `@DATE@` once. `@DATE@` uses local
+   `yyyy-MM-dd`. Other custom tokens are left for AI. Eval then appends all
+   six context tags below, in order, including empty values.
+2. **AI resolves its templates.** Matching `@name@` placeholders in system
+   and default prompts use entries from the received instructions, ignoring
+   case. For example, `<topic>Amsterdam</topic>` supplies both `@topic@` and
+   `@TOPIC@`. AI also expands context in selected legacy saved prompts and
+   opening/closing presentation.
+
+| Eval-appended tag | Value |
+|---|---|
+| `<fen>…</fen>` | Current position, including an explored variation. |
+| `<color>…</color>` | `White` or `Black`, from the FEN's side to move. |
+| `<server>…</server>` | `lichess.org` / `chess.com` when known, otherwise empty. |
+| `<player>…</player>` | Side-to-move player's name for a position report; selected player for a profile report. May be empty when unknown. |
+| `<pgn>…</pgn>` | Available game PGN; the separate FEN is authoritative for the current position. |
+| `<board>…</board>` | Generated board HTML/JavaScript. |
+
+A player-only request sends empty `fen`, `color`, `pgn` and `board`; it does
+not reuse the last opened position. Eval XML-escapes the five plain fields
+(`&amp;`, `&lt;`, `&gt;`, `&quot;`, `&#39;`); `board` is raw markup. Its
+inline token expansion in the saved instruction text inserts values as-is;
+use the appended fields for plain model context.
+
+AI decodes plain entry values once and preserves raw `open`, `close` and
+`board` bodies. Custom names start with a letter or underscore and may also
+contain digits, dots, hyphens and colons. Values may span lines and retain
+whitespace. An empty entry replaces its token with empty text; when data
+entries repeat, the last value is used. Eval's appended context therefore
+wins over an earlier duplicate context entry. Use each saved-definition
+selector once; the first selector of each kind is read for routing.
+
+System/default substitution is a single pass: tokens inside an inserted
+value remain literal. Other unmatched tokens remain unchanged, apart from
+existing default-prompt built-ins such as `@MODEL@`, `@PROVIDER@`, `@AGENT@`
+and `@DATE@` when no matching external entry overrides them. Eval does not
+append a `date` field automatically: add `<date>@DATE@</date>` to its saved
+instructions to give saved system and default templates the same explicit
+date value.
+
+Keep `@BOARD@` in `<open>`/`<close>` for presentation. A system or default
+template that explicitly uses `@BOARD@` receives that raw value like any
+other named entry; caller-supplied normal prompts and the legacy saved-prompt
+path omit the board token. Data and presentation bodies are removed before
+interpreting commands, so `<select>` or `<email>` inside such a body is data.
+
+HTML opening/closing bodies are inserted verbatim, including CSS, scripts
+and event handlers, in Complete/Short HTML and the zipped HTML index. They
+run in the in-app HTML preview and a browser opening the export. Reports
+with either field have an **HTML** tile in **View**. Text-only presentation
+keeps Markdown formatting; when supplying HTML, write the whole body as
+HTML. The literal `</open>` / `</close>` delimiter ends its body, including
+when written inside a JavaScript string.
+
+## Examples
+
+The definition and worker names below are examples: create them in AI first
+or substitute names/IDs that already exist. Eval automatically appends its
+six context tags; do not paste a fixed FEN or duplicate those tags into an
+Eval instruction entry.
+
+### 1. Eval position report with all three named selections
+
+Create these definitions in AI:
+
+| Kind / name | Example contents |
+|---|---|
+| System prompt **Chess coach** | `You are a chess coach. Respond in @language@. Report date: @date@.` |
+| Parameters **Careful analysis** | Temperature `0.2`, max tokens `2048` (choose a model supporting them). |
+| Default prompt **Analyse a position** | `Analyse @fen@ for @color@. Player: @player@. Explain plans and candidate moves.` |
+
+Save this instruction text in Eval:
+
+```xml
+<system>Chess coach</system>
+<parameters>Careful analysis</parameters>
+<default>Analyse a position</default>
+<language>English</language>
+<date>@DATE@</date>
+<type>Classic</type>
+<select>
+<next>View</next>
+<open>@BOARD@</open>
 ```
-com.ai.ACTION_NEW_REPORT
+
+Eval inserts the current date and board, appends the current position and
+player fields, and sends only `title` and `instructions`. AI shows the
+expanded default/system prompts on confirmation, then model selection and
+report setup. The named default applies even to a directly selected model.
+The user starts generation; completion opens the report view.
+
+### 2. Use a Flock's defaults and generate after confirmation
+
+The AI Flock **Chess analysts** must exist and resolve a non-empty default
+prompt for every member. Save in Eval:
+
+```xml
+<flock>Chess analysts</flock>
+<type>Classic</type>
+<next>View</next>
+<open>@BOARD@</open>
 ```
 
-### Package
+There is no `<select>` or `<edit>`, so AI's confirmation button is
+**Generate**. No API calls start before the user confirms. Each member uses
+its resolved worker default and the received position context.
+
+### 3. Eval player-only report
+
+Create a Default prompt named **Player profile** with this text:
+
+```text
+Summarize the playing style of @player@ on @server@. State what cannot be
+inferred from the supplied information.
 ```
-com.ai
+
+Save this instruction entry in Eval:
+
+```xml
+<system>Chess coach</system>
+<default>Player profile</default>
+<language>English</language>
+<date>@DATE@</date>
+<type>Classic</type>
+<select>
 ```
 
-### Extras
+For a synthetic player `ExamplePlayer` on `lichess.org`, AI resolves the
+question to `Summarize the playing style of ExamplePlayer on lichess.org…`.
+The position-related fields are empty. No old FEN or board is included.
 
-| Extra Key | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `title` | String | Optional | Title for the AI report (appears in report header) |
-| `system` | String | Optional | System prompt sent to AI models (used as fallback when agent/flock/swarm has no system prompt configured) |
-| `prompt` | String | Required | The prompt/question to send to AI agents |
-| `instructions` | String | Optional | Control tags for report behavior (see Instructions Tags below) |
+### 4. Another Android caller: complete named-template request
 
-### Instruction Tags
-
-The `instructions` parameter supports XML-style tags to control report behavior:
-
-| Tag | Description |
-|-----|-------------|
-| `<agent>Name</agent>` | Select an agent by name (repeatable) |
-| `<flock>Name</flock>` | Select a flock by name (repeatable) |
-| `<swarm>Name</swarm>` | Select a swarm by name (repeatable) |
-| `<model>provider/model</model>` | Select a specific model (repeatable) |
-| `<type>Classic</type>` or `<type>Table</type>` | Report format |
-| `<open>HTML</open>` | HTML content shown at the top of the report |
-| `<close>HTML</close>` | HTML content shown at the bottom of the report |
-| `<next>View</next>` | Auto-action on completion: `View`, `Share`, `Browser`, `Email` |
-| `<email>addr@example.com</email>` | Auto-email report on completion |
-| `<edit>` | Show the New Report screen for prompt editing before generating |
-| `<select>` | Show model selection screen even when agent/model tags are present |
-| `<return>` | Finish the activity after the `<next>` action completes |
-
-### Legacy Format
-
-For backward compatibility, the `prompt` extra can contain both the prompt and instructions separated by a `-- end prompt --` marker. The text above the marker is the prompt; the text below contains instruction tags. When the `instructions` extra is provided, it takes precedence and the marker is not used.
-
-## Implementation in Calling App
-
-### Kotlin Example
+Create System prompt **Short answers** (`Answer in @language@.`), Parameters
+**Concise** (max tokens `512`), and Default prompt **City summary**
+(`Describe @topic@ in three sentences.`) in AI. From an Android Activity:
 
 ```kotlin
-/**
- * Launch the AI app with a prompt for report generation.
- *
- * @param title Report title (optional)
- * @param system System prompt for AI models (optional)
- * @param prompt The prompt to send to AI agents
- * @param instructions Control tags for report behavior (optional)
- */
-fun launchAiReport(
-    context: Context,
-    title: String,
-    prompt: String,
-    system: String? = null,
-    instructions: String? = null
-) {
-    val intent = Intent().apply {
-        action = "com.ai.ACTION_NEW_REPORT"
-        setPackage("com.ai")
-        putExtra("title", title)
-        putExtra("prompt", prompt)
-        if (system != null) putExtra("system", system)
-        if (instructions != null) putExtra("instructions", instructions)
-    }
+import android.app.Activity
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.widget.Toast
 
-    // Check if AI app is installed
-    if (intent.resolveActivity(context.packageManager) != null) {
-        context.startActivity(intent)
-    } else {
-        // AI app not installed - show error or fallback
-        Toast.makeText(context, "AI app not installed", Toast.LENGTH_SHORT).show()
+fun Activity.openCityReport() {
+    val instructions = """
+        <system>Short answers</system>
+        <parameters>Concise</parameters>
+        <default>City summary</default>
+        <topic>Amsterdam</topic>
+        <language>Dutch</language>
+        <type>Classic</type>
+        <select>
+    """.trimIndent()
+    val request = Intent("com.ai.ACTION_NEW_REPORT")
+        .setPackage("com.ai")
+        .putExtra("title", "Amsterdam summary")
+        .putExtra("instructions", instructions)
+    try {
+        startActivity(request)
+    } catch (_: ActivityNotFoundException) {
+        Toast.makeText(this, "Install the AI app first", Toast.LENGTH_SHORT).show()
     }
 }
 ```
 
-### Usage Examples
+AI previews `Answer in Dutch.` and `Describe Amsterdam in three sentences.`.
+The user confirms, selects models and generates. No `prompt`, literal
+`system` or `externalInstructions` extra is needed. If the caller adds
+`.putExtra("prompt", "Compare Amsterdam and Utrecht.")`, that explicit
+question takes precedence over **City summary**.
+
+### 5. Missing names and literal values
+
+```xml
+<system>System that does not exist</system>
+<parameters>Concise</parameters>
+<default>City summary</default>
+<topic>Amsterdam &amp; Utrecht</topic>
+<language></language>
+<literal>@topic@</literal>
+<select>
+```
+
+Assuming only the system name is missing, AI shows
+`System prompt not found: System that does not exist` and disables
+continuation. Correct the name and resend. Once resolved, `@topic@` becomes
+`Amsterdam & Utrecht`, `@language@` becomes empty, and `@literal@` becomes the
+literal text `@topic@` in system/default templates. An unmatched `@unknown@`
+stays unchanged.
+<!-- END SHARED AI INTENT CONTRACT -->
+
+## Eval implementation
+
+- [`AiAppLauncher.kt`](app/src/main/java/com/eval/ui/AiAppLauncher.kt)
+  implements `launchAiReport(context, entry, reportContext)`,
+  `buildInstructions` and board HTML generation. It sends only `title` and
+  `instructions`, restricted to package `com.ai`.
+- [`AiSettingsModels.kt`](app/src/main/java/com/eval/ui/AiSettingsModels.kt)
+  defines `AiInstructionEntry(id, name, instructions)` and
+  `AiReportContext(title, fen, color, server, player, pgn, board)`.
+- [`GameViewModel.kt`](app/src/main/java/com/eval/ui/GameViewModel.kt)
+  captures the current position or selected player's context and stages the
+  instruction choice. [`GameScreen.kt`](app/src/main/java/com/eval/ui/GameScreen.kt)
+  shows that chooser before launching AI.
+- [`SettingsScreen.kt`](app/src/main/java/com/eval/ui/SettingsScreen.kt)
+  manages named entries under Settings → AI Instructions.
+- [`SettingsPreferences.kt`](app/src/main/java/com/eval/ui/SettingsPreferences.kt)
+  stores `ai_instructions_list`; typed settings schema v3 uses
+  `aiInstructions`. Migration retains old IDs, names and instructions and
+  converts a legacy email field to an `<email>` instruction. Old prompt and
+  system-prompt text is not part of active Eval instruction storage.
+- [`AndroidManifest.xml`](app/src/main/AndroidManifest.xml) declares package
+  visibility queries for `com.ai` and the custom action, used by
+  `resolveActivity`/the installed-app check.
+
+The current launcher checks that AI can handle the intent and returns
+`false` with a toast when unavailable. It also supports an optional pinned
+signing-certificate fingerprint; the current empty constant leaves pinning
+disabled. Model/API configuration and all report generation belong to AI.
+
+Existing Eval call sites use the instruction-entry API, not the obsolete
+`launchAiReport(context, title, prompt, system, instructions)` signature.
+For example, from an Activity inside Eval:
 
 ```kotlin
-// Simple report - opens New Report screen for user to review and generate
-launchAiReport(
-    context = context,
-    title = "Chess Position Analysis",
-    prompt = "Analyze this chess position: FEN $fen"
-)
-
-// With system prompt and auto-generation using a specific flock
-launchAiReport(
-    context = context,
-    title = "Chess Position Analysis",
-    prompt = "Analyze this chess position: FEN $fen",
-    system = "You are a chess grandmaster. Provide detailed positional analysis.",
-    instructions = "<flock>Chess Engines</flock><type>Classic</type><next>View</next>"
-)
-
-// Auto-generate with specific agents, email result, then close
-launchAiReport(
-    context = context,
-    title = "Daily Report",
-    prompt = "Generate the daily summary for today.",
+val entry = AiInstructionEntry(
+    name = "Position report",
     instructions = """
-        <agent>GPT-4o</agent>
-        <agent>Claude</agent>
-        <type>Table</type>
-        <email>user@example.com</email>
-        <return>
+        <system>Chess coach</system>
+        <parameters>Careful analysis</parameters>
+        <default>Analyse a position</default>
+        <language>English</language>
+        <date>@DATE@</date>
+        <type>Classic</type><select><next>View</next>
+        <open>@BOARD@</open>
     """.trimIndent()
 )
+val position = AiAppLauncher.gameContext(
+    fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+    whiteName = "ExampleWhite",
+    blackName = "ExampleBlack",
+    server = "lichess.org",
+    pgn = "*"
+)
+AiAppLauncher.launchAiReport(this, entry, position)
 ```
 
-## User Flow
-
-### Without instructions
-1. User taps "AI Analysis" button in calling app
-2. Calling app creates intent with title and prompt
-3. AI app launches and shows "New AI Report" screen with pre-filled data
-4. User reviews the prompt (can edit if desired)
-5. User taps "Generate" and selects AI agents
-6. AI app generates report from selected agents
-7. User views results in AI app
-
-### With instructions (agent/model selection tags)
-1. Calling app creates intent with title, prompt, and instructions
-2. AI app launches directly to the report generation screen
-3. Selected agents/models are auto-populated from instruction tags
-4. Report generates automatically if a `<type>` tag is present
-5. On completion, the `<next>` action triggers automatically (if specified)
-
-## Notes
-
-- The AI app handles all API calls and agent configuration
-- Users must have configured at least one AI agent in the AI app before generating reports
-- The prompt can include any text - markdown formatting is preserved
-- Special placeholder `@DATE@` in the prompt will be replaced with the current date
-- The title is optional; if omitted, the report will have no title header
-- The `system` prompt is used as a fallback: if an agent/flock/swarm has its own system prompt configured, that takes precedence
-
-## Error Handling
-
-Check if the AI app is installed before launching:
-
-```kotlin
-val intent = Intent("com.ai.ACTION_NEW_REPORT")
-intent.setPackage("com.ai")
-
-if (intent.resolveActivity(packageManager) != null) {
-    startActivity(intent)
-} else {
-    // Show message that AI app needs to be installed
-    showInstallAiAppDialog()
-}
-```
-
-## Dependencies
-
-The calling app needs no special permissions or dependencies. It only needs to be able to send standard Android intents.
+The position values here are synthetic examples; production call sites use
+the live `GameViewModel` snapshot. Both position and player requests require
+the user to select a named instruction entry.

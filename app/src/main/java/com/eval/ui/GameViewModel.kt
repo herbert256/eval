@@ -88,8 +88,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private fun saveInterfaceVisibilitySettings(settings: InterfaceVisibilitySettings) = settingsPrefs.saveInterfaceVisibilitySettings(settings)
     private fun loadGeneralSettings(): GeneralSettings = settingsPrefs.loadGeneralSettings()
     private fun saveGeneralSettings(settings: GeneralSettings) = settingsPrefs.saveGeneralSettings(settings)
-    private fun loadAiPrompts(): List<AiPromptEntry> = settingsPrefs.loadAiPrompts()
-    private fun saveAiPrompts(prompts: List<AiPromptEntry>) = settingsPrefs.saveAiPrompts(prompts)
+    private fun loadAiInstructions(): List<AiInstructionEntry> = settingsPrefs.loadAiInstructions()
+    private fun saveAiInstructions(instructions: List<AiInstructionEntry>) = settingsPrefs.saveAiInstructions(instructions)
 
     private fun getAppVersionCode(): Long {
         return try {
@@ -104,16 +104,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         } catch (e: Exception) {
             0L
         }
-    }
-
-    private fun isFirstRun(): Boolean {
-        val savedVersionCode = settingsPrefs.getFirstGameRetrievedVersion()
-        val currentVersion = getAppVersionCode()
-        return savedVersionCode != currentVersion
-    }
-
-    private fun resetSettingsToDefaults() {
-        settingsPrefs.resetAllSettingsToDefaults()
     }
 
     init {
@@ -143,7 +133,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             gameStorage = gameStorage,
             analysisOrchestrator = analysisOrchestrator,
             fetchOpeningExplorer = { fetchOpeningExplorer() },
-            restartStockfishAndAnalyze = { fen -> restartStockfishAndAnalyze(fen) },
+            analyzeRestoredPosition = { fen -> analyzeRestoredPosition(fen) },
             getAppVersionCode = { getAppVersionCode() }
         )
 
@@ -198,17 +188,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         ) }
 
         if (stockfishInstalled) {
-            if (isFirstRun()) {
-                resetSettingsToDefaults()
-            }
-
+            // Missing preferences already use defaults. Never erase settings or
+            // saved games just because no server game was retrieved this version.
             val settings = loadStockfishSettings()
             val boardSettings = loadBoardLayoutSettings()
             val graphSettings = loadGraphSettings()
             val interfaceVisibility = loadInterfaceVisibilitySettings()
             val generalSettings = loadGeneralSettings()
 
-            val aiPrompts = loadAiPrompts()
+            val aiInstructions = loadAiInstructions()
             val lichessMaxGames = settingsPrefs.lichessMaxGames
             val retrievesList = gameStorage.loadRetrievesList()
             val hasPreviousRetrieves = retrievesList.isNotEmpty()
@@ -221,7 +209,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 graphSettings = graphSettings,
                 interfaceVisibility = interfaceVisibility,
                 generalSettings = generalSettings,
-                aiPrompts = aiPrompts,
+                aiInstructions = aiInstructions,
                 lichessMaxGames = lichessMaxGames,
                 hasPreviousRetrieves = hasPreviousRetrieves,
                 hasAnalysedGames = hasAnalysedGames,
@@ -238,7 +226,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 // to set it explicitly here (was racing with the collector on init).
 
                 // Auto-restore manual stage game from previous session
-                if (ready) {
+                if (ready && _uiState.value.game == null) {
                     val manualGame = gameStorage.loadManualStageGame()
                     if (manualGame != null) {
                         gameLoader.loadAnalysedGameDirectly(manualGame)
@@ -310,16 +298,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         _uiState.update { it.copy(stockfishInstalled = true) }
 
-        if (isFirstRun()) {
-            resetSettingsToDefaults()
-        }
-
         val settings = loadStockfishSettings()
         val boardSettings = loadBoardLayoutSettings()
         val graphSettings = loadGraphSettings()
         val interfaceVisibility = loadInterfaceVisibilitySettings()
         val generalSettings = loadGeneralSettings()
-        val aiPrompts = loadAiPrompts()
+        val aiInstructions = loadAiInstructions()
         val lichessMaxGames = settingsPrefs.lichessMaxGames
 
         _uiState.update { it.copy(
@@ -328,7 +312,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             graphSettings = graphSettings,
             interfaceVisibility = interfaceVisibility,
             generalSettings = generalSettings,
-            aiPrompts = aiPrompts,
+            aiInstructions = aiInstructions,
             lichessMaxGames = lichessMaxGames
         ) }
 
@@ -462,18 +446,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleAutoFollowLive() = liveGameManager.toggleAutoFollowLive()
 
     // ===== STOCKFISH HELPERS =====
-    private suspend fun restartStockfishAndAnalyze(fen: String) {
-        analysisOrchestrator.stop()
-        val ready = stockfish.restart()
-        _uiState.update { it.copy(stockfishReady = ready) }
-        if (ready) {
+    private suspend fun analyzeRestoredPosition(fen: String) {
+        // Startup has already initialized Stockfish. Reuse it rather than
+        // replacing a healthy process just to restore a saved board.
+        if (stockfish.isReady.value) {
             stockfish.newGame()
             analysisOrchestrator.configureForManualStage()
-            delay(100)
-            val thisRequestId = analysisOrchestrator.analysisRequestId.incrementAndGet()
-            analysisOrchestrator.currentAnalysisFen = fen
-            analysisOrchestrator.ensureStockfishAnalysis(fen, thisRequestId)
         }
+        val thisRequestId = analysisOrchestrator.analysisRequestId.incrementAndGet()
+        analysisOrchestrator.currentAnalysisFen = fen
+        analysisOrchestrator.ensureStockfishAnalysis(fen, thisRequestId)
     }
 
     // ===== GAME STORAGE =====
@@ -516,12 +498,17 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     /** Extract the Site URL from the current game's PGN headers, if it's a lichess.org or chess.com URL. */
     fun getGameSiteUrl(): String? {
         val pgn = _uiState.value.game?.pgn ?: return null
-        val headers = com.eval.chess.PgnParser.parseHeaders(pgn)
-        val site = headers["Site"] ?: return null
-        return when {
-            site.contains("lichess.org") -> site
-            site.contains("chess.com") -> site
-            else -> null
+        return gameSiteUrl(pgn)
+    }
+
+    fun viewGameOnSite(context: Context) {
+        val url = getGameSiteUrl() ?: return
+        try {
+            context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+        } catch (_: android.content.ActivityNotFoundException) {
+            _uiState.update { it.copy(errorMessage = "No browser is available to open this game.") }
+        } catch (_: SecurityException) {
+            _uiState.update { it.copy(errorMessage = "This game link could not be opened.") }
         }
     }
 
@@ -689,7 +676,7 @@ ${opening.moves} *
      * Start Manual stage directly from a FEN position.
      * No PGN, no move list, no graphs - just board analysis.
      */
-    fun startFromFen(fen: String) {
+    fun startFromFen(fen: String): Boolean {
         // Replace underscores with spaces (common in URLs and clipboard pastes)
         val normalizedFen = fen.replace('_', ' ')
         // Validate FEN by trying to set up the board
@@ -698,8 +685,15 @@ ${opening.moves} *
             _uiState.update { it.copy(
                 errorMessage = "Invalid FEN position"
             ) }
-            return
+            return false
         }
+
+        gameLoader.invalidatePendingRetrieval()
+        analysisOrchestrator.stop()
+        liveGameManager.stopLiveFollow()
+        openingExplorerJob?.cancel()
+        mainTimeline.resetToInitial(board)
+        exploringTimeline.clear()
 
         // Create a minimal game object for FEN analysis
         val lichessGame = com.eval.data.LichessGame(
@@ -722,7 +716,7 @@ ${opening.moves} *
                     aiLevel = null
                 )
             ),
-            pgn = "[FEN \"$normalizedFen\"]\n\n*",
+            pgn = "[SetUp \"1\"]\n[FEN \"${board.getFen()}\"]\n\n*",
             moves = null,
             clock = null,
             createdAt = System.currentTimeMillis(),
@@ -736,6 +730,7 @@ ${opening.moves} *
         _uiState.update { it.copy(
             showRetrieveScreen = false,
             isLoading = false,
+            errorMessage = null,
             game = lichessGame,
             openingName = null,
             currentOpeningName = null,
@@ -747,6 +742,9 @@ ${opening.moves} *
             userPlayedBlack = !isWhiteToMove,
             previewScores = emptyMap(),
             analyseScores = emptyMap(),
+            moveQualities = emptyMap(),
+            openingExplorerData = null,
+            openingExplorerLoading = false,
             currentStage = AnalysisStage.MANUAL,
             autoAnalysisIndex = -1,
             isExploringLine = false,
@@ -757,6 +755,12 @@ ${opening.moves} *
             analysisResultFen = null
         ) }
 
+        gameStorage.saveManualStageGame(AnalysedGame(
+            timestamp = System.currentTimeMillis(), whiteName = "White", blackName = "Black",
+            result = "*", pgn = lichessGame.pgn.orEmpty(), moves = emptyList(), moveDetails = emptyList(),
+            previewScores = emptyMap(), analyseScores = emptyMap()
+        ))
+
         // Configure Stockfish for Manual stage and start analysis
         viewModelScope.launch {
             if (_uiState.value.stockfishReady) {
@@ -764,6 +768,7 @@ ${opening.moves} *
                 analysisOrchestrator.restartAnalysisForExploringLine()
             }
         }
+        return true
     }
 
     fun updateStockfishSettings(settings: StockfishSettings) = settingsManager.updateStockfishSettings(settings)
@@ -781,6 +786,7 @@ ${opening.moves} *
      * Reset the app to the homepage (logo only), clearing all game state.
      */
     fun resetToHomepage() {
+        gameLoader.invalidatePendingRetrieval()
         // Stop any ongoing analysis
         analysisOrchestrator.stop()
 
@@ -815,85 +821,52 @@ ${opening.moves} *
         ) }
     }
 
-    // ===== AI Prompts CRUD =====
+    // ===== AI Instructions CRUD =====
 
-    fun updateAiPrompts(prompts: List<AiPromptEntry>) = settingsManager.updateAiPrompts(prompts)
+    fun updateAiInstructions(instructions: List<AiInstructionEntry>) = settingsManager.updateAiInstructions(instructions)
 
-    fun addAiPrompt(prompt: AiPromptEntry) = settingsManager.addAiPrompt(prompt)
+    fun addAiInstruction(entry: AiInstructionEntry) = settingsManager.addAiInstruction(entry)
 
-    fun updateAiPrompt(prompt: AiPromptEntry) = settingsManager.updateAiPrompt(prompt)
+    fun updateAiInstruction(entry: AiInstructionEntry) = settingsManager.updateAiInstruction(entry)
 
-    fun deleteAiPrompt(id: String) = settingsManager.deleteAiPrompt(id)
+    fun deleteAiInstruction(id: String) = settingsManager.deleteAiInstruction(id)
 
-    // ===== AI Prompt Selection Dialog =====
+    // ===== Named AI instructions =====
 
-    fun showAiPromptSelectionDialog() {
-        _uiState.update { it.copy(showAiPromptSelectionDialog = true) }
-    }
-
-    fun hideAiPromptSelectionDialog() {
-        _uiState.update { it.copy(showAiPromptSelectionDialog = false) }
-    }
-
-    /**
-     * Launch the external AI app for game position analysis with a selected prompt.
-     * Shows warning dialog if AI app is not installed.
-     * @param context Android context needed for intent launching
-     * @param promptEntry The selected AI prompt entry
-     * @return true if AI app was launched, false if not installed
-     */
-    fun launchGameAnalysis(context: android.content.Context, promptEntry: AiPromptEntry): Boolean {
-        if (!AiAppLauncher.isAiAppInstalled(context)) {
-            showAiAppNotInstalledDialog()
-            return false
-        }
-        val fen = _uiState.value.currentBoard.getFen()
-        val whiteName = _uiState.value.game?.players?.white?.user?.name ?: ""
-        val blackName = _uiState.value.game?.players?.black?.user?.name ?: ""
-        val currentMoveIndex = _uiState.value.currentMoveIndex
-        val lastMoveDetails = if (currentMoveIndex >= 0 && currentMoveIndex < _uiState.value.moveDetails.size) {
-            _uiState.value.moveDetails[currentMoveIndex]
-        } else null
-        return AiAppLauncher.launchGameAnalysis(
-            context, fen, promptEntry.prompt, promptEntry.system, whiteName, blackName,
-            currentMoveIndex, lastMoveDetails, promptEntry.instructions
+    fun requestGameAiReport() {
+        val state = _uiState.value
+        val server = getGameSiteUrl()?.let { gameSiteHost(it) }.orEmpty()
+        val moveIndex = if (state.isExploringLine) -1 else state.currentMoveIndex
+        val data = AiAppLauncher.gameContext(
+            fen = state.currentBoard.getFen(),
+            whiteName = state.game?.players?.white?.user?.name.orEmpty(),
+            blackName = state.game?.players?.black?.user?.name.orEmpty(),
+            server = server, pgn = state.game?.pgn.orEmpty(),
+            currentMoveIndex = moveIndex,
+            lastMoveDetails = state.moveDetails.getOrNull(moveIndex)
         )
+        _uiState.update { it.copy(pendingAiReport = data) }
     }
 
-    /**
-     * Launch the external AI app for server player analysis (Lichess/Chess.com).
-     * Uses the first CHESS_SERVER_PLAYER prompt, falling back to defaults.
-     */
-    fun launchServerPlayerAnalysis(context: android.content.Context, playerName: String, server: String): Boolean {
+    fun requestPlayerAiReport(playerName: String, server: String = "") {
+        _uiState.update { it.copy(pendingAiReport = AiReportContext(
+            title = "Player Analysis: $playerName", player = playerName, server = server
+        )) }
+    }
+
+    fun dismissAiInstructionSelection() {
+        _uiState.update { it.copy(pendingAiReport = null) }
+    }
+
+    fun launchSelectedAiInstruction(context: android.content.Context, entry: AiInstructionEntry): Boolean {
+        val data = _uiState.value.pendingAiReport ?: return false
         if (!AiAppLauncher.isAiAppInstalled(context)) {
             showAiAppNotInstalledDialog()
             return false
         }
-        val prompts = _uiState.value.aiPrompts
-        val prompt = prompts.firstOrNull { it.safeCategory == AiPromptCategory.CHESS_SERVER_PLAYER }
-            ?: prompts.firstOrNull()
-        val promptTemplate = prompt?.prompt ?: DEFAULT_SERVER_PLAYER_PROMPT
-        val systemPrompt = prompt?.system ?: ""
-        val instructions = prompt?.instructions ?: ""
-        return AiAppLauncher.launchServerPlayerAnalysis(context, playerName, server, promptTemplate, systemPrompt, instructions)
-    }
-
-    /**
-     * Launch the external AI app for general player analysis.
-     * Uses the first PLAYER prompt, falling back to defaults.
-     */
-    fun launchOtherPlayerAnalysis(context: android.content.Context, playerName: String): Boolean {
-        if (!AiAppLauncher.isAiAppInstalled(context)) {
-            showAiAppNotInstalledDialog()
-            return false
+        return AiAppLauncher.launchAiReport(context, entry, data).also { launched ->
+            if (launched) dismissAiInstructionSelection()
         }
-        val prompts = _uiState.value.aiPrompts
-        val prompt = prompts.firstOrNull { it.safeCategory == AiPromptCategory.PLAYER }
-            ?: prompts.firstOrNull()
-        val promptTemplate = prompt?.prompt ?: DEFAULT_OTHER_PLAYER_PROMPT
-        val systemPrompt = prompt?.system ?: ""
-        val instructions = prompt?.instructions ?: ""
-        return AiAppLauncher.launchOtherPlayerAnalysis(context, playerName, promptTemplate, systemPrompt, instructions)
     }
 
     /**
@@ -921,7 +894,7 @@ ${opening.moves} *
             val graphSettings = loadGraphSettings()
             val interfaceVisibility = loadInterfaceVisibilitySettings()
             val generalSettings = loadGeneralSettings()
-            val aiPrompts = loadAiPrompts()
+            val aiInstructions = loadAiInstructions()
             _uiState.update {
                 it.copy(
                     stockfishSettings = settings,
@@ -929,7 +902,7 @@ ${opening.moves} *
                     graphSettings = graphSettings,
                     interfaceVisibility = interfaceVisibility,
                     generalSettings = generalSettings,
-                    aiPrompts = aiPrompts
+                    aiInstructions = aiInstructions
                 )
             }
         }

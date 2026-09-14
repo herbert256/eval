@@ -23,6 +23,7 @@ import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import kotlinx.coroutines.delay
 
 /**
@@ -128,40 +129,11 @@ fun GameScreenContent(
         return
     }
 
-    // Show share position screen (full screen)
-    if (uiState.showSharePositionDialog) {
-        val gameSiteUrl = viewModel.getGameSiteUrl()
-        SharePositionScreen(
-            gameSiteUrl = gameSiteUrl,
-            onCopyFen = { viewModel.copyFenToClipboard(context) },
-            onShare = { viewModel.sharePositionAsText(context) },
-            onExportPgn = { viewModel.exportAnnotatedPgn(context) },
-            onCopyPgn = { viewModel.copyPgnToClipboard(context) },
-            onExportGif = { viewModel.exportAsGif(context) },
-            onGenerateAiReports = {
-                viewModel.hideSharePositionDialog()
-                viewModel.showAiPromptSelectionDialog()
-            },
-            onViewOnSite = {
-                gameSiteUrl?.let { url ->
-                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
-                    context.startActivity(intent)
-                }
-            },
-            onDismiss = { viewModel.hideSharePositionDialog() }
-        )
-        return
-    }
-
-    // Show AI prompt selection screen (full screen)
-    if (uiState.showAiPromptSelectionDialog) {
-        AiPromptSelectionScreen(
-            prompts = uiState.aiPrompts.filter { it.safeCategory == AiPromptCategory.GAME },
-            onSelectPrompt = { promptEntry ->
-                viewModel.hideAiPromptSelectionDialog()
-                viewModel.launchGameAnalysis(context, promptEntry)
-            },
-            onDismiss = { viewModel.hideAiPromptSelectionDialog() }
+    if (uiState.pendingAiReport != null) {
+        AiInstructionSelectionScreen(
+            instructions = uiState.aiInstructions,
+            onSelectInstruction = { viewModel.launchSelectedAiInstruction(context, it) },
+            onDismiss = { viewModel.dismissAiInstructionSelection() }
         )
         return
     }
@@ -181,16 +153,11 @@ fun GameScreenContent(
             onGameSelected = { game -> viewModel.selectGameFromPlayerInfo(game) },
             onAiReportsClick = {
                 uiState.playerInfo?.let { info ->
-                    val serverName = if (uiState.playerInfoError != null) {
-                        null
-                    } else {
-                        "lichess.org"
+                    val serverName = if (uiState.playerInfoError != null) "" else when (info.server) {
+                        com.eval.data.ChessServer.LICHESS -> "lichess.org"
+                        com.eval.data.ChessServer.CHESS_COM -> "chess.com"
                     }
-                    if (serverName != null) {
-                        viewModel.launchServerPlayerAnalysis(context, info.username, serverName)
-                    } else {
-                        viewModel.launchOtherPlayerAnalysis(context, info.username)
-                    }
+                    viewModel.requestPlayerAiReport(info.username, serverName)
                 }
             },
             hasAiApiKeys = viewModel.isAiAppInstalled(context),
@@ -211,172 +178,197 @@ fun GameScreenContent(
         return
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(backgroundColor)
-            .padding(horizontal = 12.dp)
-            .verticalScroll(rememberScrollState())
-    ) {
-        // Title bar - always shown
-        EvalTitleBar(
-                onEvalClick = { viewModel.clearGame() },
-                leftContent = {
-                    // Menu icon - navigate to retrieve
-                    TitleBarIcon(
-                        icon = "≡",
-                        onClick = {
-                            if (uiState.game != null) {
-                                viewModel.clearGame()
-                            }
-                            onNavigateToRetrieve()
-                        },
-                        fontSize = 34,
-                        offsetY = -8
-                    )
-                    // Reload last game from server
-                    if (uiState.game != null || uiState.hasLastServerUser) {
+    // Retain the game composition while sharing. Rebuilding the entire board,
+    // PV rows and move list behind Android's chooser can block focus delivery.
+    Box(modifier = modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(backgroundColor)
+                .padding(horizontal = 12.dp)
+                .verticalScroll(rememberScrollState())
+                .then(if (uiState.showSharePositionDialog) Modifier.clearAndSetSemantics {} else Modifier)
+        ) {
+            // Title bar - always shown
+            EvalTitleBar(
+                    onEvalClick = { viewModel.clearGame() },
+                    leftContent = {
+                        // Menu icon - navigate to retrieve
                         TitleBarIcon(
-                            icon = "↻",
-                            onClick = { viewModel.reloadLastGame() },
+                            icon = "≡",
+                            onClick = {
+                                if (uiState.game != null) {
+                                    viewModel.clearGame()
+                                }
+                                onNavigateToRetrieve()
+                            },
                             fontSize = 34,
                             offsetY = -8
                         )
+                        // Reload last game from server
+                        if (uiState.game != null || uiState.hasLastServerUser) {
+                            TitleBarIcon(
+                                icon = "↻",
+                                onClick = { viewModel.reloadLastGame() },
+                                fontSize = 34,
+                                offsetY = -8
+                            )
+                        }
+                        // Settings icon
+                        TitleBarIcon(
+                            icon = "⚙",
+                            onClick = { onNavigateToSettings() }
+                        )
+                        // Help icon
+                        TitleBarIcon(
+                            icon = "?",
+                            onClick = { onNavigateToHelp() }
+                        )
                     }
-                    // Settings icon
-                    TitleBarIcon(
-                        icon = "⚙",
-                        onClick = { onNavigateToSettings() }
-                    )
-                    // Help icon
-                    TitleBarIcon(
-                        icon = "?",
-                        onClick = { onNavigateToHelp() }
-                    )
+                )
+
+            // Stage indicator - only show during Preview and Analyse stages
+            if (uiState.game != null && uiState.currentStage != AnalysisStage.MANUAL) {
+                val isPreviewStage = uiState.currentStage == AnalysisStage.PREVIEW
+                val stageText = if (isPreviewStage) "Preview stage" else "Analyse stage"
+                val stageColor = if (isPreviewStage) Color(0xFFFFAA00) else AppColors.AccentBlue
+
+                if (isPreviewStage) {
+                    // Preview stage: not clickable, just a label
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .offset(y = (-8).dp)
+                            .padding(vertical = 4.dp)
+                            .background(stageColor.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                            .padding(12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = stageText,
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 14.sp,
+                            color = stageColor
+                        )
+                    }
+                } else {
+                    // Analyse stage: clickable, enters Manual stage at biggest change
+                    Button(
+                        onClick = { viewModel.enterManualStageAtBiggestChange() },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = stageColor.copy(alpha = 0.2f),
+                            contentColor = stageColor
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .offset(y = (-8).dp)
+                            .padding(vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "Analysis running - tap to end",
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 16.sp,
+                            color = Color.Yellow
+                        )
+                    }
                 }
-            )
+            }
 
-        // Stage indicator - only show during Preview and Analyse stages
-        if (uiState.game != null && uiState.currentStage != AnalysisStage.MANUAL) {
-            val isPreviewStage = uiState.currentStage == AnalysisStage.PREVIEW
-            val stageText = if (isPreviewStage) "Preview stage" else "Analyse stage"
-            val stageColor = if (isPreviewStage) Color(0xFFFFAA00) else AppColors.AccentBlue
-
-            if (isPreviewStage) {
-                // Preview stage: not clickable, just a label
+            // Main view when no game is loaded - show logo centered on screen
+            if (uiState.game == null) {
+                // Center the logo vertically, offset 10% up from center
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .offset(y = (-8).dp)
-                        .padding(vertical = 4.dp)
-                        .background(stageColor.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
-                        .padding(12.dp),
-                    contentAlignment = Alignment.Center
+                        .weight(1f),
+                    contentAlignment = androidx.compose.ui.Alignment.Center
                 ) {
-                    Text(
-                        text = stageText,
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 14.sp,
-                        color = stageColor
-                    )
+                    Column(
+                        modifier = Modifier.offset(y = (-60).dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        EvalLogo()
+
+                        Spacer(modifier = Modifier.height(32.dp))
+
+                        Text(
+                            text = "Welcome to the Eval app !",
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            textAlign = TextAlign.Center
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Use the top left icon  ",
+                                fontSize = 18.sp,
+                                color = AppColors.LightGray
+                            )
+                            Text(
+                                text = "≡",
+                                fontSize = 34.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            Text(
+                                text = "  to select a game",
+                                fontSize = 18.sp,
+                                color = AppColors.LightGray
+                            )
+                        }
+                    }
                 }
-            } else {
-                // Analyse stage: clickable, enters Manual stage at biggest change
-                Button(
-                    onClick = { viewModel.enterManualStageAtBiggestChange() },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = stageColor.copy(alpha = 0.2f),
-                        contentColor = stageColor
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .offset(y = (-8).dp)
-                        .padding(vertical = 4.dp)
-                ) {
-                    Text(
-                        text = "Analysis running - tap to end",
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 16.sp,
-                        color = Color.Yellow
-                    )
-                }
-            }
-        }
 
-        // Main view when no game is loaded - show logo centered on screen
-        if (uiState.game == null) {
-            // Center the logo vertically, offset 10% up from center
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                contentAlignment = androidx.compose.ui.Alignment.Center
-            ) {
-                Column(
-                    modifier = Modifier.offset(y = (-60).dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    EvalLogo()
-
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    Text(
-                        text = "Welcome to the Eval app !",
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        textAlign = TextAlign.Center
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
+                // Error message
+                if (uiState.errorMessage != null) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.error
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp)
                     ) {
                         Text(
-                            text = "Use the top left icon  ",
-                            fontSize = 18.sp,
-                            color = AppColors.LightGray
-                        )
-                        Text(
-                            text = "≡",
-                            fontSize = 34.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                        Text(
-                            text = "  to select a game",
-                            fontSize = 18.sp,
-                            color = AppColors.LightGray
+                            text = uiState.errorMessage ?: "Unknown error",
+                            color = Color.White,
+                            modifier = Modifier.padding(12.dp),
+                            textAlign = TextAlign.Center
                         )
                     }
                 }
+
             }
 
-            // Error message
-            if (uiState.errorMessage != null) {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.error
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp)
-                ) {
-                    Text(
-                        text = uiState.errorMessage ?: "Unknown error",
-                        color = Color.White,
-                        modifier = Modifier.padding(12.dp),
-                        textAlign = TextAlign.Center
-                    )
-                }
+            // Game content
+            if (uiState.game != null) {
+                GameContent(uiState = uiState, viewModel = viewModel)
             }
-
         }
-
-        // Game content
-        if (uiState.game != null) {
-            GameContent(uiState = uiState, viewModel = viewModel)
+        // Show share position screen (full screen)
+        if (uiState.showSharePositionDialog) {
+            val gameSiteUrl = viewModel.getGameSiteUrl()
+            Surface(modifier = Modifier.fillMaxSize()) {
+                SharePositionScreen(
+                    gameSiteUrl = gameSiteUrl,
+                    onCopyFen = { viewModel.copyFenToClipboard(context) },
+                    onShare = { viewModel.sharePositionAsText(context) },
+                    onExportPgn = { viewModel.exportAnnotatedPgn(context) },
+                    onCopyPgn = { viewModel.copyPgnToClipboard(context) },
+                    onExportGif = { viewModel.exportAsGif(context) },
+                    onGenerateAiReports = {
+                        viewModel.hideSharePositionDialog()
+                        viewModel.requestGameAiReport()
+                    },
+                    onViewOnSite = { viewModel.viewGameOnSite(context) },
+                    onDismiss = { viewModel.hideSharePositionDialog() }
+                )
+            }
         }
     }
 }
@@ -854,11 +846,7 @@ fun SharePositionScreen(
 
         // View on lichess.org / chess.com button
         if (gameSiteUrl != null) {
-            val siteName = when {
-                gameSiteUrl.contains("lichess.org") -> "lichess.org"
-                gameSiteUrl.contains("chess.com") -> "chess.com"
-                else -> "site"
-            }
+            val siteName = gameSiteHost(gameSiteUrl) ?: "site"
             Button(
                 onClick = {
                     onViewOnSite()
@@ -873,44 +861,31 @@ fun SharePositionScreen(
     }
 }
 
-/**
- * Full-screen view for selecting an AI prompt before launching analysis.
- */
+/** Select a named instruction for every AI report, including player reports. */
 @Composable
-fun AiPromptSelectionScreen(
-    prompts: List<AiPromptEntry>,
-    onSelectPrompt: (AiPromptEntry) -> Unit,
+fun AiInstructionSelectionScreen(
+    instructions: List<AiInstructionEntry>,
+    onSelectInstruction: (AiInstructionEntry) -> Unit,
     onDismiss: () -> Unit
 ) {
+    androidx.activity.compose.BackHandler(onBack = onDismiss)
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(16.dp),
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        EvalTitleBar(
-            title = "Select AI Prompt",
-            onBackClick = onDismiss,
-            onEvalClick = onDismiss
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        if (prompts.isEmpty()) {
-            Text(
-                text = "No prompts configured. Go to Settings > AI Prompts to add prompts.",
-                color = AppColors.SubtleText
-            )
-        } else {
-            prompts.sortedBy { it.name.lowercase() }.forEach { prompt ->
+        EvalTitleBar("Select AI Instruction", onBackClick = onDismiss, onEvalClick = onDismiss)
+        Column(
+            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (instructions.isEmpty()) {
+                Text("No instructions configured. Go to Settings > AI Instructions to add one.", color = AppColors.SubtleText)
+            }
+            instructions.sortedBy { it.name.lowercase() }.forEach { entry ->
                 Button(
-                    onClick = { onSelectPrompt(prompt) },
-                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { onSelectInstruction(entry) }, modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(containerColor = AppColors.ButtonGreen)
-                ) {
-                    Text(prompt.name)
-                }
+                ) { Text(entry.name) }
             }
         }
     }

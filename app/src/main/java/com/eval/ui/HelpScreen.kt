@@ -96,13 +96,12 @@ private val helpSections = listOf(
             "Reports are saved as HTML files you can view in Chrome or share."
     ),
     HelpEntry(
-        title = "AI Agents",
+        title = "AI Instructions",
         icon = "⚙",
-        content = "Configure AI analysis with the three-tier architecture:\n\n" +
-            "• Providers - AI services with model settings\n" +
-            "• Prompts - Reusable prompt templates with placeholders (@FEN@, @BOARD@, @PLAYER@, @SERVER@, @DATE@)\n" +
-            "• Agents - Combine provider + model + API key + prompts\n\n" +
-            "Create multiple agents for different analysis purposes."
+        content = "Create named instructions in Settings > AI Instructions. Each entry has a name and instructions; you can edit, copy or delete it.\n\n" +
+            "When requesting any AI report, select a named instruction. Prompts and system prompts are created and stored in the AI app.\n\n" +
+            "Eval appends <fen>, <color>, <server>, <player>, <pgn> and <board> to the selected instructions. The FEN and color describe the current position; PGN contains the available game. Board contains HTML/JavaScript for the report. Unavailable values are empty.\n\n" +
+            "Instruction placeholders: @FEN@, @COLOR@, @SERVER@, @PLAYER@, @PGN@, @BOARD@ and @DATE@. @COLOR@ is White or Black according to the side to move."
     ),
     HelpEntry(
         title = "Game Sources",

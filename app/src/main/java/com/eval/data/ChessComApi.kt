@@ -183,6 +183,8 @@ interface ChessComApi {
                 }
                 .connectTimeout(30, TimeUnit.SECONDS)
                 .readTimeout(30, TimeUnit.SECONDS)
+                // Bound the whole download, including retries and slowly delivered bodies.
+                .callTimeout(60, TimeUnit.SECONDS)
                 .build()
 
             return Retrofit.Builder()
