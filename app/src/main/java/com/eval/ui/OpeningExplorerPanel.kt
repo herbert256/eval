@@ -23,7 +23,8 @@ fun OpeningExplorerPanel(
     explorerData: OpeningExplorerResponse?,
     isLoading: Boolean,
     onMoveClick: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    errorMessage: String? = null
 ) {
     Card(
         colors = CardDefaults.cardColors(
@@ -151,7 +152,7 @@ fun OpeningExplorerPanel(
                 }
             } else if (!isLoading) {
                 Text(
-                    text = "No opening data available",
+                    text = errorMessage ?: "No opening data available",
                     fontSize = 12.sp,
                     color = AppColors.DimGray
                 )

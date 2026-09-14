@@ -1303,7 +1303,11 @@ class ChessRepository(
                     Result.Error("Empty response body for opening data")
                 }
             } else {
-                Result.Error("Failed to fetch opening data: ${response.code()}")
+                Result.Error(when (response.code()) {
+                    401, 403 -> "Lichess requires authentication for opening statistics."
+                    429 -> "Lichess opening statistics are temporarily rate limited. Try again later."
+                    else -> "Could not load opening statistics (HTTP ${response.code()})."
+                })
             }
         } catch (e: Exception) {
             Result.Error("${e.javaClass.simpleName}: ${e.message ?: "unknown"}")

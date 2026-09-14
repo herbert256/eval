@@ -374,6 +374,7 @@ data class GameUiState(
     // Opening Explorer
     val openingExplorerData: com.eval.data.OpeningExplorerResponse? = null,
     val openingExplorerLoading: Boolean = false,
+    val openingExplorerError: String? = null,
     // Player info screen
     val showPlayerInfoScreen: Boolean = false,
     val playerInfo: PlayerInfo? = null,

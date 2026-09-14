@@ -62,7 +62,11 @@ class EmulatorBugHuntTest {
     private fun await(label: String, timeout: Long = 45000, condition: () -> Boolean) {
         val deadline = System.currentTimeMillis() + timeout
         while (!condition() && System.currentTimeMillis() < deadline) Thread.sleep(100)
-        assertTrue(label + ": " + vm.uiState.value.errorMessage, condition())
+        val state = vm.uiState.value
+        assertTrue("$label: ${state.errorMessage}; stage=${state.currentStage}, ready=${state.stockfishReady}, " +
+            "move=${state.currentMoveIndex}, analysisFen=${state.analysisResult?.fen}, " +
+            "openingLoading=${state.openingExplorerLoading}, opening=${state.openingExplorerData?.opening}, " +
+            "openingError=${state.openingExplorerError}", condition())
     }
     private fun screenshot(name: String) {
         val bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
@@ -129,6 +133,58 @@ class EmulatorBugHuntTest {
         await("Manual evaluation") { vm.uiState.value.analysisResult != null }
         assertEquals("r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3", vm.uiState.value.currentBoard.getFen())
         screenshot("analysed")
+    }
+
+    @Test fun opening_information_follows_navigation_and_variations_during_live_analysis() {
+        onUi {
+            val visibility = vm.uiState.value.interfaceVisibility
+            vm.updateInterfaceVisibilitySettings(visibility.copy(
+                manualStage = visibility.manualStage.copy(showOpeningName = true, showOpeningExplorer = true)))
+            vm.loadGamesFromPgnContent(sample)
+        }
+        await("Manual stage") { vm.uiState.value.currentStage == AnalysisStage.MANUAL }
+        onUi { vm.goToMove(0) }
+        await("Opening name for e4") { vm.uiState.value.currentOpeningName == "King's Pawn Opening" }
+        await("Opening lookup during live analysis") {
+            val state = vm.uiState.value
+            (state.openingExplorerData != null ||
+                state.openingExplorerError == "Lichess requires authentication for opening statistics.") &&
+                state.analysisResult?.fen == state.currentBoard.getFen()
+        }
+        assertFalse(vm.uiState.value.openingExplorerLoading)
+        vm.uiState.value.openingExplorerData?.let { assertTrue(it.white > 0) }
+        screenshot("opening-explorer")
+        onUi { vm.exploreLine("c7c5") }
+        await("Sicilian variation") { vm.uiState.value.currentOpeningName == "Sicilian Defense" }
+        onUi { vm.backToOriginalGame(); vm.goToMove(1) }
+        await("Return to Open Game") { vm.uiState.value.currentOpeningName == "Open Game" }
+        onUi {
+            val visibility = vm.uiState.value.interfaceVisibility
+            vm.updateInterfaceVisibilitySettings(visibility.copy(
+                manualStage = visibility.manualStage.copy(showOpeningName = false, showOpeningExplorer = false)))
+        }
+        await("Hidden opening data cleared") {
+            vm.uiState.value.openingExplorerData == null && !vm.uiState.value.openingExplorerLoading
+        }
+        assertNull(vm.uiState.value.openingExplorerError)
+        onUi { assertTrue(vm.startFromFen(fen)) }
+        await("Custom FEN has no previous opening") { vm.uiState.value.currentOpeningName == null }
+        assertNull(vm.uiState.value.openingName)
+    }
+
+    @Test fun navigation_during_the_manual_stage_transition_keeps_the_new_search() {
+        onUi { vm.loadGamesFromPgnContent(sample) }
+        await("Manual stage begins") { vm.uiState.value.currentStage == AnalysisStage.MANUAL }
+        // Deliberately navigate before the transition has finished restarting Stockfish.
+        onUi { vm.goToMove(0); vm.goToMove(2) }
+        val selectedFen = vm.uiState.value.currentBoard.getFen()
+        await("Transition navigation has an evaluation of the selected position") {
+            val state = vm.uiState.value
+            state.currentMoveIndex == 2 && state.analysisResult?.fen == selectedFen &&
+                state.analysisResultFen == selectedFen
+        }
+        Thread.sleep(500)
+        assertEquals(selectedFen, vm.uiState.value.analysisResult?.fen)
     }
 
     @Test fun rapid_navigation_settles_on_the_selected_board_with_live_analysis() {

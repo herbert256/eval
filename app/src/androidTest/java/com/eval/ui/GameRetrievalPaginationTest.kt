@@ -43,12 +43,12 @@ class GameRetrievalPaginationTest {
         } as LichessApi
         private val history = mutableListOf<ChessBoard>()
         private val orchestrator = AnalysisOrchestrator(
-            StockfishEngine(context), { state }, { state = it(state) }, scope, { history }, {}
+            StockfishEngine(context), { state }, { state = it(state) }, scope, { history }
         )
         val loader = GameLoader(
             ChessRepository(lichessApi = api), { state }, { state = it(state) }, scope,
             { history }, { mutableListOf() }, SettingsPreferences(prefs),
-            GameStorageManager(prefs, Gson()), orchestrator, {}
+            GameStorageManager(prefs, Gson()), orchestrator
         )
 
         init { prefs.edit().clear().commit() }

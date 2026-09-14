@@ -25,7 +25,7 @@ class BoardExplorationRegressionTest {
         val history = BoardHistoryBuilder.build(moves).boards.toMutableList()
         var state = GameUiState(currentStage = AnalysisStage.MANUAL, moves = moves,
             currentBoard = history.first().copy(), currentMoveIndex = -1)
-        val orchestrator = AnalysisOrchestrator(StockfishEngine(context), { state }, { state = it(state) }, scope, { history }, {})
+        val orchestrator = AnalysisOrchestrator(StockfishEngine(context), { state }, { state = it(state) }, scope, { history })
         val navigation = BoardNavigationManager({ state }, { state = it(state) }, { history }, { mutableListOf() }, orchestrator, sounds)
         try {
             repeat(3) { navigation.nextMove() }
@@ -51,7 +51,7 @@ class BoardExplorationRegressionTest {
         val history = mutableListOf(ChessBoard())
         val exploration = mutableListOf<ChessBoard>()
         val engine = StockfishEngine(context)
-        val orchestrator = AnalysisOrchestrator(engine, { state }, { state = it(state) }, scope, { history }, {})
+        val orchestrator = AnalysisOrchestrator(engine, { state }, { state = it(state) }, scope, { history })
         val navigation = BoardNavigationManager({ state }, { state = it(state) }, { history }, { exploration }, orchestrator, sounds)
         try {
             navigation.makeManualMove(Square(4, 1), Square(4, 3)) // e4

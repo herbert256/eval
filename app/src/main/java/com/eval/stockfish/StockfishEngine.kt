@@ -19,7 +19,8 @@ data class AnalysisResult(
     val depth: Int,
     val nodes: Long,
     val nps: Long,
-    val lines: List<PvLine>
+    val lines: List<PvLine>,
+    val fen: String? = null
 ) {
     // Convenience properties for backward compatibility
     val bestLine: PvLine? get() = lines.firstOrNull()
@@ -280,7 +281,7 @@ class StockfishEngine(private val context: Context) {
      * Returns the number of lines read.
      * Must be called from a coroutine context (checks isActive).
      */
-    private suspend fun CoroutineScope.readAnalysisOutput(caller: String): Int {
+    private suspend fun CoroutineScope.readAnalysisOutput(caller: String, fen: String): Int {
         var linesRead = 0
         var idlePolls = 0
         val maxIdlePolls = 10
@@ -304,7 +305,7 @@ class StockfishEngine(private val context: Context) {
             linesRead++
             when {
                 line.startsWith("info depth") && line.contains("score") -> {
-                    parseInfoLine(line)
+                    parseInfoLine(line, fen)
                 }
                 line.startsWith("bestmove") -> {
                     break
@@ -390,7 +391,7 @@ class StockfishEngine(private val context: Context) {
                     sendCommand(goCommand)
 
                     // Read analysis output
-                    val linesRead = readAnalysisOutput(caller)
+                    val linesRead = readAnalysisOutput(caller, fen)
                     onComplete?.invoke(linesRead)
                 } catch (e: Exception) {
                     if (e !is CancellationException) {
@@ -402,7 +403,7 @@ class StockfishEngine(private val context: Context) {
         }
     }
 
-    private fun parseInfoLine(line: String) {
+    private fun parseInfoLine(line: String, fen: String) {
         try {
             // Extract depth
             val depthMatch = Regex("depth (\\d+)").find(line)
@@ -465,7 +466,8 @@ class StockfishEngine(private val context: Context) {
                     depth = depth,
                     nodes = currentNodes,
                     nps = currentNps,
-                    lines = sortedLines
+                    lines = sortedLines,
+                    fen = fen
                 )
             }
         } catch (e: Exception) {

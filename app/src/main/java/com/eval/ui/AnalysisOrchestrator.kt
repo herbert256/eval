@@ -25,7 +25,6 @@ internal class AnalysisOrchestrator(
     private val updateUiState: (GameUiState.() -> GameUiState) -> Unit,
     private val viewModelScope: CoroutineScope,
     private val getBoardHistory: () -> MutableList<ChessBoard>,
-    private val fetchOpeningExplorer: () -> Unit,
     private val saveManualGame: (AnalysedGame) -> Unit = {},
     private val storeManualGameToList: (AnalysedGame) -> Unit = {}
 ) {
@@ -284,7 +283,7 @@ internal class AnalysisOrchestrator(
             }
 
             val result = stockfish.analysisResult.value
-            if (result != null) {
+            if (result != null && result.fen == board.getFen()) {
                 val bestLine = result.bestLine
                 if (bestLine != null) {
                     analyzedCount++
@@ -402,7 +401,9 @@ internal class AnalysisOrchestrator(
         val moveQualities = calculateMoveQualities(filledAnalyseScores)
         val boardHistory = getBoardHistory()
 
-        viewModelScope.launch {
+        val previousJob = manualAnalysisJob
+        manualAnalysisJob = viewModelScope.launch {
+            previousJob?.cancelAndJoin()
             autoAnalysisJob?.cancel()
             stockfish.stop()
 
@@ -463,7 +464,6 @@ internal class AnalysisOrchestrator(
                 configureForManualStage()
                 delay(100)
                 ensureStockfishAnalysis(fenToAnalyze, thisRequestId)
-                fetchOpeningExplorer()
             }
         }
     }
@@ -501,7 +501,8 @@ internal class AnalysisOrchestrator(
         var attempt = 0
 
         while (attempt < maxRetries) {
-            if (!getUiState().stockfishReady) {
+            if (analysisRequestId.get() != requestId || getUiState().currentStage != AnalysisStage.MANUAL) return
+            if (!stockfish.isReady.value) {
                 val ready = stockfish.restart()
                 updateUiState { copy(stockfishReady = ready) }
                 if (!ready) {
@@ -511,6 +512,7 @@ internal class AnalysisOrchestrator(
                 configureForManualStage()
             }
 
+            if (analysisRequestId.get() != requestId || getUiState().currentStage != AnalysisStage.MANUAL) return
             val depth = getUiState().stockfishSettings.manualStage.depth
             stockfish.analyze(fen, depth)
 
@@ -531,7 +533,7 @@ internal class AnalysisOrchestrator(
                 }
 
                 val result = stockfish.analysisResult.value
-                if (result != null) {
+                if (result != null && result.fen == fen) {
                     if (analysisRequestId.get() == requestId) {
                         updateUiState {
                             copy(
@@ -642,15 +644,10 @@ internal class AnalysisOrchestrator(
 
         // Navigation is immediate even while the previous engine search unwinds.
         // Otherwise consecutive taps all read the same old move index.
-        val state = getUiState()
-        val openingName = if (validIndex >= 0 && state.moves.isNotEmpty()) {
-            com.eval.data.OpeningBook.getOpeningName(state.moves, validIndex)
-        } else null
         updateUiState {
             copy(
                 currentMoveIndex = validIndex,
                 currentBoard = board,
-                currentOpeningName = openingName,
                 analysisResult = null,
                 analysisResultFen = null
             )
@@ -668,13 +665,14 @@ internal class AnalysisOrchestrator(
 
                 if (getUiState().currentStage == AnalysisStage.MANUAL) {
                     ensureStockfishAnalysis(fenToAnalyze, thisRequestId)
-                    fetchOpeningExplorer()
                 }
             }
         }
     }
 
     fun stop() {
+        analysisRequestId.incrementAndGet()
+        currentAnalysisFen = null
         autoAnalysisJob?.cancel()
         manualAnalysisJob?.cancel()
         stockfish.stop()

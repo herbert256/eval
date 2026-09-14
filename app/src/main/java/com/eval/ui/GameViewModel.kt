@@ -11,7 +11,6 @@ import com.eval.data.BroadcastRoundInfo
 import com.eval.data.ChessRepository
 import com.eval.data.ChessServer
 import com.eval.data.LichessGame
-import com.eval.data.Result
 import com.eval.data.StreamerInfo
 import com.eval.data.TournamentInfo
 import com.eval.data.TvChannelInfo
@@ -20,7 +19,6 @@ import com.eval.stockfish.StockfishEngine
 import org.json.JSONObject
 import com.eval.audio.MoveSoundPlayer
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -69,9 +67,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val exportShareManager: ExportShareManager
     private val settingsManager: SettingsManager
 
-    // Opening explorer job
-    private var openingExplorerJob: Job? = null
-
     val savedLichessUsername: String
         get() = settingsPrefs.savedLichessUsername
 
@@ -114,7 +109,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             updateUiState = { transform -> _uiState.update { it.transform() } },
             viewModelScope = viewModelScope,
             getBoardHistory = { boardHistory },
-            fetchOpeningExplorer = { fetchOpeningExplorer() },
             saveManualGame = { game -> gameStorage.saveManualStageGame(game) },
             storeManualGameToList = { game ->
                 gameStorage.storeManualGameToList(game)
@@ -132,7 +126,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             settingsPrefs = settingsPrefs,
             gameStorage = gameStorage,
             analysisOrchestrator = analysisOrchestrator,
-            fetchOpeningExplorer = { fetchOpeningExplorer() },
             analyzeRestoredPosition = { fen -> analyzeRestoredPosition(fen) },
             getAppVersionCode = { getAppVersionCode() }
         )
@@ -177,6 +170,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             stockfish = stockfish,
             analysisOrchestrator = analysisOrchestrator
         )
+
+        OpeningExplorerLoader(
+            state = uiState,
+            updateState = { transform -> _uiState.update { it.transform() } },
+            scope = viewModelScope,
+            getBoardHistory = { synchronized(boardHistory) { boardHistory.toList() } },
+            getExploringLineHistory = { synchronized(exploringLineHistory) { exploringLineHistory.toList() } },
+            load = repository::getOpeningExplorer
+        ).observe()
 
         // Check if Stockfish is installed first
         val stockfishInstalled = stockfish.isStockfishInstalled()
@@ -239,7 +241,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     if (_uiState.value.currentStage != AnalysisStage.MANUAL) {
                         if (result != null) {
                             val expectedFen = analysisOrchestrator.currentAnalysisFen
-                            if (expectedFen != null && expectedFen == _uiState.value.currentBoard.getFen()) {
+                            if (expectedFen != null && result.fen == expectedFen && expectedFen == _uiState.value.currentBoard.getFen()) {
                                 _uiState.update { it.copy(
                                     analysisResult = result,
                                     analysisResultFen = expectedFen
@@ -460,34 +462,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     // ===== GAME STORAGE =====
 
-    // ===== OPENING EXPLORER =====
-    fun fetchOpeningExplorer() {
-        val manualSettings = _uiState.value.interfaceVisibility.manualStage
-        if (!manualSettings.showOpeningExplorer && !manualSettings.showOpeningName) return
-
-        openingExplorerJob?.cancel()
-        openingExplorerJob = viewModelScope.launch {
-            delay(500)
-            _uiState.update { it.copy(openingExplorerLoading = true) }
-
-            val fen = _uiState.value.currentBoard.getFen()
-            when (val result = repository.getOpeningExplorer(fen)) {
-                is Result.Success -> {
-                    _uiState.update { it.copy(
-                        openingExplorerData = result.data,
-                        openingExplorerLoading = false
-                    ) }
-                }
-                is Result.Error -> {
-                    _uiState.update { it.copy(
-                        openingExplorerData = null,
-                        openingExplorerLoading = false
-                    ) }
-                }
-            }
-        }
-    }
-
     // ===== SHARE/EXPORT =====
     fun showSharePositionDialog() = exportShareManager.showSharePositionDialog()
 
@@ -691,7 +665,6 @@ ${opening.moves} *
         gameLoader.invalidatePendingRetrieval()
         analysisOrchestrator.stop()
         liveGameManager.stopLiveFollow()
-        openingExplorerJob?.cancel()
         mainTimeline.resetToInitial(board)
         exploringTimeline.clear()
 
@@ -745,6 +718,7 @@ ${opening.moves} *
             moveQualities = emptyMap(),
             openingExplorerData = null,
             openingExplorerLoading = false,
+            openingExplorerError = null,
             currentStage = AnalysisStage.MANUAL,
             autoAnalysisIndex = -1,
             isExploringLine = false,
@@ -817,7 +791,11 @@ ${opening.moves} *
             analyseScores = emptyMap(),
             autoAnalysisIndex = -1,
             openingName = null,
-            currentOpeningName = null
+            currentOpeningName = null,
+            openingExplorerData = null,
+            openingExplorerLoading = false,
+            openingExplorerError = null,
+            moveQualities = emptyMap()
         ) }
     }
 
@@ -934,7 +912,6 @@ ${opening.moves} *
         stockfishReadyCollector?.cancel()
         analysisOrchestrator.autoAnalysisJob?.cancel()
         analysisOrchestrator.manualAnalysisJob?.cancel()
-        openingExplorerJob?.cancel()
         liveGameManager.cancel()
         stockfish.shutdown()
         moveSoundPlayer.release()

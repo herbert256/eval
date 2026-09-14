@@ -47,10 +47,10 @@ class GameLoadingRaceTest {
         private val history = mutableListOf<ChessBoard>()
         private val engineScope = CoroutineScope(Job().apply { cancel() })
         private val orchestrator = AnalysisOrchestrator(
-            StockfishEngine(context), { state }, { state = it(state) }, engineScope, { history }, {}
+            StockfishEngine(context), { state }, { state = it(state) }, engineScope, { history }
         )
         val loader = GameLoader(repository, { state }, { state = it(state) }, scope,
-            { history }, { mutableListOf() }, settings, GameStorageManager(prefs, Gson()), orchestrator, {})
+            { history }, { mutableListOf() }, settings, GameStorageManager(prefs, Gson()), orchestrator)
         init { prefs.edit().clear().commit() }
         fun close() { prefs.edit().clear().commit() }
     }

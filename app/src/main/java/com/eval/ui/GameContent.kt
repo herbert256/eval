@@ -924,6 +924,7 @@ fun GameContent(
             OpeningExplorerPanel(
                 explorerData = uiState.openingExplorerData,
                 isLoading = uiState.openingExplorerLoading,
+                errorMessage = uiState.openingExplorerError,
                 onMoveClick = { uciMove ->
                     // Make the move on the current board
                     viewModel.exploreLine(uciMove, 0)

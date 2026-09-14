@@ -26,7 +26,6 @@ internal class GameLoader(
     private val settingsPrefs: SettingsPreferences,
     private val gameStorage: GameStorageManager,
     private val analysisOrchestrator: AnalysisOrchestrator,
-    private val fetchOpeningExplorer: () -> Unit,
     private val analyzeRestoredPosition: suspend (String) -> Unit = { },
     private val getAppVersionCode: () -> Long = { 0L }
 ) {
@@ -265,6 +264,13 @@ internal class GameLoader(
                 moveDetails = emptyList(),
                 currentMoveIndex = -1,
                 analysisResult = null,
+                analysisResultFen = null,
+                openingName = null,
+                currentOpeningName = null,
+                openingExplorerData = null,
+                openingExplorerLoading = false,
+                openingExplorerError = null,
+                moveQualities = emptyMap(),
                 flippedBoard = false,
                 userPlayedBlack = false,
                 isExploringLine = false,
@@ -347,6 +353,10 @@ internal class GameLoader(
                 gameSelectionServer = server ?: gameSelectionServer,
                 errorMessage = importError(parsedMoves.map { it.san }, validMoves),
                 openingName = openingName,
+                currentOpeningName = null,
+                openingExplorerData = null,
+                openingExplorerLoading = false,
+                openingExplorerError = null,
                 moves = validMoves,
                 moveDetails = moveDetailsList,
                 currentBoard = initialBoard,
@@ -454,6 +464,15 @@ internal class GameLoader(
                 flippedBoard = userPlayedBlack,
                 userPlayedBlack = userPlayedBlack,
                 openingName = analysedGame.openingName,
+                currentOpeningName = null,
+                openingExplorerData = null,
+                openingExplorerLoading = false,
+                openingExplorerError = null,
+                analysisResult = null,
+                analysisResultFen = null,
+                moveQualities = analysisOrchestrator.calculateMoveQualities(
+                    analysedGame.previewScores + analysedGame.analyseScores),
+                showRetrieveScreen = false,
                 previewScores = analysedGame.previewScores,
                 analyseScores = analysedGame.analyseScores,
                 currentStage = AnalysisStage.MANUAL,
@@ -468,7 +487,6 @@ internal class GameLoader(
         val fenToAnalyze = board.getFen()
 
         analysisOrchestrator.manualAnalysisJob = viewModelScope.launch {
-            fetchOpeningExplorer()
             analyzeRestoredPosition(fenToAnalyze)
         }
     }
