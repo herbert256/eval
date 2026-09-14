@@ -141,7 +141,17 @@ fun GameContent(
             val liveResult = uiState.analysisResult
             val isManualMode = uiState.currentStage == AnalysisStage.MANUAL
 
-            if (currentMove != null && moveIndex >= 0) {
+            if (uiState.isExploringLine) {
+                val moveNumber = uiState.currentBoard.getFen().substringAfterLast(' ')
+                val sideToMove = if (isWhiteTurn) "White" else "Black"
+                Text(
+                    text = "Variation · Move $moveNumber · $sideToMove to move",
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+            } else if (currentMove != null && moveIndex >= 0) {
                 val completeMoveNumber = firstMoveNumber + (moveIndex + firstPly) / 2
                 val totalCompleteMoves = firstMoveNumber + (uiState.moves.size - 1 + firstPly) / 2
 

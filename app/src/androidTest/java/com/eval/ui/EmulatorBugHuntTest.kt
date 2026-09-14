@@ -214,6 +214,41 @@ class EmulatorBugHuntTest {
         screenshot("rapid-navigation")
     }
 
+    @Test fun nested_variations_keep_their_history_and_receive_live_analysis() {
+        onUi { vm.loadGamesFromPgnContent(sample) }
+        await("Manual stage before nested variation") {
+            vm.uiState.value.currentStage == AnalysisStage.MANUAL && vm.uiState.value.stockfishReady
+        }
+        val mainMoves = vm.uiState.value.moves
+        onUi {
+            vm.goToStart()
+            vm.exploreLine("e2e4 e7e5 g1f3", 1)
+            vm.exploreLine("b1c3 b8c6", 0)
+            assertEquals(listOf("e2e4", "e7e5", "b1c3", "b8c6"), vm.uiState.value.exploringLineMoves)
+            assertEquals(2, vm.uiState.value.exploringLineMoveIndex)
+            assertNull(vm.uiState.value.analysisResult)
+        }
+        val selectedFen = vm.uiState.value.currentBoard.getFen()
+        await("Nested variation evaluation") {
+            vm.uiState.value.analysisResult?.fen == selectedFen && vm.uiState.value.analysisResultFen == selectedFen
+        }
+        screenshot("nested-variation")
+        onUi {
+            vm.goToStart()
+            assertEquals(com.eval.chess.ChessBoard().getFen(), vm.uiState.value.currentBoard.getFen())
+            vm.goToEnd()
+            assertEquals(3, vm.uiState.value.exploringLineMoveIndex)
+            vm.backToOriginalGame()
+            assertFalse(vm.uiState.value.isExploringLine)
+            assertEquals(mainMoves, vm.uiState.value.moves)
+            assertEquals(-1, vm.uiState.value.currentMoveIndex)
+            vm.goToEnd()
+        }
+        val finalFen = vm.uiState.value.currentBoard.getFen()
+        await("Main game evaluation after leaving the variation") { vm.uiState.value.analysisResult?.fen == finalFen }
+        assertEquals(3, vm.uiState.value.currentMoveIndex)
+    }
+
     @Test fun fen_replaces_old_history_returns_from_exploration_and_restores_after_restart() {
         onUi {
             vm.loadGamesFromPgnContent(sample)

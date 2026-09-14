@@ -17,6 +17,61 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class BoardExplorationRegressionTest {
+    private class Harness {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val scope = CoroutineScope(Job().apply { cancel() } + Dispatchers.Main)
+        val sounds = MoveSoundPlayer(context)
+        val history = BoardHistoryBuilder.build(listOf("d4", "d5")).boards.toMutableList()
+        val exploration = mutableListOf<ChessBoard>()
+        var state = GameUiState(currentStage = AnalysisStage.MANUAL, moves = listOf("d4", "d5"),
+            currentBoard = history.first(), currentMoveIndex = -1)
+        val orchestrator = AnalysisOrchestrator(StockfishEngine(context), { state }, { state = it(state) }, scope, { history })
+        val navigation = BoardNavigationManager({ state }, { state = it(state) }, { history }, { exploration }, orchestrator, sounds)
+        fun close() { orchestrator.stop(); sounds.release() }
+    }
+
+    @Test fun selecting_a_continuation_inside_a_variation_keeps_the_played_prefix() {
+        val h = Harness()
+        try {
+            h.navigation.exploreLine("e2e4 e7e5 g1f3", 1)
+            h.navigation.exploreLine("b1c3 b8c6", 0)
+            assertEquals(listOf("e2e4", "e7e5", "b1c3", "b8c6"), h.state.exploringLineMoves)
+            assertEquals(2, h.state.exploringLineMoveIndex)
+            val selectedFen = h.state.currentBoard.getFen()
+            h.navigation.goToStart()
+            assertEquals("Variation start changed", h.history.first().getFen(), h.state.currentBoard.getFen())
+            h.navigation.goToMove(2)
+            assertEquals(selectedFen, h.state.currentBoard.getFen())
+            h.navigation.backToOriginalGame()
+            assertEquals(h.history.first().getFen(), h.state.currentBoard.getFen())
+            assertEquals(listOf("d4", "d5"), h.state.moves)
+        } finally { h.close() }
+    }
+
+    @Test fun an_invalid_continuation_leaves_the_existing_variation_untouched() {
+        val h = Harness()
+        try {
+            h.navigation.exploreLine("e2e4 e7e5", 0)
+            val previous = h.state
+            val history = h.exploration.map { it.getFen() }
+            h.navigation.exploreLine("e2e4") // stale line: that pawn is already on e4
+            assertEquals(previous, h.state)
+            assertEquals(history, h.exploration.map { it.getFen() })
+        } finally { h.close() }
+    }
+
+    @Test fun moving_into_a_variation_clears_the_old_evaluation_before_engine_work_runs() {
+        val h = Harness()
+        try {
+            h.state = h.state.copy(
+                analysisResult = com.eval.stockfish.AnalysisResult(20, 1, 1, emptyList(), h.state.currentBoard.getFen()),
+                analysisResultFen = h.state.currentBoard.getFen())
+            h.navigation.makeManualMove(Square(4, 1), Square(4, 3))
+            assertNull(h.state.analysisResult)
+            assertNull(h.state.analysisResultFen)
+        } finally { h.close() }
+    }
+
     @Test fun rapid_main_game_navigation_updates_before_engine_work_runs() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val scope = CoroutineScope(Job().apply { cancel() } + Dispatchers.Main)

@@ -127,7 +127,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             gameStorage = gameStorage,
             analysisOrchestrator = analysisOrchestrator,
             analyzeRestoredPosition = { fen -> analyzeRestoredPosition(fen) },
-            getAppVersionCode = { getAppVersionCode() }
+            getAppVersionCode = { getAppVersionCode() },
+            stopLiveFollow = { stopLiveFollow() }
         )
 
         boardNavigationManager = BoardNavigationManager(
@@ -153,6 +154,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             updateUiState = { transform -> _uiState.update { it.transform() } },
             viewModelScope = viewModelScope,
             moveSoundPlayer = moveSoundPlayer,
+            analyzeDisplayedPosition = { analysisOrchestrator.analyzePosition(_uiState.value.currentBoard) },
             appendBoardHistory = { board -> boardHistory.add(board.copy()) }
         )
 
@@ -761,6 +763,7 @@ ${opening.moves} *
      */
     fun resetToHomepage() {
         gameLoader.invalidatePendingRetrieval()
+        liveGameManager.stopLiveFollow()
         // Stop any ongoing analysis
         analysisOrchestrator.stop()
 

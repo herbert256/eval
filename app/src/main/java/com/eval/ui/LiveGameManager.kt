@@ -2,6 +2,8 @@ package com.eval.ui
 
 import com.eval.audio.MoveSoundPlayer
 import com.eval.chess.PieceType
+import com.eval.chess.PieceColor
+import com.eval.chess.PgnParser
 import com.eval.chess.Square
 import com.eval.data.ChessRepository
 import com.eval.data.LiveGameEvent
@@ -19,17 +21,27 @@ internal class LiveGameManager(
     private val updateUiState: (GameUiState.() -> GameUiState) -> Unit,
     private val viewModelScope: CoroutineScope,
     private val moveSoundPlayer: MoveSoundPlayer,
+    private val analyzeDisplayedPosition: () -> Unit,
     private val appendBoardHistory: (com.eval.chess.ChessBoard) -> Unit
 ) {
     private var liveGameJob: Job? = null
     private var liveBoard: com.eval.chess.ChessBoard? = null
+    private var liveSession = 0L
+    private var initialHistory = emptyList<com.eval.chess.ChessBoard>()
+    private var streamedMoveCount = 0
 
     /**
      * Start following a live game.
      */
     fun startLiveFollow(gameId: String) {
         stopLiveFollow()
-        liveBoard = buildLatestBoard(getUiState())
+        if (getUiState().game?.id != gameId) return
+        val session = liveSession
+        val state = getUiState()
+        val initialBoard = PgnParser.parseInitialBoard(state.game?.pgn.orEmpty()) ?: com.eval.chess.ChessBoard()
+        initialHistory = BoardHistoryBuilder.build(state.moves, initialBoard).boards
+        liveBoard = initialBoard
+        streamedMoveCount = 0
 
         updateUiState {
             copy(
@@ -41,6 +53,11 @@ internal class LiveGameManager(
 
         liveGameJob = viewModelScope.launch {
             repository.streamLiveGame(gameId).collect { event ->
+                if (session != liveSession) return@collect
+                if (getUiState().game?.id != gameId) {
+                    stopLiveFollow()
+                    return@collect
+                }
                 when (event) {
                     is LiveGameEvent.Connected -> {
                         updateUiState { copy(liveStreamConnected = true) }
@@ -92,7 +109,7 @@ internal class LiveGameManager(
         val state = getUiState()
         val currentMoves = state.moves.toMutableList()
         val currentMoveDetails = state.moveDetails.toMutableList()
-        val board = liveBoard?.copy() ?: buildLatestBoard(state)
+        val board = liveBoard?.copy() ?: return
         val from = uciMove.substring(0, 2)
         val to = uciMove.substring(2, 4)
         val fromSquare = Square.fromAlgebraic(from)
@@ -118,7 +135,17 @@ internal class LiveGameManager(
 
             val moveApplied = board.makeMoveFromSquares(fromSquare, toSquare, promotion)
             if (!moveApplied) return
+            // Each connection replays the game from its starting position.
+            // Consume the already loaded prefix, including repeated positions.
+            val expectedHistoricalBoard = initialHistory.getOrNull(streamedMoveCount + 1)
+            if (expectedHistoricalBoard != null && board.getFen() != expectedHistoricalBoard.getFen()) {
+                stopLiveFollow()
+                updateUiState { copy(errorMessage = "Live stream history differs from the loaded game. Reload the game to follow it.") }
+                return
+            }
             liveBoard = board.copy()
+            streamedMoveCount++
+            if (expectedHistoricalBoard != null) return
             appendBoardHistory(board)
             currentMoves.add(uciMove)
 
@@ -131,9 +158,7 @@ internal class LiveGameManager(
                 PieceType.PAWN -> "P"
             }
 
-            // Move index is 0-based: even indices (0, 2, 4) are white moves
-            val moveIndex = currentMoves.size - 1
-            val clockTime = if (moveIndex % 2 == 0) {
+            val clockTime = if (piece.color == PieceColor.WHITE) {
                 moveData.wc?.let { formatClockSeconds(it) }
             } else {
                 moveData.bc?.let { formatClockSeconds(it) }
@@ -149,7 +174,7 @@ internal class LiveGameManager(
             )
             currentMoveDetails.add(moveDetail)
 
-            val autoFollow = state.autoFollowLive
+            val autoFollow = state.autoFollowLive && !state.isExploringLine
             val newMoveIndex = if (autoFollow) currentMoves.size - 1 else state.currentMoveIndex
 
             updateUiState {
@@ -157,9 +182,13 @@ internal class LiveGameManager(
                     moves = currentMoves,
                     moveDetails = currentMoveDetails,
                     currentMoveIndex = newMoveIndex,
-                    currentBoard = if (autoFollow) board else currentBoard
+                    currentBoard = if (autoFollow) board else currentBoard,
+                    analysisResult = if (autoFollow) null else analysisResult,
+                    analysisResultFen = if (autoFollow) null else analysisResultFen
                 )
             }
+
+            if (autoFollow) analyzeDisplayedPosition()
 
             if (state.generalSettings.moveSoundsEnabled && autoFollow) {
                 moveSoundPlayer.playMove(isCapture = isCapture, isCheck = false, isCastle = false)
@@ -182,9 +211,12 @@ internal class LiveGameManager(
      * Stop following a live game.
      */
     fun stopLiveFollow() {
+        liveSession++
         liveGameJob?.cancel()
         liveGameJob = null
         liveBoard = null
+        initialHistory = emptyList()
+        streamedMoveCount = 0
         updateUiState {
             copy(
                 isLiveGame = false,
@@ -204,17 +236,11 @@ internal class LiveGameManager(
     }
 
     fun cancel() {
+        liveSession++
         liveGameJob?.cancel()
         liveGameJob = null
         liveBoard = null
-    }
-
-    private fun buildLatestBoard(state: GameUiState): com.eval.chess.ChessBoard {
-        val board = com.eval.chess.ChessBoard()
-        for (move in state.moves) {
-            val success = board.makeMove(move) || board.makeUciMove(move)
-            if (!success) break
-        }
-        return board
+        initialHistory = emptyList()
+        streamedMoveCount = 0
     }
 }

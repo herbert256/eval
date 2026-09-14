@@ -174,32 +174,27 @@ internal class BoardNavigationManager(
     }
 
     fun exploreLine(pv: String, moveIndex: Int = 0) {
-        if (pv.isBlank()) return
-
         val state = getUiState()
+        if (pv.isBlank() || state.currentStage != AnalysisStage.MANUAL) return
         val exploringLineHistory = getExploringLineHistory()
-        val savedMoveIndex = state.currentMoveIndex
         val startBoard = state.currentBoard.copy()
+        val uciMoves = pv.trim().split(Regex("\\s+")).takeWhile { it.matches(Regex("[a-h][1-8][a-h][1-8][qrbn]?")) }
+        val continuation = BoardHistoryBuilder.build(uciMoves, startBoard)
+        // A stale PV must not erase the line the user is currently inspecting.
+        if (continuation.validMoves.isEmpty()) return
 
-        val uciMoves = pv.split(" ").filter { it.isNotBlank() }
+        val prefixLength = if (state.isExploringLine) state.exploringLineMoveIndex + 1 else 0
+        val prefixMoves = if (state.isExploringLine) state.exploringLineMoves.take(prefixLength) else emptyList()
+        val prefixBoards = if (state.isExploringLine) exploringLineHistory.take(prefixLength + 1) else listOf(startBoard)
+        val savedMoveIndex = if (state.isExploringLine) state.savedGameMoveIndex else state.currentMoveIndex
+        val targetIndex = prefixLength + moveIndex.coerceIn(-1, continuation.validMoves.lastIndex)
         exploringLineHistory.clear()
-        exploringLineHistory.add(startBoard)
-
-        val tempBoard = startBoard.copy()
-        for (uciMove in uciMoves) {
-            if (tempBoard.makeUciMove(uciMove)) {
-                exploringLineHistory.add(tempBoard.copy())
-            } else {
-                break
-            }
-        }
-
-        val targetIndex = moveIndex.coerceIn(-1, exploringLineHistory.size - 2)
+        exploringLineHistory.addAll(prefixBoards + continuation.boards.drop(1))
 
         updateUiState {
             copy(
                 isExploringLine = true,
-                exploringLineMoves = uciMoves.take(exploringLineHistory.size - 1),
+                exploringLineMoves = prefixMoves + continuation.validMoves,
                 exploringLineMoveIndex = targetIndex,
                 savedGameMoveIndex = savedMoveIndex,
                 currentBoard = exploringLineHistory.getOrNull(targetIndex + 1)?.copy() ?: startBoard

@@ -356,15 +356,17 @@ internal class AnalysisOrchestrator(
         val qualities = mutableMapOf<Int, MoveQuality>()
 
         for (moveIndex in scores.keys) {
-            val prevSameColorIndex = moveIndex - 2
+            val previousPositionIndex = moveIndex - 1
 
-            if (prevSameColorIndex < 0) {
+            if (previousPositionIndex < 0) {
                 qualities[moveIndex] = MoveQuality.NORMAL
                 continue
             }
 
             val currentScore = scores[moveIndex]?.score ?: continue
-            val prevScore = scores[prevSameColorIndex]?.score ?: continue
+            // Compare the positions immediately before and after this move.
+            // Skipping the opponent's move incorrectly attributes its swing to this player.
+            val prevScore = scores[previousPositionIndex]?.score ?: continue
 
             // Scores are from WHITE's perspective. For move quality:
             // White move: positive change = good for white (the mover)
@@ -599,22 +601,16 @@ internal class AnalysisOrchestrator(
      */
     fun restartAnalysisForExploringLine() {
         val previousJob = manualAnalysisJob
+        val thisRequestId = analysisRequestId.incrementAndGet()
+        val fenToAnalyze = getUiState().currentBoard.getFen()
+        currentAnalysisFen = fenToAnalyze
+        updateUiState { copy(analysisResult = null, analysisResultFen = null) }
         manualAnalysisJob = viewModelScope.launch {
             // Wait for the previous analysis coroutine to unwind before entering
             // analysisMutex so the two don't interleave stop/newGame commands.
             previousJob?.cancelAndJoin()
             analysisMutex.withLock {
                 stockfish.stop()
-
-                val thisRequestId = analysisRequestId.incrementAndGet()
-
-                val board = getUiState().currentBoard
-                val fenToAnalyze = board.getFen()
-                currentAnalysisFen = fenToAnalyze
-
-                updateUiState {
-                    copy(analysisResultFen = null)
-                }
 
                 delay(50)
 

@@ -27,7 +27,8 @@ internal class GameLoader(
     private val gameStorage: GameStorageManager,
     private val analysisOrchestrator: AnalysisOrchestrator,
     private val analyzeRestoredPosition: suspend (String) -> Unit = { },
-    private val getAppVersionCode: () -> Long = { 0L }
+    private val getAppVersionCode: () -> Long = { 0L },
+    private val stopLiveFollow: () -> Unit = {}
 ) {
     // Temporary storage for server/username when showing game selection dialog
     private var pendingGameSelectionServer: ChessServer? = null
@@ -248,6 +249,7 @@ internal class GameLoader(
 
     fun clearGame() {
         invalidatePendingRetrieval()
+        stopLiveFollow()
         analysisOrchestrator.stop()
         val boardHistory = getBoardHistory()
         val exploringLineHistory = getExploringLineHistory()
@@ -306,6 +308,7 @@ internal class GameLoader(
         invalidatePendingRetrieval()
         analysisOrchestrator.stop()
         gameStorage.clearManualStageGame()
+        stopLiveFollow()
         val openingName = pgnHeaders["Opening"] ?: pgnHeaders["ECO"]
 
         val parsedMoves = PgnParser.parseMovesWithClock(pgn)
@@ -389,6 +392,7 @@ internal class GameLoader(
         }
         invalidatePendingRetrieval()
         analysisOrchestrator.stop()
+        stopLiveFollow()
 
         val parsedMoves = PgnParser.parseMoves(analysedGame.pgn)
 
