@@ -135,6 +135,40 @@ class EmulatorBugHuntTest {
         screenshot("analysed")
     }
 
+    @Test fun white_and_black_checkmates_keep_the_correct_sign_through_analysis_and_restart() {
+        for (whiteWins in listOf(true, false)) {
+            val start = if (whiteWins) "7k/5Q2/6K1/8/8/8/8/8 w - - 0 1"
+                else "8/8/8/8/8/6k1/5q2/7K b - - 0 1"
+            val moves = if (whiteWins) "1. Qg7# 1-0" else "1... Qg2# 0-1"
+            val pgn = "[SetUp \"1\"]\n[FEN \"$start\"]\n\n$moves"
+            val expected = if (whiteWins) "+M0" else "-M0"
+            onUi { vm.loadGamesFromPgnContent(pgn) }
+            await("Mate analysed for whiteWins=$whiteWins") {
+                val s = vm.uiState.value
+                s.currentStage == AnalysisStage.MANUAL && s.stockfishReady &&
+                    s.previewScores[0]?.isMate == true && s.analyseScores[0]?.isMate == true
+            }
+            assertEquals(expected, vm.uiState.value.previewScores[0]!!.formatDisplay())
+            assertEquals(expected, vm.uiState.value.analyseScores[0]!!.formatDisplay())
+            scenario!!.close()
+            scenario = ActivityScenario.launch(MainActivity::class.java)
+            scenario!!.onActivity { vm = ViewModelProvider(it)[GameViewModel::class.java] }
+            await("Saved mate restored") { vm.uiState.value.game?.pgn == pgn && vm.uiState.value.stockfishReady }
+            onUi { vm.goToEnd() }
+            await("Live checkmate score") {
+                val s = vm.uiState.value
+                s.analysisResult?.fen == s.currentBoard.getFen() && s.analysisResult?.isMate == true
+            }
+            val s = vm.uiState.value
+            assertEquals(0, s.analysisResult!!.mateIn)
+            val raw = s.analysisResult!!.bestLine!!
+            val whiteTurn = s.currentBoard.getTurn() == com.eval.chess.PieceColor.WHITE
+            assertEquals(expected, MoveScore(if (whiteTurn) raw.score else -raw.score, true, 0).formatDisplay())
+            assertEquals(expected, s.previewScores[0]!!.formatDisplay())
+            screenshot(if (whiteWins) "white-mate-zero" else "black-mate-zero")
+        }
+    }
+
     @Test fun selecting_a_previous_draw_survives_a_fresh_activity_and_exports_its_metadata() {
         val draw = """
             [Event "Saved draw regression"]

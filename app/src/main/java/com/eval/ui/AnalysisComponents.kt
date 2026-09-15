@@ -135,11 +135,7 @@ fun EvaluationGraph(
             if (score != null) {
                 val x = if (totalMoves > 1) moveIndex * pointSpacing else width / 2
                 // Use raw Stockfish score, but for mate use +/- lineGraphRange
-                val rawScore = if (score.isMate) {
-                    if (score.mateIn > 0) maxScore else -maxScore
-                } else {
-                    score.score
-                }
+                val rawScore = score.graphValue(maxScore)
                 val clampedScore = rawScore.coerceIn(-maxScore, maxScore)
                 val y = centerY - (clampedScore / maxScore) * (height / 2 - 4)
                 points.add(GraphPoint(x, y, rawScore))
@@ -211,11 +207,7 @@ fun EvaluationGraph(
             if (score != null) {
                 val x = if (totalMoves > 1) moveIndex * pointSpacing else width / 2
                 // Use raw Stockfish score, but for mate use +/- lineGraphRange
-                val rawScore = if (score.isMate) {
-                    if (score.mateIn > 0) maxScore else -maxScore
-                } else {
-                    score.score
-                }
+                val rawScore = score.graphValue(maxScore)
                 val clampedScore = rawScore.coerceIn(-maxScore, maxScore)
                 val y = centerY - (clampedScore / maxScore) * (height / 2 - 4)
                 pointsAnalyse.add(GraphPoint(x, y, rawScore))
@@ -562,10 +554,10 @@ fun ScoreDifferenceGraph(
                 val currMValue = kotlin.math.abs(currentScore.mateIn)
 
                 // Check if winning (+M*) or losing (-M*) mate
-                val prevIsPositiveMate = prevIsMate && prevSameColorScore.mateIn > 0
-                val prevIsNegativeMate = prevIsMate && prevSameColorScore.mateIn < 0
-                val currIsPositiveMate = currIsMate && currentScore.mateIn > 0
-                val currIsNegativeMate = currIsMate && currentScore.mateIn < 0
+                val prevIsPositiveMate = prevSameColorScore.isPositiveMate
+                val prevIsNegativeMate = prevIsMate && !prevIsPositiveMate
+                val currIsPositiveMate = currentScore.isPositiveMate
+                val currIsNegativeMate = currIsMate && !currIsPositiveMate
 
                 val rawDiff: Float = when {
                     // Both +M* (winning mate for both)
@@ -738,15 +730,11 @@ private fun PvLineRow(
     val adjustedScore = if (isWhiteTurn) line.score else -line.score
     val adjustedMateIn = if (isWhiteTurn) line.mateIn else -line.mateIn
 
-    val displayScore = if (line.isMate) {
-        if (adjustedMateIn > 0) "+M${adjustedMateIn}" else "-M${kotlin.math.abs(adjustedMateIn)}"
-    } else {
-        if (adjustedScore >= 0) "+%.1f".format(adjustedScore)
-        else "%.1f".format(adjustedScore)
-    }
+    val whiteScore = MoveScore(adjustedScore, line.isMate, adjustedMateIn)
+    val displayScore = whiteScore.formatDisplay()
 
     val scoreColor = when {
-        line.isMate -> if (adjustedMateIn > 0) AppColors.PositiveGreen else AppColors.NegativeRed
+        line.isMate -> if (whiteScore.isPositiveMate) AppColors.PositiveGreen else AppColors.NegativeRed
         else -> {
             when {
                 adjustedScore > 0.3f -> AppColors.PositiveGreen  // Green - good for player

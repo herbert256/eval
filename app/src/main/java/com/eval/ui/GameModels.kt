@@ -256,6 +256,15 @@ data class MoveScore(
     val nodes: Long = 0,
     val nps: Long = 0
 ) {
+    // A signed integer mate distance cannot distinguish +0 from -0. The numeric
+    // score retains the winner after conversion to White's perspective, including
+    // in existing saved games, so use it to disambiguate a completed checkmate.
+    val isPositiveMate: Boolean
+        get() = isMate && (mateIn > 0 || (mateIn == 0 && score > 0f))
+
+    fun graphValue(mateMagnitude: Float): Float =
+        if (isMate) { if (isPositiveMate) mateMagnitude else -mateMagnitude } else score
+
     /**
      * Format this score for display (e.g. "+1.5", "-M3"). Centralised here
      * because the same conversion was duplicated across GameContent,
@@ -265,7 +274,7 @@ data class MoveScore(
      */
     fun formatDisplay(decimals: Int = 1): String {
         if (isMate) {
-            return if (mateIn > 0) "+M${mateIn}" else "-M${kotlin.math.abs(mateIn)}"
+            return (if (isPositiveMate) "+M" else "-M") + kotlin.math.abs(mateIn)
         }
         val fmt = "%.${decimals}f"
         return if (score >= 0) "+" + fmt.format(score) else fmt.format(score)

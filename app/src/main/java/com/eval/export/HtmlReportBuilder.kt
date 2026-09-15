@@ -2,6 +2,7 @@ package com.eval.export
 
 import com.eval.chess.PieceColor
 import com.eval.ui.GameUiState
+import com.eval.ui.MoveScore
 import org.json.JSONObject
 
 /**
@@ -79,11 +80,7 @@ object HtmlReportBuilder {
         val previewScoresJson = uiState.previewScores.entries
             .sortedBy { it.key }
             .joinToString(",") { (idx, score) ->
-                val value = if (score.isMate) {
-                    if (score.mateIn > 0) 10.0 else -10.0
-                } else {
-                    score.score.toDouble().coerceIn(-10.0, 10.0)
-                }
+                val value = score.graphValue(10f).toDouble().coerceIn(-10.0, 10.0)
                 """{"move":$idx,"score":$value}"""
             }
 
@@ -91,11 +88,7 @@ object HtmlReportBuilder {
         val analyseScoresJson = uiState.analyseScores.entries
             .sortedBy { it.key }
             .joinToString(",") { (idx, score) ->
-                val value = if (score.isMate) {
-                    if (score.mateIn > 0) 10.0 else -10.0
-                } else {
-                    score.score.toDouble().coerceIn(-10.0, 10.0)
-                }
+                val value = score.graphValue(10f).toDouble().coerceIn(-10.0, 10.0)
                 """{"move":$idx,"score":$value}"""
             }
 
@@ -506,17 +499,15 @@ object HtmlReportBuilder {
         sb.append("<p style=\"color: #888;\">Depth: ${result.depth} • Nodes: ${formatNodes(result.nodes)}</p>")
 
         result.lines.forEach { line ->
+            val whiteToMove = uiState.currentBoard.getTurn() == PieceColor.WHITE
+            val whiteScore = MoveScore(if (whiteToMove) line.score else -line.score,
+                line.isMate, if (whiteToMove) line.mateIn else -line.mateIn)
             val scoreClass = when {
-                line.isMate -> if (line.mateIn > 0) "positive" else "negative"
-                line.score >= 0 -> "positive"
+                line.isMate -> if (whiteScore.isPositiveMate) "positive" else "negative"
+                whiteScore.score >= 0 -> "positive"
                 else -> "negative"
             }
-            val scoreText = if (line.isMate) {
-                if (line.mateIn > 0) "M${line.mateIn}" else "M${-line.mateIn}"
-            } else {
-                val s = line.score
-                if (s >= 0) "+%.2f".format(s) else "%.2f".format(s)
-            }
+            val scoreText = whiteScore.formatDisplay(decimals = 2)
 
             // Convert UCI moves to readable format (simplified)
             val movesText = line.pv.split(" ").take(8).joinToString(" ").htmlEscape()

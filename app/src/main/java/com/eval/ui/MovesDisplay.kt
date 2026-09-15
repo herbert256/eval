@@ -214,8 +214,8 @@ private fun MoveChip(
             }
             val scoreColor = when {
                 isActive -> Color.White.copy(alpha = 0.9f)
-                score.isMate && playerMateIn > 0 -> AppColors.PositiveGreen // Green for player winning mate
-                score.isMate && playerMateIn < 0 -> AppColors.NegativeRed // Red for player losing mate
+                score.isPositiveMate -> AppColors.PositiveGreen
+                score.isMate -> AppColors.NegativeRed
                 playerScore > 0.1f -> AppColors.PositiveGreen // Green for player better
                 playerScore < -0.1f -> AppColors.NegativeRed // Red for player worse
                 else -> Color(0xFF2196F3) // Blue for equal (0)

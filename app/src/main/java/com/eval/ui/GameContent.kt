@@ -220,8 +220,8 @@ fun GameContent(
                 if (displayScore != null) {
                     val scoreText = displayScore.formatDisplay(decimals = 1)
                     val scoreColor = when {
-                        displayScore.isMate && displayScore.mateIn > 0 -> AppColors.PositiveGreen  // Green for player winning mate
-                        displayScore.isMate && displayScore.mateIn < 0 -> AppColors.NegativeRed  // Red for player losing mate
+                        displayScore.isPositiveMate -> AppColors.PositiveGreen
+                        displayScore.isMate -> AppColors.NegativeRed
                         displayScore.score > 0.1f -> AppColors.PositiveGreen  // Green for player better
                         displayScore.score < -0.1f -> AppColors.NegativeRed  // Red for player worse
                         else -> Color(0xFF64B5F6)  // Bright blue for equal
@@ -456,16 +456,14 @@ fun GameContent(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         // Score
-                        val scoreText = if (bestLine.isMate) {
-                            if (bestLine.mateIn > 0) "+M${bestLine.mateIn}" else "-M${kotlin.math.abs(bestLine.mateIn)}"
-                        } else {
-                            if (bestLine.score >= 0) "+%.1f".format(bestLine.score) else "%.1f".format(bestLine.score)
-                        }
+                        val whiteScore = MoveScore(if (isWhiteTurn) bestLine.score else -bestLine.score,
+                            bestLine.isMate, if (isWhiteTurn) bestLine.mateIn else -bestLine.mateIn)
+                        val scoreText = whiteScore.formatDisplay()
                         val scoreColor = when {
-                            bestLine.isMate && bestLine.mateIn > 0 -> AppColors.PositiveGreen
-                            bestLine.isMate && bestLine.mateIn < 0 -> AppColors.NegativeRed
-                            bestLine.score > 0.5f -> AppColors.PositiveGreen
-                            bestLine.score < -0.5f -> AppColors.NegativeRed
+                            whiteScore.isPositiveMate -> AppColors.PositiveGreen
+                            whiteScore.isMate -> AppColors.NegativeRed
+                            whiteScore.score > 0.5f -> AppColors.PositiveGreen
+                            whiteScore.score < -0.5f -> AppColors.NegativeRed
                             else -> Color(0xFF64B5F6)
                         }
                         Text(
@@ -630,11 +628,7 @@ fun GameContent(
                                 val adjustedMateIn = if (isWhiteTurnNow) line.mateIn else -line.mateIn
 
                                 // Format score for display
-                                val scoreText = if (line.isMate) {
-                                    if (adjustedMateIn > 0) "+M${adjustedMateIn}" else "-M${kotlin.math.abs(adjustedMateIn)}"
-                                } else {
-                                    if (adjustedScore >= 0) "+%.1f".format(adjustedScore) else "%.1f".format(adjustedScore)
-                                }
+                                val scoreText = MoveScore(adjustedScore, line.isMate, adjustedMateIn).formatDisplay()
 
                                 // Gray color for multi-line arrows
                                 val arrowColor = Color(0xCC888888)
@@ -675,11 +669,7 @@ fun GameContent(
                 val analyseScore = uiState.analyseScores[moveIndex]
                 val previewScore = uiState.previewScores[moveIndex]
                 (analyseScore ?: previewScore)?.let { score ->
-                    if (score.isMate) {
-                        if (score.mateIn > 0) 100f else -100f
-                    } else {
-                        score.score
-                    }
+                    score.graphValue(100f)
                 } ?: 0f
             }
         }
@@ -1196,13 +1186,7 @@ private fun RawStockfishScoresCard(
                 val moveNumber = (index / 2) + 1
                 val moveNotation = if (isWhiteMove) "$moveNumber. $move" else "$moveNumber... $move"
 
-                val scoreText = score?.let { s ->
-                    if (s.isMate) {
-                        if (s.mateIn > 0) "M${s.mateIn}" else "-M${kotlin.math.abs(s.mateIn)}"
-                    } else {
-                        if (s.score >= 0) "+%.2f".format(s.score) else "%.2f".format(s.score)
-                    }
-                } ?: "—"
+                val scoreText = score?.formatDisplay(decimals = 2) ?: "—"
 
                 val isCurrentMove = index == currentMoveIndex
                 val backgroundColor = if (isCurrentMove) Color(0xFF4A4A5A) else Color.Transparent
@@ -1587,14 +1571,10 @@ private fun StockfishAnalyseCard(uiState: GameUiState) {
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val scoreText = if (currentScore.isMate) {
-                        if (currentScore.mateIn > 0) "+M${currentScore.mateIn}" else "-M${kotlin.math.abs(currentScore.mateIn)}"
-                    } else {
-                        if (currentScore.score >= 0) "+%.2f".format(currentScore.score) else "%.2f".format(currentScore.score)
-                    }
+                    val scoreText = currentScore.formatDisplay(decimals = 2)
                     val scoreColor = when {
-                        currentScore.isMate && currentScore.mateIn > 0 -> AppColors.PositiveGreen
-                        currentScore.isMate && currentScore.mateIn < 0 -> AppColors.NegativeRed
+                        currentScore.isPositiveMate -> AppColors.PositiveGreen
+                        currentScore.isMate -> AppColors.NegativeRed
                         currentScore.score > 0.5f -> AppColors.PositiveGreen
                         currentScore.score < -0.5f -> AppColors.NegativeRed
                         else -> Color(0xFF64B5F6)

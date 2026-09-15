@@ -301,7 +301,7 @@ object GifExporter {
         val whiteHeight = if (score == null) {
             BOARD_SIZE / 2f // 50% when no score
         } else if (score.isMate) {
-            if (score.mateIn > 0) BOARD_SIZE.toFloat() else 0f
+            if (score.isPositiveMate) BOARD_SIZE.toFloat() else 0f
         } else {
             // Convert score to percentage (clamp to -10 to +10)
             val clampedScore = score.score.coerceIn(-10f, 10f)
