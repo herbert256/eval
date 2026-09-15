@@ -14,8 +14,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.util.Locale
 
 // Chess piece Unicode symbols for move display
 private const val WHITE_KING = "♔"
@@ -102,9 +104,11 @@ fun MovesList(
                         Spacer(modifier = Modifier.weight(1f))
                     }
 
+                    // Keep the column gap on the final row, even without a Black move.
+                    Spacer(modifier = Modifier.width(8.dp))
+
                     // Black move
                     if (pair.size > 1) {
-                        Spacer(modifier = Modifier.width(4.dp))
                         val blackIndex = whiteIndex + 1
                         MoveChip(
                             moveDetails = requireNotNull(pair[1]),
@@ -182,30 +186,36 @@ private fun MoveChip(
             .padding(horizontal = 6.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = moveText,
-            fontSize = 15.sp,
-            color = if (isActive) Color.White else MaterialTheme.colorScheme.onSurface
-        )
-
-        // Show quality symbol if available and not NORMAL
-        if (qualitySymbol.isNotEmpty()) {
-            Spacer(modifier = Modifier.width(2.dp))
+        // Reserve the trailing score's width; keep the move, quality and clock together.
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(
-                text = qualitySymbol,
-                fontSize = 13.sp,
-                color = if (isActive) Color.White else qualityColor
+                text = moveText,
+                fontSize = 15.sp,
+                color = if (isActive) Color.White else MaterialTheme.colorScheme.onSurface
             )
-        }
 
-        // Show clock time if available
-        if (moveDetails.clockTime != null) {
-            Spacer(modifier = Modifier.width(4.dp))
-            Text(
-                text = formatMoveClock(moveDetails.clockTime),
-                fontSize = 11.sp,
-                color = if (isActive) Color.White.copy(alpha = 0.7f) else AppColors.MediumGray
-            )
+            // Show quality symbol if available and not NORMAL
+            if (qualitySymbol.isNotEmpty()) {
+                Spacer(modifier = Modifier.width(2.dp))
+                Text(
+                    text = qualitySymbol,
+                    fontSize = 13.sp,
+                    color = if (isActive) Color.White else qualityColor
+                )
+            }
+
+            // Show clock time if available
+            if (moveDetails.clockTime != null) {
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = formatMoveClock(moveDetails.clockTime),
+                    fontSize = 11.sp,
+                    color = if (isActive) Color.White.copy(alpha = 0.7f) else AppColors.MediumGray
+                )
+            }
         }
 
         // Show score if available (always from WHITE's perspective)
@@ -217,7 +227,7 @@ private fun MoveChip(
             val scoreText = if (score.isMate) {
                 "M${kotlin.math.abs(playerMateIn)}"
             } else {
-                "%.1f".format(kotlin.math.abs(playerScore))
+                "%.1f".format(Locale.ROOT, kotlin.math.abs(playerScore))
             }
             val scoreColor = when {
                 isActive -> Color.White.copy(alpha = 0.9f)
@@ -230,14 +240,20 @@ private fun MoveChip(
             Text(
                 text = scoreText,
                 fontSize = 15.sp,
-                color = scoreColor
+                color = scoreColor,
+                textAlign = TextAlign.End,
+                maxLines = 1,
+                softWrap = false
             )
         } else if (isAnalyzing) {
             Spacer(modifier = Modifier.width(4.dp))
             Text(
                 text = "...",
                 fontSize = 15.sp,
-                color = AppColors.DimGray
+                color = AppColors.DimGray,
+                textAlign = TextAlign.End,
+                maxLines = 1,
+                softWrap = false
             )
         }
     }
