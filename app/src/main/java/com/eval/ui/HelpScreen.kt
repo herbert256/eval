@@ -24,7 +24,7 @@ private data class HelpEntry(
 private val helpSections = listOf(
     HelpEntry(
         title = "Welcome to Eval",
-        content = "Analyze your chess games from Lichess.org and Chess.com with the powerful Stockfish 17.1 engine and 9 AI services. " +
+        content = "Analyze your chess games from Lichess.org and Chess.com with the powerful Stockfish engine and 9 AI services. " +
             "The app automatically fetches your games and provides deep analysis to help you improve."
     ),
     HelpEntry(
@@ -199,7 +199,7 @@ private val helpSections = listOf(
     HelpEntry(
         title = "About",
         icon = "ℹ",
-        content = "Eval uses Stockfish 17.1, the world's strongest open-source chess engine.\n\n" +
+        content = "Eval uses the installed Stockfish engine. Its reported version appears in the Stockfish card.\n\n" +
             "Game data from Lichess.org and Chess.com public APIs.\n\n" +
             "AI analysis from OpenAI, Anthropic, Google, xAI, DeepSeek, Mistral, Perplexity, Together AI, and OpenRouter.\n\n" +
             "All data stored locally on your device."

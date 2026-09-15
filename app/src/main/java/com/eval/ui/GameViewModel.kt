@@ -191,6 +191,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             aiAppInstalled = aiAppInstalled
         ) }
 
+        // Observe identity even when the engine is installed after Eval starts.
+        viewModelScope.launch {
+            stockfish.engineName.collect { name ->
+                _uiState.update { it.copy(stockfishName = name ?: "Stockfish") }
+            }
+        }
+
         if (stockfishInstalled) {
             // Missing preferences already use defaults. Never erase settings or
             // saved games just because no server game was retrieved this version.

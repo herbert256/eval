@@ -75,7 +75,7 @@ object PgnExporter {
             tag("SetUp", "1")
             tag("FEN", startingBoard.getFen())
         }
-        sb.appendLine("[Annotator \"Eval App - Stockfish 17.1\"]")
+        sb.appendLine("[Annotator \"Eval App - Stockfish\"]")
         sb.appendLine()
 
         // Moves with annotations

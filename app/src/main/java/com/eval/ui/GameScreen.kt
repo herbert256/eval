@@ -375,7 +375,7 @@ fun GameScreenContent(
 
 /**
  * Blocking screen shown when Stockfish is not installed.
- * User must install "Stockfish 17.1 Chess Engine" from Google Play Store.
+ * User must install "Stockfish Chess Engine" from Google Play Store.
  * Automatically checks every 2 seconds if Stockfish has been installed.
  */
 @Composable
@@ -445,7 +445,7 @@ fun StockfishNotInstalledScreen(
                         color = AppColors.AccentBlue,
                         textDecoration = TextDecoration.Underline
                     )) {
-                        append("Stockfish 17.1 Chess Engine")
+                        append("Stockfish Chess Engine")
                     }
                     pop()
                     append(" from the Google Play Store.")

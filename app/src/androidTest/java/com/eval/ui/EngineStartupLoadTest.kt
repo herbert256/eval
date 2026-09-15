@@ -40,6 +40,8 @@ class EngineStartupLoadTest {
             assertEquals(2, state.analyseScores.size)
             assertEquals(listOf("e4", "e5"), state.moves)
             assertTrue(state.stockfishReady)
+            assertTrue("Engine identity reaches the card state: ${state.stockfishName}",
+                state.stockfishName.startsWith("Stockfish "))
             assertNotNull("Live evaluation after startup", state.analysisResult)
             assertEquals(state.currentBoard.getFen(), state.analysisResultFen)
         } finally {

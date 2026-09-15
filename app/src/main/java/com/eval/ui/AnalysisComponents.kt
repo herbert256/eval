@@ -681,7 +681,8 @@ fun AnalysisPanel(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Stockfish 17.1",
+                    text = uiState.stockfishName,
+                    modifier = Modifier.weight(1f).padding(end = 8.dp),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = AppColors.SubtleText

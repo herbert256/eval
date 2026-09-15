@@ -42,6 +42,10 @@ class StockfishEngine(private val context: Context) {
         // Maximum safe thread count for mobile devices
         private const val MAX_SAFE_THREADS = 4
         internal const val READY_TIMEOUT_MS = 15000L
+        private val UCI_NAME = Regex("""id\s+name\s+(.+)""")
+
+        internal fun parseUciEngineName(line: String): String? =
+            UCI_NAME.matchEntire(line.trim())?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
     }
 
     private var process: Process? = null
@@ -53,6 +57,9 @@ class StockfishEngine(private val context: Context) {
 
     private val _isReady = MutableStateFlow(false)
     val isReady: StateFlow<Boolean> = _isReady
+
+    private val _engineName = MutableStateFlow<String?>(null)
+    val engineName: StateFlow<String?> = _engineName
 
     private var analysisJob: Job? = null
     // Scope is created lazily and can be recreated after shutdown
@@ -151,6 +158,7 @@ class StockfishEngine(private val context: Context) {
     }
 
     private suspend fun startProcess() {
+        _engineName.value = null
         val path = stockfishPath ?: return
 
         try {
@@ -174,8 +182,10 @@ class StockfishEngine(private val context: Context) {
             // Loading the engine's neural network can take several seconds on
             // a cold device. Bound the whole handshake, not each output line.
             val uciDeadline = android.os.SystemClock.elapsedRealtime() + 15000
+            var reportedName: String? = null
             var line = readLineWithTimeout(15000)
             while (line != null && line != "uciok") {
+                parseUciEngineName(line)?.let { reportedName = it }
                 val remaining = uciDeadline - android.os.SystemClock.elapsedRealtime()
                 if (remaining <= 0) break
                 line = readLineWithTimeout(remaining)
@@ -185,6 +195,7 @@ class StockfishEngine(private val context: Context) {
                 _isReady.value = false
                 return
             }
+            _engineName.value = reportedName
 
             // Send isready and wait for readyok (with timeout)
             sendCommand("isready")
@@ -504,6 +515,7 @@ class StockfishEngine(private val context: Context) {
      * simply calls destroy().
      */
     private fun cleanupProcess(forceful: Boolean) {
+        _engineName.value = null
         val oldProcess = process
         val oldWriter = processWriter
         val oldReader = processReader

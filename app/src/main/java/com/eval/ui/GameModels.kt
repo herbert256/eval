@@ -334,6 +334,7 @@ data class GameUiState(
     val analysisResult: AnalysisResult? = null,
     val analysisResultFen: String? = null,  // FEN for which analysisResult is valid
     val stockfishReady: Boolean = false,
+    val stockfishName: String = "Stockfish",
     val flippedBoard: Boolean = false,
     val userPlayedBlack: Boolean = false,  // True if active player played black (for score perspective)
     val stockfishSettings: StockfishSettings = StockfishSettings(),
