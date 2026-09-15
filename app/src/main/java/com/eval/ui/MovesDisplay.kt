@@ -31,6 +31,13 @@ private const val BLACK_BISHOP = "♝"
 private const val BLACK_KNIGHT = "♞"
 private const val BLACK_PAWN = "♟"
 
+private fun formatMoveClock(clockTime: String): String {
+    val parts = clockTime.split(':')
+    if (parts.size != 3 || parts[0].toIntOrNull() != 0) return clockTime
+    val minutes = parts[1].toIntOrNull()?.takeIf { it in 0..59 } ?: return clockTime
+    return "$minutes:${parts[2]}"
+}
+
 /**
  * Displays the list of moves in a two-column format (white/black pairs).
  */
@@ -195,7 +202,7 @@ private fun MoveChip(
         if (moveDetails.clockTime != null) {
             Spacer(modifier = Modifier.width(4.dp))
             Text(
-                text = moveDetails.clockTime,
+                text = formatMoveClock(moveDetails.clockTime),
                 fontSize = 11.sp,
                 color = if (isActive) Color.White.copy(alpha = 0.7f) else AppColors.MediumGray
             )
