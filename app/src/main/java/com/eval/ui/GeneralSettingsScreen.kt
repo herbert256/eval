@@ -24,11 +24,13 @@ fun GeneralSettingsScreen(
 ) {
     var moveSoundsEnabled by remember { mutableStateOf(generalSettings.moveSoundsEnabled) }
     var lichessUsername by remember { mutableStateOf(generalSettings.lichessUsername) }
+    var fullScreen by remember(generalSettings.fullScreen) { mutableStateOf(generalSettings.fullScreen) }
 
     fun saveSettings() {
         onSave(generalSettings.copy(
             moveSoundsEnabled = moveSoundsEnabled,
-            lichessUsername = lichessUsername
+            lichessUsername = lichessUsername,
+            fullScreen = fullScreen
         ))
     }
 
@@ -65,6 +67,28 @@ fun GeneralSettingsScreen(
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White
                 )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Full screen", color = Color.White)
+                        Text(
+                            text = "Hide system bars; swipe from an edge to reveal them",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AppColors.SubtleText
+                        )
+                    }
+                    Switch(
+                        checked = fullScreen,
+                        onCheckedChange = {
+                            fullScreen = it
+                            saveSettings()
+                        }
+                    )
+                }
 
                 // Move sounds toggle
                 Row(

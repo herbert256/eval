@@ -297,13 +297,15 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
     fun loadGeneralSettings(): GeneralSettings {
         return GeneralSettings(
             moveSoundsEnabled = prefs.getBoolean(KEY_MOVE_SOUNDS_ENABLED, true),
-            lichessUsername = prefs.getString(KEY_LICHESS_USERNAME, "DrNykterstein") ?: ""
+            lichessUsername = prefs.getString(KEY_LICHESS_USERNAME, "DrNykterstein") ?: "",
+            fullScreen = prefs.getBoolean(KEY_FULL_SCREEN, false)
         )
     }
 
     fun saveGeneralSettings(settings: GeneralSettings) {
         prefs.edit()
             .putBoolean(KEY_MOVE_SOUNDS_ENABLED, settings.moveSoundsEnabled)
+            .putBoolean(KEY_FULL_SCREEN, settings.fullScreen)
             .putString(KEY_LICHESS_USERNAME, settings.lichessUsername)
             .apply()
     }
@@ -446,6 +448,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         editor.putInt(KEY_LICHESS_MAX_GAMES, snapshot.lichessMaxGames.coerceIn(1, 25))
 
         editor.putBoolean(KEY_MOVE_SOUNDS_ENABLED, snapshot.generalSettings.moveSoundsEnabled)
+        editor.putBoolean(KEY_FULL_SCREEN, snapshot.generalSettings.fullScreen)
         editor.putString(KEY_AI_INSTRUCTIONS_LIST, gson.toJson(snapshot.aiInstructions))
         editor.putBoolean(KEY_AI_APP_DONT_ASK_AGAIN, snapshot.aiAppDontAskAgain)
         editor.putLong(KEY_FIRST_GAME_RETRIEVED_VERSION, snapshot.firstGameRetrievedVersion)
@@ -692,6 +695,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
 
         // General settings
         private const val KEY_MOVE_SOUNDS_ENABLED = "move_sounds_enabled"
+        private const val KEY_FULL_SCREEN = "full_screen"
 
         // AI instructions list (CRUD)
         private const val KEY_AI_INSTRUCTIONS_LIST = "ai_instructions_list"

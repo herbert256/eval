@@ -224,7 +224,8 @@ data class InterfaceVisibilitySettings(
 // General app settings
 data class GeneralSettings(
     val moveSoundsEnabled: Boolean = true,
-    val lichessUsername: String = ""
+    val lichessUsername: String = "",
+    val fullScreen: Boolean = false
 )
 
 // Move quality assessment based on evaluation change
@@ -355,7 +356,7 @@ data class GameUiState(
     val autoAnalysisCurrentScore: MoveScore? = null,
     // Lichess settings
     val lichessMaxGames: Int = 10,
-    // General settings (fullScreenMode is stored here, not persistent)
+    // Persisted general settings
     val generalSettings: GeneralSettings = GeneralSettings(),
     // Game selection info for full screen display
     val gameSelectionUsername: String = "",

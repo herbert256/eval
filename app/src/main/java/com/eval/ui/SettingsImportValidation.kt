@@ -129,7 +129,7 @@ internal object SettingsImportValidation {
             "board_show_coordinates", "board_show_last_move", "manual_nnue", "manual_shownumbers",
             "manual_vis_gameinfo", "manual_vis_movelist", "manual_vis_openingexplorer", "manual_vis_openingname",
             "manual_vis_pgn", "manual_vis_rawstockfishscore", "manual_vis_resultbar", "manual_vis_scorebarsgraph",
-            "manual_vis_scorelinegraph", "manual_vis_timegraph", "move_sounds_enabled", "preview_nnue",
+            "manual_vis_scorelinegraph", "manual_vis_timegraph", "move_sounds_enabled", "full_screen", "preview_nnue",
             "preview_vis_board", "preview_vis_movelist", "preview_vis_pgn", "preview_vis_resultbar", "preview_vis_scorebarsgraph")
         fields("Int", "analyse_hash", "analyse_threads", "board_player_bar_mode", "eval_bar_position", "eval_bar_range",
             "graph_bar_range", "graph_bar_scale", "graph_line_range", "graph_line_scale", "lichess_max_games",

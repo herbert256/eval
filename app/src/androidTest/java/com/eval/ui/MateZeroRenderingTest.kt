@@ -55,12 +55,22 @@ class MateZeroRenderingTest {
                 instrumentation.waitForIdleSync()
                 assertTrue(bounds.get().width > 0f)
                 val rect = bounds.get()
-                val screenshot = instrumentation.uiAutomation.takeScreenshot()
+                val x = (rect.left + rect.width * 0.8f).toInt()
+                val winningY = (rect.top + rect.height * if (whiteWins) 0.25f else 0.75f).toInt()
+                val losingY = (rect.top + rect.height * if (whiteWins) 0.75f else 0.25f).toInt()
+                val color = (if (whiteWins) settings.plusScoreColor else settings.negativeScoreColor).toInt()
+                // Compose layout can finish before its frame reaches the display. Wait for
+                // the rendered graph instead of sampling the previous screen's pixels.
+                val renderDeadline = SystemClock.uptimeMillis() + 5000
+                var screenshot = instrumentation.uiAutomation.takeScreenshot()
+                while ((screenshot.getPixel(x, winningY) != color ||
+                        screenshot.getPixel(x, losingY) != settings.backgroundColor.toInt()) &&
+                    SystemClock.uptimeMillis() < renderDeadline) {
+                    screenshot.recycle()
+                    SystemClock.sleep(50)
+                    screenshot = instrumentation.uiAutomation.takeScreenshot()
+                }
                 try {
-                    val x = (rect.left + rect.width * 0.8f).toInt()
-                    val winningY = (rect.top + rect.height * if (whiteWins) 0.25f else 0.75f).toInt()
-                    val losingY = (rect.top + rect.height * if (whiteWins) 0.75f else 0.25f).toInt()
-                    val color = (if (whiteWins) settings.plusScoreColor else settings.negativeScoreColor).toInt()
                     assertEquals("Graph layer analyse=$analyse whiteWins=$whiteWins", color, screenshot.getPixel(x, winningY))
                     assertEquals(settings.backgroundColor.toInt(), screenshot.getPixel(x, losingY))
                 } finally { screenshot.recycle() }

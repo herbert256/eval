@@ -176,7 +176,7 @@ private val helpSections = listOf(
             "• Tap 'Analysis running' banner to jump to biggest mistake\n" +
             "• Enable 'Red border for player to move' to see whose turn it is\n" +
             "• Move list shows colored scores - green moves are good, red are mistakes\n" +
-            "• Long tap for fullscreen mode (if enabled in General settings)"
+            "• Enable Full screen in Settings → General settings to hide system bars; swipe from an edge to reveal them"
     ),
     HelpEntry(
         title = "Live Games",

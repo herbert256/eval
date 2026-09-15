@@ -20,7 +20,7 @@ class SettingsImportRoundTripTest {
         settings.saveLichessUsername("TesterLichess")
         settings.saveChessComUsername("TesterChessCom")
         settings.saveLichessMaxGames(17)
-        settings.saveGeneralSettings(GeneralSettings(moveSoundsEnabled = false, lichessUsername = "TesterLichess"))
+        settings.saveGeneralSettings(GeneralSettings(moveSoundsEnabled = false, lichessUsername = "TesterLichess", fullScreen = true))
         settings.saveStockfishSettings(
             StockfishSettings(
                 previewStage = PreviewStageSettings(secondsForMove = 0.10f, threads = 2, hashMb = 16, useNnue = true),
@@ -43,6 +43,7 @@ class SettingsImportRoundTripTest {
         val exported = settings.exportAllSettings()
 
         settings.resetAllSettingsToDefaults()
+        assertEquals(false, settings.loadGeneralSettings().fullScreen)
         settings.saveLichessUsername("OtherUser")
 
         val imported = settings.importAllSettings(exported)
@@ -51,6 +52,7 @@ class SettingsImportRoundTripTest {
         assertEquals("TesterChessCom", settings.savedChessComUsername)
         assertEquals(17, settings.lichessMaxGames)
         assertEquals(false, settings.loadGeneralSettings().moveSoundsEnabled)
+        assertEquals(true, settings.loadGeneralSettings().fullScreen)
         assertEquals(0.10f, settings.loadStockfishSettings().previewStage.secondsForMove)
         assertEquals(true, settings.getAiAppDontAskAgain())
         assertEquals("TesterLichess", settings.lastServerUser)
@@ -59,4 +61,3 @@ class SettingsImportRoundTripTest {
         assertEquals(1, settings.loadFenHistory().size)
     }
 }
-

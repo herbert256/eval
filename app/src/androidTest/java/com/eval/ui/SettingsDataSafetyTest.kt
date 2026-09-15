@@ -22,6 +22,7 @@ class SettingsDataSafetyTest {
             val original = prefs.all.toMap()
             for (json in listOf(
                 """{"lichess_username":{"_type":"Boolean","_value":true}}""",
+                """{"full_screen":{"_type":"String","_value":"true"}}""",
                 """{"manual_multipv":{"_type":"Int","_value":-1}}""",
                 """{"manual_threads":{"_type":"Int","_value":1.5}}""",
                 """{"preview_seconds":{"_type":"Float","_value":1e100}}""",
@@ -51,6 +52,7 @@ class SettingsDataSafetyTest {
                 """"graphSettings":{"lineGraphScale":-100}""",
                 """"graphSettings":{"barGraphRange":0}""",
                 """"generalSettings":{"moveSoundsEnabled":"yes"}""",
+                """"generalSettings":{"fullScreen":"true"}""",
                 """"lichessUsername":true""",
                 """"fenHistory":[null]""",
                 """"aiInstructions":[{"name":null}]"""
