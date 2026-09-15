@@ -394,9 +394,29 @@ internal class GameLoader(
         analysisOrchestrator.stop()
         stopLiveFollow()
 
-        val parsedMoves = PgnParser.parseMoves(analysedGame.pgn)
-
-        val (boards, validMoves) = buildBoardHistory(parsedMoves, initialBoard = startingBoard)
+        val headers = PgnParser.parseHeaders(analysedGame.pgn)
+        val parsedMoves = PgnParser.parseMovesWithClock(analysedGame.pgn)
+        val moveDetails = mutableListOf<MoveDetails>()
+        val (boards, validMoves) = buildBoardHistory(
+            parsedMoves.map { it.san }, initialBoard = startingBoard,
+            onMoveApplied = { index, move, before, after ->
+                // PGN is the source of truth; older saves can have incomplete cached details.
+                val lastMove = after.getLastMove()
+                val cached = analysedGame.moveDetails.getOrNull(index)?.takeIf {
+                    it.from == lastMove?.from?.toAlgebraic() && it.to == lastMove?.to?.toAlgebraic()
+                }
+                buildMoveDetails(after, before, move, parsedMoves[index].clockTime ?: cached?.clockTime)
+                    ?.let { moveDetails.add(it) }
+            }
+        )
+        val pgnResult = headers["Result"]?.takeIf { it in setOf("1-0", "0-1", "1/2-1/2", "*") }
+            ?: PgnParser.parseResult(analysedGame.pgn)
+        val result = pgnResult ?: when {
+            // Preserve the legacy opening-study correction only when PGN has no result.
+            analysedGame.whiteName == "White" && analysedGame.blackName == "Black" &&
+                analysedGame.result == "1/2-1/2" -> "*"
+            else -> analysedGame.result
+        }
 
         val boardHistory = getBoardHistory()
         val exploringLineHistory = getExploringLineHistory()
@@ -410,17 +430,12 @@ internal class GameLoader(
             variant = "standard",
             speed = analysedGame.speed ?: "unknown",
             perf = null,
-            // For opening studies (White vs Black with no real result), treat as ongoing
-            // This also handles previously mis-stored games with "1/2-1/2"
-            status = when {
-                analysedGame.result == "*" -> "*"
-                analysedGame.result == "1-0" || analysedGame.result == "0-1" -> "mate"
-                // Check if this looks like an opening study (no real winner)
-                analysedGame.whiteName == "White" && analysedGame.blackName == "Black" -> "*"
-                analysedGame.result == "1/2-1/2" -> "draw"
-                else -> "*"  // Default to ongoing for unknown cases
+            status = when (result) {
+                "1-0", "0-1" -> "mate"
+                "1/2-1/2" -> "draw"
+                else -> "*"
             },
-            winner = when (analysedGame.result) {
+            winner = when (result) {
                 "1-0" -> "white"
                 "0-1" -> "black"
                 else -> null
@@ -428,12 +443,12 @@ internal class GameLoader(
             players = Players(
                 white = Player(
                     user = User(name = analysedGame.whiteName, id = analysedGame.whiteName.lowercase()),
-                    rating = null,
+                    rating = headers["WhiteElo"]?.toIntOrNull(),
                     aiLevel = null
                 ),
                 black = Player(
                     user = User(name = analysedGame.blackName, id = analysedGame.blackName.lowercase()),
-                    rating = null,
+                    rating = headers["BlackElo"]?.toIntOrNull(),
                     aiLevel = null
                 )
             ),
@@ -461,8 +476,8 @@ internal class GameLoader(
             copy(
                 game = lichessGame,
                 moves = validMoves,
-                moveDetails = analysedGame.moveDetails.take(validMoves.size),
-                errorMessage = importError(parsedMoves, validMoves),
+                moveDetails = moveDetails,
+                errorMessage = importError(parsedMoves.map { it.san }, validMoves),
                 currentMoveIndex = validIndex,
                 currentBoard = board.copy(),
                 flippedBoard = userPlayedBlack,
@@ -488,6 +503,11 @@ internal class GameLoader(
             )
         }
 
+        // Reopening a previous game must also select it for the next startup.
+        // Avoid rewriting storage when startup is already restoring this exact save.
+        if (gameStorage.loadManualStageGame() != analysedGame) {
+            gameStorage.saveManualStageGame(analysedGame)
+        }
         val fenToAnalyze = board.getFen()
 
         analysisOrchestrator.manualAnalysisJob = viewModelScope.launch {

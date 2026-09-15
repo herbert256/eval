@@ -135,6 +135,65 @@ class EmulatorBugHuntTest {
         screenshot("analysed")
     }
 
+    @Test fun selecting_a_previous_draw_survives_a_fresh_activity_and_exports_its_metadata() {
+        val draw = """
+            [Event "Saved draw regression"]
+            [WhiteElo "2410"]
+            [BlackElo "2385"]
+            [Result "1/2-1/2"]
+
+            1. d4 {[%clk 0:05:00]} d5 1/2-1/2
+        """.trimIndent()
+        val storage = GameStorageManager(prefs, com.google.gson.Gson())
+        onUi { vm.loadGamesFromPgnContent(draw) }
+        await("Draw analysed and saved") {
+            vm.uiState.value.currentStage == AnalysisStage.MANUAL && vm.uiState.value.stockfishReady &&
+                storage.loadManualStageGame()?.pgn == draw
+        }
+        onUi { vm.loadGamesFromPgnContent(sample) }
+        await("Second game analysed and saved") {
+            vm.uiState.value.currentStage == AnalysisStage.MANUAL && vm.uiState.value.stockfishReady &&
+                storage.loadManualStageGame()?.pgn == sample
+        }
+        onUi {
+            vm.showAnalysedGames()
+            vm.selectAnalysedGame(vm.uiState.value.analysedGamesList.first { it.pgn == draw })
+        }
+        await("Selected draw has live analysis") {
+            val state = vm.uiState.value
+            state.game?.pgn == draw && state.analysisResult?.fen == state.currentBoard.getFen()
+        }
+        val previousVm = vm
+        scenario!!.close()
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        scenario!!.onActivity { vm = ViewModelProvider(it)[GameViewModel::class.java] }
+        assertNotSame(previousVm, vm)
+        await("Fresh activity restored a game") { vm.uiState.value.stockfishReady && vm.uiState.value.game != null }
+        assertEquals("Startup restored the wrong selected game", draw, vm.uiState.value.game!!.pgn)
+        assertEquals("draw", vm.uiState.value.game!!.status)
+        assertEquals(2410, vm.uiState.value.game!!.players.white.rating)
+        assertEquals(2385, vm.uiState.value.game!!.players.black.rating)
+        assertEquals("0:05:00", vm.uiState.value.moveDetails.first().clockTime)
+        onUi { vm.goToEnd() }
+        await("Restored final board has analysis") {
+            val state = vm.uiState.value
+            state.currentMoveIndex == 1 && state.analysisResult?.fen == state.currentBoard.getFen()
+        }
+        var sent: Intent? = null
+        val shareContext = object : ContextWrapper(context) {
+            override fun startActivity(intent: Intent) { sent = intent }
+        }
+        onUi { vm.exportAnnotatedPgn(shareContext) }
+        @Suppress("DEPRECATION")
+        val exported = sent!!.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!.getStringExtra(Intent.EXTRA_TEXT)!!
+        val headers = com.eval.chess.PgnParser.parseHeaders(exported)
+        assertEquals("1/2-1/2", headers["Result"])
+        assertEquals("2410", headers["WhiteElo"])
+        assertEquals("2385", headers["BlackElo"])
+        assertEquals(listOf("d4", "d5"), com.eval.chess.PgnParser.parseMoves(exported))
+        screenshot("restored-draw")
+    }
+
     @Test fun opening_information_follows_navigation_and_variations_during_live_analysis() {
         onUi {
             val visibility = vm.uiState.value.interfaceVisibility
