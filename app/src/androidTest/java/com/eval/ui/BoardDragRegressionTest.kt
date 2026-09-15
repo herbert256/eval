@@ -28,6 +28,7 @@ class BoardDragRegressionTest {
     private fun checkDrag(flipped: Boolean) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val moves = CopyOnWriteArrayList<Pair<Square, Square>>()
+        val navigation = CopyOnWriteArrayList<String>()
         val measuredBounds = java.util.concurrent.atomic.AtomicReference(Rect.Zero)
         val board = ChessBoard().apply { check(setFen("4k3/8/8/8/3R4/8/8/4K3 w - - 0 1")) }
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
@@ -37,6 +38,8 @@ class BoardDragRegressionTest {
                         Box(Modifier.size(280.dp)) {
                             ChessBoardView(board, flipped = flipped, interactionEnabled = true,
                                 onMove = { from, to -> moves.add(from to to) },
+                                onPreviousMove = { navigation.add("previous") },
+                                onNextMove = { navigation.add("next") },
                                 modifier = Modifier.onGloballyPositioned { measuredBounds.set(it.boundsInWindow()) })
                         }
                     }
@@ -71,6 +74,7 @@ class BoardDragRegressionTest {
             assertTrue("Releasing outside the board must cancel the move: $moves", moves.isEmpty())
             drag(bounds.left + size / 2)
             assertEquals(listOf(Square(3, 3) to Square(if (flipped) 7 else 0, 3)), moves.toList())
+            assertTrue("Piece drags must never navigate: $navigation", navigation.isEmpty())
         }
     }
 

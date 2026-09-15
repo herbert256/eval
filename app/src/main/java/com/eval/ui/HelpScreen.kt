@@ -176,6 +176,7 @@ private val helpSections = listOf(
             "• Tap 'Analysis running' banner to jump to biggest mistake\n" +
             "• Enable 'Red border for player to move' to see whose turn it is\n" +
             "• Move list shows colored scores - green moves are good, red are mistakes\n" +
+            "• In Manual mode, swipe left for the previous move or right for the next; start on an empty square or an opponent's piece to avoid dragging your own piece\n" +
             "• Enable Full screen in Settings → General settings to hide system bars; swipe from an edge to reveal them"
     ),
     HelpEntry(

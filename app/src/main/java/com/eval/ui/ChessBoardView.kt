@@ -16,6 +16,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -45,6 +46,8 @@ fun ChessBoardView(
     interactionEnabled: Boolean = false,
     onMove: ((Square, Square) -> Unit)? = null,
     onTap: (() -> Unit)? = null,
+    onPreviousMove: (() -> Unit)? = null,
+    onNextMove: (() -> Unit)? = null,
     moveArrows: List<MoveArrow> = emptyList(),  // Up to 8 arrows from PV line
     showArrowNumbers: Boolean = false,  // Show move numbers on arrows
     whiteArrowColor: Color = Color(0xCC3399FF),  // Default blue
@@ -59,6 +62,9 @@ fun ChessBoardView(
 ) {
     val lastMove = board.getLastMove()
     val context = LocalContext.current
+    val currentOnMove by rememberUpdatedState(onMove)
+    val currentOnPreviousMove by rememberUpdatedState(onPreviousMove)
+    val currentOnNextMove by rememberUpdatedState(onNextMove)
 
     // Selection and drag state
     var selectedSquare by remember { mutableStateOf<Square?>(null) }
@@ -68,8 +74,10 @@ fun ChessBoardView(
     var squareSize by remember { mutableStateOf(0f) }
 
     // Clear selection when board changes (e.g., after a move)
-    LaunchedEffect(board.getFen()) {
+    LaunchedEffect(board.getFen(), flipped, interactionEnabled) {
         selectedSquare = null
+        dragFromSquare = null
+        dragPosition = null
         legalMoves = emptySet()
     }
 
@@ -102,17 +110,18 @@ fun ChessBoardView(
                     Modifier.pointerInput(Unit) {
                         detectTapGestures { onTap() }
                     }
-                } else if (interactionEnabled && onMove != null) {
+                } else if (interactionEnabled && (onMove != null || onPreviousMove != null || onNextMove != null)) {
                     Modifier
-                        .pointerInput(board, flipped) {
+                        .pointerInput(board, board.getFen(), flipped) {
                             detectTapGestures { offset ->
+                                if (currentOnMove == null) return@detectTapGestures
                                 squareSize = size.width / 8f
                                 val tappedSquare = positionToSquare(offset.x, offset.y, squareSize)
                                 if (tappedSquare != null) {
                                     val currentSelected = selectedSquare
                                     if (currentSelected != null && legalMoves.contains(tappedSquare)) {
                                         // Tapped on a legal move target - make the move
-                                        onMove(currentSelected, tappedSquare)
+                                        currentOnMove?.invoke(currentSelected, tappedSquare)
                                         selectedSquare = null
                                         legalMoves = emptySet()
                                     } else {
@@ -131,18 +140,29 @@ fun ChessBoardView(
                                 }
                             }
                         }
-                        .pointerInput(board, flipped) {
+                        .pointerInput(board, board.getFen(), flipped) {
+                            var gestureStart: Offset? = null
+                            fun clearDrag() {
+                                gestureStart = null
+                                dragFromSquare = null
+                                dragPosition = null
+                                legalMoves = emptySet()
+                            }
                             detectDragGestures(
                                 onDragStart = { offset ->
+                                    clearDrag()
+                                    selectedSquare = null
+                                    gestureStart = offset
+                                    dragPosition = offset
                                     squareSize = size.width / 8f
                                     val square = positionToSquare(offset.x, offset.y, squareSize)
                                     if (square != null) {
                                         val piece = board.getPiece(square)
-                                        if (piece != null && piece.color == board.getTurn()) {
+                                        // Piece drags take priority, including cancelled/illegal drops.
+                                        if (currentOnMove != null && piece != null && piece.color == board.getTurn()) {
                                             dragFromSquare = square
                                             dragPosition = offset
                                             legalMoves = board.getLegalMoves(square).toSet()
-                                            selectedSquare = null // Clear tap selection when dragging
                                         }
                                     }
                                 },
@@ -153,20 +173,26 @@ fun ChessBoardView(
                                 onDragEnd = {
                                     val from = dragFromSquare
                                     val pos = dragPosition
+                                    val start = gestureStart
+                                    val targets = legalMoves
+                                    clearDrag()
                                     if (from != null && pos != null && squareSize > 0) {
                                         val to = positionToSquare(pos.x, pos.y, squareSize)
-                                        if (to != null && legalMoves.contains(to)) {
-                                            onMove(from, to)
+                                        if (to != null && targets.contains(to)) {
+                                            currentOnMove?.invoke(from, to)
+                                        }
+                                    } else if (start != null && pos != null) {
+                                        val delta = pos - start
+                                        val minimumDistance = maxOf(48.dp.toPx(), size.width * 0.15f)
+                                        if (kotlin.math.abs(delta.x) >= minimumDistance &&
+                                            kotlin.math.abs(delta.x) > kotlin.math.abs(delta.y) * 1.5f) {
+                                            if (delta.x < 0) currentOnPreviousMove?.invoke()
+                                            else currentOnNextMove?.invoke()
                                         }
                                     }
-                                    dragFromSquare = null
-                                    dragPosition = null
-                                    legalMoves = emptySet()
                                 },
                                 onDragCancel = {
-                                    dragFromSquare = null
-                                    dragPosition = null
-                                    legalMoves = emptySet()
+                                    clearDrag()
                                 }
                             )
                         }
