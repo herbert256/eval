@@ -174,7 +174,7 @@ class ChessBoard private constructor(skipReset: Boolean) {
 
     private fun applyFenUnchecked(fen: String): Boolean {
         val parts = fen.trim().split(Regex("\\s+"))
-        if (parts.isEmpty()) return false
+        if (parts.size !in 1..6) return false
 
         // Clear the board first
         for (i in 0..63) board[i] = null
@@ -188,10 +188,15 @@ class ChessBoard private constructor(skipReset: Boolean) {
         for ((rankIndex, rankStr) in ranks.withIndex()) {
             val rank = 7 - rankIndex  // FEN starts from rank 8 (index 7)
             var file = 0
+            var previousWasDigit = false
             for (c in rankStr) {
-                if (c.isDigit()) {
+                if (c in '1'..'8') {
+                    if (previousWasDigit) return false
                     file += c.digitToInt()
+                    if (file > 8) return false
+                    previousWasDigit = true
                 } else {
+                    previousWasDigit = false
                     val piece = charToPiece(c) ?: return false
                     if (file > 7) return false
                     // Pawns may never occupy rank 1 (index 0) or rank 8 (index 7)
@@ -220,18 +225,22 @@ class ChessBoard private constructor(skipReset: Boolean) {
         // Parse castling rights (third part)
         castlingRights.clear()
         if (parts.size > 2 && parts[2] != "-") {
+            if (parts[2].any { it !in "KQkq" } || parts[2].toSet().size != parts[2].length) return false
             for (c in parts[2]) {
-                if (c in "KQkq") castlingRights.add(c)
+                castlingRights.add(c)
             }
         }
 
         // Parse en passant square (fourth part). When present, the target square
-        // must be on rank 3 (black just pushed, white to move) or rank 6 (white
-        // just pushed, black to move).
+        // must be on rank 6 after Black pushes or rank 3 after White pushes.
         enPassantSquare = if (parts.size > 3 && parts[3] != "-") {
             val sq = Square.fromAlgebraic(parts[3]) ?: return false
             val expectedRank = if (newTurn == PieceColor.WHITE) 5 else 2
             if (sq.rank != expectedRank) return false
+            val pawnRank = if (newTurn == PieceColor.WHITE) 4 else 3
+            val sourceRank = if (newTurn == PieceColor.WHITE) 6 else 1
+            if (getPiece(sq) != null || getPiece(sq.file, sourceRank) != null ||
+                getPiece(sq.file, pawnRank) != Piece(PieceType.PAWN, oppositeColor(newTurn))) return false
             sq
         } else null
 
@@ -306,6 +315,47 @@ class ChessBoard private constructor(skipReset: Boolean) {
         val move = Move(from, to, promotion, uci)
         if (!isLegalMove(from, to) || !isValidPromotion(move)) return false
         return executeMove(move)
+    }
+
+    /** Return legal, standard algebraic notation without changing this position. */
+    fun sanForMove(notation: String): String? {
+        val after = copy()
+        if (!after.makeMove(notation) && !after.makeUciMove(notation)) return null
+        val move = after.getLastMove() ?: return null
+        val piece = getPiece(move.from) ?: return null
+        val castle = piece.type == PieceType.KING && kotlin.math.abs(move.to.file - move.from.file) == 2
+        val base = if (castle) {
+            if (move.to.file == 6) "O-O" else "O-O-O"
+        } else {
+            val capture = getPiece(move.to) != null || (piece.type == PieceType.PAWN && move.from.file != move.to.file)
+            val letter = when (piece.type) {
+                PieceType.KING -> "K"; PieceType.QUEEN -> "Q"; PieceType.ROOK -> "R"
+                PieceType.BISHOP -> "B"; PieceType.KNIGHT -> "N"; PieceType.PAWN -> ""
+            }
+            val source = if (piece.type == PieceType.PAWN) {
+                if (capture) move.from.toAlgebraic().take(1) else ""
+            } else {
+                val others = (0..63).map { Square(it % 8, it / 8) }.filter {
+                    it != move.from && getPiece(it) == piece && isLegalMove(it, move.to)
+                }
+                when {
+                    others.isEmpty() -> ""
+                    others.none { it.file == move.from.file } -> move.from.toAlgebraic().take(1)
+                    others.none { it.rank == move.from.rank } -> move.from.toAlgebraic().takeLast(1)
+                    else -> move.from.toAlgebraic()
+                }
+            }
+            val promotion = when (move.promotion) {
+                PieceType.QUEEN -> "=Q"; PieceType.ROOK -> "=R"
+                PieceType.BISHOP -> "=B"; PieceType.KNIGHT -> "=N"; else -> ""
+            }
+            letter + source + (if (capture) "x" else "") + move.to.toAlgebraic() + promotion
+        }
+        val suffix = if (after.isKingInCheck(after.turn)) {
+            val canReply = (0..63).any { after.getLegalMoves(Square(it % 8, it / 8)).isNotEmpty() }
+            if (canReply) "+" else "#"
+        } else ""
+        return base + suffix
     }
 
     private fun parseSanMove(san: String): Move? {

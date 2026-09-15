@@ -88,16 +88,7 @@ internal class ExportShareManager(
     fun exportAnnotatedPgn(context: Context) {
         val state = getUiState()
         val game = state.game ?: return
-        val openingName = state.currentOpeningName ?: state.openingName
-
-        val pgn = com.eval.export.PgnExporter.exportAnnotatedPgn(
-            game = game,
-            moveDetails = state.moveDetails,
-            analyseScores = state.analyseScores,
-            moveQualities = state.moveQualities,
-            openingName = openingName,
-            server = state.gameSelectionServer
-        )
+        val pgn = pgnForExport(state) ?: return
 
         val sendIntent = Intent().apply {
             action = Intent.ACTION_SEND
@@ -110,19 +101,27 @@ internal class ExportShareManager(
 
     fun copyPgnToClipboard(context: Context) {
         val state = getUiState()
-        val game = state.game ?: return
-        val openingName = state.currentOpeningName ?: state.openingName
-        val pgn = com.eval.export.PgnExporter.exportAnnotatedPgn(
-            game = game,
-            moveDetails = state.moveDetails,
-            analyseScores = state.analyseScores,
-            moveQualities = state.moveQualities,
-            openingName = openingName,
-            server = state.gameSelectionServer
-        )
+        val pgn = pgnForExport(state) ?: return
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val clip = ClipData.newPlainText("Chess PGN", pgn)
         clipboard.setPrimaryClip(clip)
+    }
+
+    private fun pgnForExport(state: GameUiState): String? {
+        val game = state.game ?: return null
+        return try {
+            com.eval.export.PgnExporter.exportAnnotatedPgn(
+                game = game,
+                moveDetails = state.moveDetails,
+                analyseScores = state.previewScores + state.analyseScores,
+                moveQualities = state.moveQualities,
+                openingName = state.openingName,
+                server = state.gameSelectionServer
+            )
+        } catch (e: IllegalArgumentException) {
+            updateUiState { copy(errorMessage = "PGN export failed: ${e.message}") }
+            null
+        }
     }
 
     fun exportAsGif(context: Context) {

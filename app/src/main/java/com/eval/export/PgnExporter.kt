@@ -2,8 +2,10 @@ package com.eval.export
 
 import com.eval.data.ChessServer
 import com.eval.chess.PgnParser
+import com.eval.chess.ChessBoard
 import com.eval.chess.PieceColor
 import com.eval.data.LichessGame
+import com.eval.data.OpeningBook
 import com.eval.ui.MoveDetails
 import com.eval.ui.MoveQuality
 import com.eval.ui.MoveScore
@@ -35,6 +37,19 @@ object PgnExporter {
         val sb = StringBuilder()
         val originalHeaders = PgnParser.parseHeaders(game.pgn.orEmpty())
         val startingBoard = requireNotNull(PgnParser.parseInitialBoard(game.pgn.orEmpty()))
+        val board = startingBoard.copy()
+        val openingMoves = mutableListOf<String>()
+        val sanMoves = moveDetails.mapIndexed { index, detail ->
+            val san = requireNotNull(board.sanForMove(detail.san)) { "Invalid move ${index + 1}: ${detail.san}" }
+            check(board.makeMove(san))
+            val move = board.getLastMove()!!
+            // The book matches opening prefixes, before any possible promotion.
+            openingMoves.add(move.from.toAlgebraic() + move.to.toAlgebraic())
+            san
+        }
+        val gameOpening = originalHeaders["Opening"] ?: openingName ?: if (startingBoard.getFen() == ChessBoard().getFen()) {
+            OpeningBook.getOpeningName(openingMoves)
+        } else null
         val startsWithBlack = startingBoard.getTurn() == PieceColor.BLACK
         val firstMoveNumber = startingBoard.getFen().substringAfterLast(' ').toInt()
         fun tag(name: String, value: String) {
@@ -55,7 +70,7 @@ object PgnExporter {
         sb.appendLine("[Result \"${formatResult(game.winner, game.status)}\"]")
         game.players.white.rating?.let { sb.appendLine("[WhiteElo \"$it\"]") }
         game.players.black.rating?.let { sb.appendLine("[BlackElo \"$it\"]") }
-        openingName?.let { tag("Opening", it) }
+        gameOpening?.let { tag("Opening", it) }
         if (originalHeaders["FEN"] != null) {
             tag("SetUp", "1")
             tag("FEN", startingBoard.getFen())
@@ -82,7 +97,7 @@ object PgnExporter {
             }
 
             // Add move notation
-            moveText.append(detail.san.trimEnd('!', '?'))
+            moveText.append(sanMoves[i])
 
             // Add quality symbol (NAG)
             val quality = moveQualities[i]

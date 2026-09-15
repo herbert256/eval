@@ -214,6 +214,53 @@ class EmulatorBugHuntTest {
         screenshot("rapid-navigation")
     }
 
+    @Test fun exporting_while_exploring_keeps_main_game_moves_and_opening_metadata() {
+        onUi { vm.loadGamesFromPgnContent(sample) }
+        await("Manual stage for export") { vm.uiState.value.currentStage == AnalysisStage.MANUAL && vm.uiState.value.stockfishReady }
+        onUi { vm.goToMove(0); vm.exploreLine("c7c5") }
+        await("Explored opening ready") { vm.uiState.value.currentOpeningName == "Sicilian Defense" }
+        val branchFen = vm.uiState.value.currentBoard.getFen()
+        var sent: Intent? = null
+        val shareContext = object : ContextWrapper(context) {
+            override fun startActivity(intent: Intent) { sent = intent }
+        }
+        onUi { vm.exportAnnotatedPgn(shareContext) }
+        @Suppress("DEPRECATION")
+        val pgn = sent!!.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!.getStringExtra(Intent.EXTRA_TEXT)!!
+        assertEquals(listOf("e4", "e5", "Nf3", "Nc6"), com.eval.chess.PgnParser.parseMoves(pgn))
+        assertEquals("Italian Game / Ruy Lopez Setup", com.eval.chess.PgnParser.parseHeaders(pgn)["Opening"])
+        onUi {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            val previous = clipboard.primaryClip
+            try {
+                vm.copyPgnToClipboard(context)
+                assertEquals(pgn, clipboard.primaryClip!!.getItemAt(0).text.toString())
+            } finally {
+                if (previous == null) clipboard.clearPrimaryClip() else clipboard.setPrimaryClip(previous)
+            }
+        }
+        assertEquals(branchFen, vm.uiState.value.currentBoard.getFen())
+        assertTrue(vm.uiState.value.isExploringLine)
+    }
+
+    @Test fun imported_uci_study_exports_legal_san_and_rejects_invalid_fen_without_losing_the_game() {
+        val study = "[White \"UCI Study\"]\n[Black \"Opponent\"]\n\n1. e2e4 e7e5 2. g1f3 b8c6 *"
+        onUi { vm.loadGamesFromPgnContent(study) }
+        await("UCI study analysed") { vm.uiState.value.currentStage == AnalysisStage.MANUAL && vm.uiState.value.stockfishReady }
+        val selectedFen = vm.uiState.value.currentBoard.getFen()
+        var sent: Intent? = null
+        val shareContext = object : ContextWrapper(context) {
+            override fun startActivity(intent: Intent) { sent = intent }
+        }
+        onUi { vm.exportAnnotatedPgn(shareContext) }
+        @Suppress("DEPRECATION")
+        val pgn = sent!!.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!.getStringExtra(Intent.EXTRA_TEXT)!!
+        assertEquals(listOf("e4", "e5", "Nf3", "Nc6"), com.eval.chess.PgnParser.parseMoves(pgn))
+        onUi { assertFalse(vm.startFromFen("4k3/8/8/4P3/8/8/8/4K3 w - d6 0 2")) }
+        assertEquals(selectedFen, vm.uiState.value.currentBoard.getFen())
+        assertEquals("UCI Study", vm.uiState.value.game!!.players.white.user!!.name)
+    }
+
     @Test fun nested_variations_keep_their_history_and_receive_live_analysis() {
         onUi { vm.loadGamesFromPgnContent(sample) }
         await("Manual stage before nested variation") {
