@@ -10,6 +10,24 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class SettingsImportRoundTripTest {
 
+    @Test fun retired_source_settings_do_not_reappear_in_exports_or_enable_reload() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val prefsName = "retired_source_settings_test"
+        val prefs = context.getSharedPreferences(prefsName, android.content.Context.MODE_PRIVATE)
+        val settings = SettingsPreferences(prefs)
+        try {
+            assertTrue(settings.importAllSettings("""{"schemaVersion":3,
+                "lichessUsername":"TesterLichess","retiredUsername":"OldUser",
+                "lastServerName":"retired.example","lastServerUser":"OldUser"}"""))
+            assertEquals("TesterLichess", settings.savedLichessUsername)
+            assertEquals(null, settings.lastServerName)
+            assertEquals(null, settings.lastServerUser)
+            val exported = settings.exportAllSettings()
+            assertTrue(!exported.contains("retired"))
+            assertTrue(!exported.contains("OldUser"))
+        } finally { context.deleteSharedPreferences(prefsName) }
+    }
+
     @Test
     fun typed_import_export_round_trip_restores_values() {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
@@ -18,7 +36,6 @@ class SettingsImportRoundTripTest {
         val settings = SettingsPreferences(prefs)
 
         settings.saveLichessUsername("TesterLichess")
-        settings.saveChessComUsername("TesterChessCom")
         settings.saveLichessMaxGames(17)
         settings.saveGeneralSettings(GeneralSettings(moveSoundsEnabled = false, lichessUsername = "TesterLichess", fullScreen = true))
         settings.saveStockfishSettings(
@@ -49,7 +66,6 @@ class SettingsImportRoundTripTest {
         val imported = settings.importAllSettings(exported)
         assertTrue(imported)
         assertEquals("TesterLichess", settings.savedLichessUsername)
-        assertEquals("TesterChessCom", settings.savedChessComUsername)
         assertEquals(17, settings.lichessMaxGames)
         assertEquals(false, settings.loadGeneralSettings().moveSoundsEnabled)
         assertEquals(true, settings.loadGeneralSettings().fullScreen)

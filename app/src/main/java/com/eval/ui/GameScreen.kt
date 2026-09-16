@@ -155,7 +155,7 @@ fun GameScreenContent(
                 uiState.playerInfo?.let { info ->
                     val serverName = if (uiState.playerInfoError != null) "" else when (info.server) {
                         com.eval.data.ChessServer.LICHESS -> "lichess.org"
-                        com.eval.data.ChessServer.CHESS_COM -> "chess.com"
+                        com.eval.data.ChessServer.LOCAL -> ""
                     }
                     viewModel.requestPlayerAiReport(info.username, serverName)
                 }
@@ -844,7 +844,7 @@ fun SharePositionScreen(
             Text("Generate AI Reports")
         }
 
-        // View on lichess.org / chess.com button
+        // View on lichess.org button
         if (gameSiteUrl != null) {
             val siteName = gameSiteHost(gameSiteUrl) ?: "site"
             Button(

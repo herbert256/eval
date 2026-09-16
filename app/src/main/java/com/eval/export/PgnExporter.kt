@@ -59,7 +59,7 @@ object PgnExporter {
 
         // PGN Headers
         val siteName = when (server) {
-            ChessServer.CHESS_COM -> "Chess.com"
+            ChessServer.LOCAL -> "?"
             ChessServer.LICHESS -> "Lichess.org"
         }
         tag("Event", originalHeaders["Event"] ?: game.perf ?: "Game")

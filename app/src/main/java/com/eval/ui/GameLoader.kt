@@ -54,9 +54,6 @@ internal class GameLoader(
     val savedLichessUsername: String
         get() = settingsPrefs.savedLichessUsername
 
-    val savedChessComUsername: String
-        get() = settingsPrefs.savedChessComUsername
-
     /**
      * Automatically load a game and start analysis on app startup.
      */
@@ -69,7 +66,6 @@ internal class GameLoader(
         if (username != null) {
             val server = when (serverName) {
                 "lichess.org" -> ChessServer.LICHESS
-                "chess.com" -> ChessServer.CHESS_COM
                 else -> return
             }
             val generation = ++gameSelectionGeneration
@@ -83,12 +79,12 @@ internal class GameLoader(
      * Fetch the most recent game from a specific server for a username.
      */
     suspend fun fetchLastGameFromServer(server: ChessServer, username: String) {
-        if (username.isBlank()) return
+        if (username.isBlank() || server != ChessServer.LICHESS) return
         fetchLastGameFromServer(server, username, ++gameSelectionGeneration)
     }
 
     private suspend fun fetchLastGameFromServer(server: ChessServer, username: String, generation: Long) {
-        if (username.isBlank() || generation != gameSelectionGeneration) return
+        if (username.isBlank() || server != ChessServer.LICHESS || generation != gameSelectionGeneration) return
 
         updateUiState {
             copy(
@@ -97,10 +93,7 @@ internal class GameLoader(
             )
         }
 
-        val result = when (server) {
-            ChessServer.LICHESS -> repository.getLichessGames(username, 1)
-            ChessServer.CHESS_COM -> repository.getChessComGames(username, 1)
-        }
+        val result = repository.getLichessGames(username, 1)
         if (generation != gameSelectionGeneration) return
 
         when (result) {
@@ -116,11 +109,10 @@ internal class GameLoader(
                     }
                     loadGame(games.first(), server, username)
                 } else {
-                    val serverName = if (server == ChessServer.LICHESS) "Lichess" else "Chess.com"
                     updateUiState {
                         copy(
                             isLoading = false,
-                            errorMessage = "No games found for $username on $serverName"
+                            errorMessage = "No games found for $username on Lichess"
                         )
                     }
                 }
@@ -137,17 +129,10 @@ internal class GameLoader(
     }
 
     fun fetchGames(server: ChessServer, username: String) {
+        if (server != ChessServer.LICHESS) return
         val generation = ++gameSelectionGeneration
-        when (server) {
-            ChessServer.LICHESS -> {
-                settingsPrefs.saveLichessUsername(username)
-                settingsPrefs.saveLastServerUser(username, "lichess.org")
-            }
-            ChessServer.CHESS_COM -> {
-                settingsPrefs.saveChessComUsername(username)
-                settingsPrefs.saveLastServerUser(username, "chess.com")
-            }
-        }
+        settingsPrefs.saveLichessUsername(username)
+        settingsPrefs.saveLastServerUser(username, "lichess.org")
         updateUiState { copy(hasLastServerUser = true) }
 
         settingsPrefs.setFirstGameRetrievedVersion(getAppVersionCode())
@@ -171,10 +156,7 @@ internal class GameLoader(
                 )
             }
 
-            val result = when (server) {
-                ChessServer.LICHESS -> repository.getLichessGames(username, pageSize)
-                ChessServer.CHESS_COM -> repository.getChessComGames(username, pageSize)
-            }
+            val result = repository.getLichessGames(username, pageSize)
             if (generation != gameSelectionGeneration) return@launch
 
             when (result) {
@@ -353,7 +335,7 @@ internal class GameLoader(
             copy(
                 isLoading = false,
                 game = game,
-                gameSelectionServer = server ?: gameSelectionServer,
+                gameSelectionServer = server ?: if (gameSiteUrl(game.pgn.orEmpty()) != null) ChessServer.LICHESS else ChessServer.LOCAL,
                 errorMessage = importError(parsedMoves.map { it.san }, validMoves),
                 openingName = openingName,
                 currentOpeningName = null,
@@ -475,6 +457,7 @@ internal class GameLoader(
         updateUiState {
             copy(
                 game = lichessGame,
+                gameSelectionServer = if (gameSiteUrl(analysedGame.pgn) != null) ChessServer.LICHESS else ChessServer.LOCAL,
                 moves = validMoves,
                 moveDetails = moveDetails,
                 errorMessage = importError(parsedMoves.map { it.san }, validMoves),
@@ -664,7 +647,7 @@ internal class GameLoader(
                     selectedRetrieveGames = games,
                     gameSelectionPage = 0,
                     gameSelectionLoading = false,
-                    gameSelectionHasMore = games.size >= 25,
+                    gameSelectionHasMore = entry.server == ChessServer.LICHESS && games.size >= 25,
                     errorMessage = null
                 )
             }
@@ -706,16 +689,13 @@ internal class GameLoader(
 
         // Fill the next page before showing it. Otherwise a partial page from
         // the initial batch skips its missing games when the user taps Next again.
-        if (nextPageEndIndex > currentGames.size && hasMore) {
+        if (nextPageEndIndex > currentGames.size && hasMore && entry.server == ChessServer.LICHESS) {
             val generation = gameSelectionGeneration
             updateUiState { copy(gameSelectionLoading = true, errorMessage = null) }
 
             viewModelScope.launch {
                 val newCount = nextPageEndIndex
-                val gamesResult = when (entry.server) {
-                    ChessServer.LICHESS -> repository.getLichessGames(entry.accountName, newCount)
-                    ChessServer.CHESS_COM -> repository.getChessComGames(entry.accountName, newCount)
-                }
+                val gamesResult = repository.getLichessGames(entry.accountName, newCount)
                 if (generation != gameSelectionGeneration) return@launch
                 when (gamesResult) {
                     is Result.Success -> {

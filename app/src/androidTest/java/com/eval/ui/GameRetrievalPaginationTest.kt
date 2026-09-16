@@ -61,6 +61,60 @@ class GameRetrievalPaginationTest {
         coroutineContext[Job]!!.children.toList().joinAll()
     }
 
+    @Test fun retired_sources_keep_cached_games_after_index_updates_and_page_without_network() = runBlocking {
+        val h = Harness(this, 25)
+        try {
+            h.loader.fetchGames(ChessServer.LICHESS, "tester")
+            settle()
+            val storage = GameStorageManager(h.prefs, Gson())
+            val games = h.state.selectedRetrieveGames
+            val firstKey = SettingsPreferences.KEY_RETRIEVED_GAMES_PREFIX + "retired_source_tester"
+            val secondKey = SettingsPreferences.KEY_RETRIEVED_GAMES_PREFIX + "another_source_tester"
+            h.prefs.edit()
+                .putString(firstKey, Gson().toJson(games))
+                .putString(secondKey, Gson().toJson(games.take(2)))
+                .putString(SettingsPreferences.KEY_RETRIEVES_LIST,
+                    """[{"accountName":"Tester","server":"RETIRED_SOURCE"},
+                        {"accountName":"Tester","server":"ANOTHER_SOURCE"},
+                        {"accountName":"tester","server":"LICHESS"}]""")
+                .commit()
+            storage.storeRetrievedGames(games.take(3), "tester", ChessServer.LICHESS)
+            val entries = storage.loadRetrievesList()
+            val localEntries = entries.filter { it.server == ChessServer.LOCAL }
+            assertEquals(2, localEntries.size)
+            assertEquals(25, storage.loadGamesForRetrieve(localEntries[0]).size)
+            assertEquals(2, storage.loadGamesForRetrieve(localEntries[1]).size)
+            assertEquals(3, storage.loadGamesForRetrieve(entries.first()).size)
+            h.requests.clear()
+            h.loader.selectPreviousRetrieve(localEntries.first())
+            assertFalse(h.state.gameSelectionHasMore)
+            h.loader.nextGameSelectionPage(19)
+            settle()
+            assertEquals((20..25).map { "game-$it" }, h.visibleIds(19))
+            h.loader.nextGameSelectionPage(19)
+            settle()
+            assertEquals(1, h.state.gameSelectionPage)
+            assertTrue(h.requests.isEmpty())
+        } finally { h.close() }
+    }
+
+    @Test fun local_history_cannot_start_an_online_retrieval_or_replace_current_selection() = runBlocking {
+        val h = Harness(this, 25)
+        try {
+            h.loader.fetchGames(ChessServer.LICHESS, "tester")
+            settle()
+            val before = h.state
+            h.requests.clear()
+            h.loader.fetchGames(ChessServer.LOCAL, "tester")
+            h.loader.fetchLastGameFromServer(ChessServer.LOCAL, "tester")
+            settle()
+            assertEquals(before, h.state)
+            assertTrue(h.requests.isEmpty())
+            val result = ChessRepository().getPlayerInfo("tester", ChessServer.LOCAL)
+            assertTrue(result is com.eval.data.Result.Error)
+        } finally { h.close() }
+    }
+
     @Test fun every_game_is_reachable_when_batch_and_page_sizes_differ() = runBlocking {
         val h = Harness(this, 70)
         try {

@@ -29,7 +29,7 @@ cp app/build/outputs/apk/debug/app-debug.apk /Users/herbert/cloud/eval.apk
 
 ## Project Overview
 
-Eval is an Android chess analysis app. It fetches games from Lichess.org and Chess.com, parses PGN, and provides three-stage Stockfish 17.1 analysis with an interactive board. AI reports are delegated to an external companion app (`com.ai`).
+Eval is an Android chess analysis app. It fetches games from Lichess.org, parses PGN, and provides three-stage Stockfish analysis with an interactive board. AI reports are delegated to an external companion app (`com.ai`).
 
 **Codebase:** 47 Kotlin files, ~23,000 lines | **SDK:** minSdk 26, targetSdk 34 | **UI:** Jetpack Compose + Material 3
 
@@ -45,9 +45,8 @@ com.eval/
 │   └── PgnParser.kt (98) - PGN parsing with clock time extraction
 ├── data/
 │   ├── LichessApi.kt (304) - Retrofit interface for Lichess API
-│   ├── ChessComApi.kt (178) - Retrofit interface for Chess.com API
 │   ├── LichessModels.kt (40) - Data classes: LichessGame, Players, Clock
-│   ├── LichessRepository.kt (1,365) - Repository with ChessServer enum (Lichess + Chess.com)
+│   ├── LichessRepository.kt (1,365) - Repository with ChessServer enum (Lichess + local history)
 │   ├── OpeningBook.kt (217) - ECO opening identification
 │   └── OpeningExplorerApi.kt (57) - Opening statistics API
 ├── stockfish/
@@ -119,7 +118,7 @@ object NavRoutes {
 
 | Enum | Values |
 |------|--------|
-| `ChessServer` | `LICHESS`, `CHESS_COM` |
+| `ChessServer` | `LICHESS`, `LOCAL` |
 | `AnalysisStage` | `PREVIEW`, `ANALYSE`, `MANUAL` |
 | `ArrowMode` | `NONE`, `MAIN_LINE`, `MULTI_LINES` |
 | `PlayerBarMode` | `NONE`, `TOP`, `BOTTOM`, `BOTH` |
@@ -178,8 +177,6 @@ AI reports use Android intents to the external `com.ai` app:
 
 **Lichess.org:** User games (NDJSON streaming), tournaments, broadcasts, TV channels, top rankings, streamers, live game following
 
-**Chess.com:** User games (monthly archives), top rankings, daily puzzle
-
 **Local:** PGN file upload (with ZIP support), ECO opening selection (A00-E99), FEN position entry (with history), previously analysed games
 
 ## Settings Persistence
@@ -189,7 +186,7 @@ All settings via `SettingsPreferences` using SharedPreferences (`eval_prefs`). K
 - Board layout: colors, coordinates, player bars, eval bar
 - Graph: colors, ranges, scales
 - Interface visibility: ~23 toggles across 3 stages
-- General: move sounds, Lichess username, Chess.com username
+- General: move sounds, Lichess username
 - AI instructions: JSON list of `AiInstructionEntry`
 - Settings export/import: Full JSON round-trip with type preservation
 
@@ -244,7 +241,7 @@ Use `restartAnalysisForExploringLine()` in `AnalysisOrchestrator`: stop -> newGa
 - [ ] Build: `JAVA_HOME=/opt/homebrew/opt/openjdk@17 ./gradlew assembleDebug`
 - [ ] No `AlertDialog`, `Dialog`, or `ExposedDropdownMenu` in UI code
 - [ ] Title bar visible on all screens
-- [ ] Load game from Lichess and Chess.com
+- [ ] Load game from Lichess
 - [ ] Full analysis pipeline (Preview -> Analyse -> Manual)
 - [ ] Arrow modes cycle correctly
 - [ ] Settings persist across restarts

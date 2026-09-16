@@ -70,8 +70,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val savedLichessUsername: String
         get() = settingsPrefs.savedLichessUsername
 
-    val savedChessComUsername: String
-        get() = settingsPrefs.savedChessComUsername
 
     private fun loadStockfishSettings(): StockfishSettings = settingsPrefs.loadStockfishSettings()
     private fun saveStockfishSettings(settings: StockfishSettings) = settingsPrefs.saveStockfishSettings(settings)
@@ -212,7 +210,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val retrievesList = gameStorage.loadRetrievesList()
             val hasPreviousRetrieves = retrievesList.isNotEmpty()
             val hasAnalysedGames = gameStorage.hasManualGames()
-            val hasLastServerUser = settingsPrefs.lastServerUser != null
+            val hasLastServerUser = settingsPrefs.lastServerUser != null && settingsPrefs.lastServerName == "lichess.org"
 
             _uiState.update { it.copy(
                 stockfishSettings = settings,
@@ -431,16 +429,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun selectTvGame(channel: TvChannelInfo) = contentSourceManager.selectTvGame(channel)
     fun dismissLichessTv() = contentSourceManager.dismissLichessTv()
 
-    fun showDailyPuzzle() = contentSourceManager.showDailyPuzzle()
-    fun dismissDailyPuzzle() = contentSourceManager.dismissDailyPuzzle()
-
     fun showStreamers() = contentSourceManager.showStreamers()
     fun selectStreamer(streamer: StreamerInfo) = contentSourceManager.selectStreamer(streamer) { username, server ->
         contentSourceManager.showPlayerInfoWithServer(username, server)
     }
     fun dismissStreamers() = contentSourceManager.dismissStreamers()
 
-    fun showPlayerInfo(username: String) = contentSourceManager.showPlayerInfo(username, null)
+    fun showPlayerInfo(username: String) = contentSourceManager.showPlayerInfoWithServer(
+        username, if (getGameSiteUrl() != null) ChessServer.LICHESS else ChessServer.LOCAL
+    )
     fun showPlayerInfo(username: String, server: ChessServer) = contentSourceManager.showPlayerInfoWithServer(username, server)
     fun nextPlayerGamesPage(pageSize: Int) = contentSourceManager.nextPlayerGamesPage(pageSize)
     fun previousPlayerGamesPage() = contentSourceManager.previousPlayerGamesPage()
@@ -478,7 +475,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     fun getCurrentFen(): String = exportShareManager.getCurrentFen()
 
-    /** Extract the Site URL from the current game's PGN headers, if it's a lichess.org or chess.com URL. */
+    /** Extract the Site URL from the current game's PGN headers, if it's a lichess.org URL. */
     fun getGameSiteUrl(): String? {
         val pgn = _uiState.value.game?.pgn ?: return null
         return gameSiteUrl(pgn)

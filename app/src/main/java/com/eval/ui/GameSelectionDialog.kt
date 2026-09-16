@@ -28,7 +28,7 @@ fun GameSelectionScreen(
     onSelectGame: (LichessGame) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val serverName = if (server == ChessServer.LICHESS) "Lichess" else "Chess.com"
+    val serverName = if (server == ChessServer.LICHESS) "Lichess" else "Local"
 
     // Handle back navigation
     BackHandler { onDismiss() }
@@ -245,7 +245,7 @@ private fun RetrieveListItem(
     entry: RetrievedGamesEntry,
     onClick: () -> Unit
 ) {
-    val serverName = if (entry.server == ChessServer.LICHESS) "lichess.org" else "chess.com"
+    val serverName = if (entry.server == ChessServer.LICHESS) "lichess.org" else "Local"
     val rowBackgroundColor = AppColors.CardBackground  // Dark gray
     val rowTextColor = Color.White
 
@@ -305,7 +305,7 @@ fun SelectedRetrieveGamesScreen(
     onSelectGame: (LichessGame) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val serverName = if (entry.server == ChessServer.LICHESS) "lichess.org" else "chess.com"
+    val serverName = if (entry.server == ChessServer.LICHESS) "lichess.org" else "Local"
     val serverColor = AppColors.PaginationLink
 
     // Handle back navigation

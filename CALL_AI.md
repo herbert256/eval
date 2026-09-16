@@ -110,7 +110,7 @@ There are two stages:
 |---|---|
 | `<fen>…</fen>` | Current position, including an explored variation. |
 | `<color>…</color>` | `White` or `Black`, from the FEN's side to move. |
-| `<server>…</server>` | `lichess.org` / `chess.com` when known, otherwise empty. |
+| `<server>…</server>` | `lichess.org` when known, otherwise empty. |
 | `<player>…</player>` | Side-to-move player's name for a position report; selected player for a profile report. May be empty when unknown. |
 | `<pgn>…</pgn>` | Available game PGN; the separate FEN is authoritative for the current position. |
 | `<board>…</board>` | Generated board HTML/JavaScript. |

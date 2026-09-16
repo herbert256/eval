@@ -49,6 +49,8 @@ class BoardSwipeNavigationTest {
                                 onMove = { from, to -> moves.add(from to to) },
                                 onPreviousMove = { navigation.add("previous") },
                                 onNextMove = { navigation.add("next") },
+                                onGoToStart = { navigation.add("start") },
+                                onGoToEnd = { navigation.add("end") },
                                 modifier = Modifier.onGloballyPositioned { measuredBounds.set(it.boundsInWindow()) })
                         }
                     }
@@ -87,6 +89,31 @@ class BoardSwipeNavigationTest {
             }
             send(if (cancel) MotionEvent.ACTION_CANCEL else MotionEvent.ACTION_UP, x2, y2)
             instrumentation.waitForIdleSync()
+        }
+
+        fun tap(x: Float, y: Float) {
+            val bounds = measuredBounds.get()
+            val down = SystemClock.uptimeMillis()
+            for (action in listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP)) {
+                val event = MotionEvent.obtain(down, SystemClock.uptimeMillis(), action,
+                    bounds.left + x * bounds.width, bounds.top + y * bounds.height, 0)
+                instrumentation.sendPointerSync(event)
+                event.recycle()
+                SystemClock.sleep(30)
+            }
+        }
+
+        fun settleTaps() {
+            SystemClock.sleep(android.view.ViewConfiguration.getDoubleTapTimeout().toLong() + 50)
+            instrumentation.waitForIdleSync()
+        }
+
+        fun tapPair(x1: Float, y1: Float, x2: Float = x1, y2: Float = y1, between: (() -> Unit)? = null) {
+            tap(x1, y1)
+            SystemClock.sleep(70)
+            between?.invoke()
+            tap(x2, y2)
+            settleTaps()
         }
 
         override fun close() = scenario.close()
@@ -128,6 +155,50 @@ class BoardSwipeNavigationTest {
             fixture.setEnabled(true)
             fixture.swipe(.2f, .3f, .8f, .3f)
             assertEquals(listOf("next"), fixture.navigation.toList())
+        }
+    }
+
+    @Test fun double_taps_jump_by_screen_half_in_both_orientations_including_own_pieces() {
+        for (flipped in listOf(false, true)) {
+            Fixture(flipped).use { fixture ->
+                fixture.tapPair(.2f, .3f)
+                fixture.tapPair(.8f, .3f)
+                fixture.tapPair(if (flipped) .5625f else .4375f, if (flipped) .4375f else .5625f)
+                assertEquals(listOf("start", "end", if (flipped) "end" else "start"), fixture.navigation.toList())
+                assertTrue(fixture.moves.isEmpty())
+            }
+        }
+    }
+
+    @Test fun quick_taps_on_different_squares_still_make_piece_moves() {
+        Fixture().use { fixture ->
+            fixture.tapPair(.4375f, .5625f, .5625f, .5625f) // d4-e4 crosses the middle.
+            fixture.tapPair(.4375f, .5625f, .3125f, .5625f) // d4-c4 stays in the left half.
+            assertEquals(listOf(Square(3, 3) to Square(4, 3), Square(3, 3) to Square(2, 3)), fixture.moves.toList())
+            assertTrue(fixture.navigation.isEmpty())
+        }
+    }
+
+    @Test fun double_taps_are_disabled_outside_manual_mode_and_cancel_when_it_ends() {
+        Fixture(enabled = false).use { fixture ->
+            fixture.tapPair(.2f, .3f)
+            fixture.tapPair(.8f, .3f)
+            fixture.setEnabled(true)
+            fixture.tapPair(.2f, .3f, between = { fixture.setEnabled(false) })
+            assertTrue(fixture.navigation.isEmpty())
+            fixture.setEnabled(true)
+            fixture.tapPair(.8f, .3f)
+            assertEquals(listOf("end"), fixture.navigation.toList())
+        }
+    }
+
+    @Test fun dragging_a_selected_piece_does_not_trigger_double_tap_navigation() {
+        Fixture().use { fixture ->
+            fixture.tap(.4375f, .5625f)
+            fixture.settleTaps()
+            fixture.swipe(.4375f, .5625f, .0625f, .5625f)
+            assertEquals(listOf(Square(3, 3) to Square(0, 3)), fixture.moves.toList())
+            assertTrue(fixture.navigation.isEmpty())
         }
     }
 }

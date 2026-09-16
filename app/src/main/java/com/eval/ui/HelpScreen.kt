@@ -24,13 +24,13 @@ private data class HelpEntry(
 private val helpSections = listOf(
     HelpEntry(
         title = "Welcome to Eval",
-        content = "Analyze your chess games from Lichess.org and Chess.com with the powerful Stockfish engine and 9 AI services. " +
+        content = "Analyze your chess games from Lichess.org with the powerful Stockfish engine and 9 AI services. " +
             "The app automatically fetches your games and provides deep analysis to help you improve."
     ),
     HelpEntry(
         title = "Getting Started",
         icon = "\uD83D\uDE80",
-        content = "Enter your username in the Lichess or Chess.com card and tap 'Retrieve' to fetch games. " +
+        content = "Enter your username in the Lichess card and tap 'Retrieve' to fetch games. " +
             "You can also browse tournaments, broadcasts, TV channels, streamers, or import PGN files. " +
             "Select a game to start the analysis. The app remembers your last game for quick startup."
     ),
@@ -108,8 +108,6 @@ private val helpSections = listOf(
         icon = "\uD83C\uDFAE",
         content = "Lichess.org:\n" +
             "• User games, Tournaments, Broadcasts, TV channels, Streamers, Rankings\n\n" +
-            "Chess.com:\n" +
-            "• User games, Daily puzzle, Rankings\n\n" +
             "Local sources:\n" +
             "• PGN files (with ZIP support), ECO openings, FEN positions, Game history"
     ),
@@ -177,6 +175,7 @@ private val helpSections = listOf(
             "• Enable 'Red border for player to move' to see whose turn it is\n" +
             "• Move list shows colored scores - green moves are good, red are mistakes\n" +
             "• In Manual mode, swipe left for the previous move or right for the next; start on an empty square or an opponent's piece to avoid dragging your own piece\n" +
+            "• Double-tap the left half of the board for the start position, or the right half for the last move\n" +
             "• Enable Full screen in Settings → General settings to hide system bars; swipe from an edge to reveal them"
     ),
     HelpEntry(
@@ -192,7 +191,7 @@ private val helpSections = listOf(
         title = "Developer: API Tracing",
         icon = "\uD83D\uDC1B",
         content = "Enable 'Track API calls' in General settings to log all network requests:\n\n" +
-            "• All Lichess, Chess.com, and AI service calls are logged\n" +
+            "• All Lichess and AI service calls are logged\n" +
             "• View requests/responses in the trace viewer\n" +
             "• Useful for debugging API issues\n" +
             "• Traces are cleared when tracking is disabled"
@@ -201,7 +200,7 @@ private val helpSections = listOf(
         title = "About",
         icon = "ℹ",
         content = "Eval uses the installed Stockfish engine. Its reported version appears in the Stockfish card.\n\n" +
-            "Game data from Lichess.org and Chess.com public APIs.\n\n" +
+            "Game data from Lichess.org public APIs.\n\n" +
             "AI analysis from OpenAI, Anthropic, Google, xAI, DeepSeek, Mistral, Perplexity, Together AI, and OpenRouter.\n\n" +
             "All data stored locally on your device."
     )

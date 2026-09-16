@@ -5,7 +5,6 @@ import com.eval.data.ChessServer
 import com.eval.data.TournamentInfo
 import com.eval.data.BroadcastInfo
 import com.eval.data.TvChannelInfo
-import com.eval.data.PuzzleInfo
 import com.eval.data.StreamerInfo
 import com.eval.data.LichessGame
 import com.eval.data.PlayerInfo
@@ -110,7 +109,6 @@ object AppColors {
     val AccentBlue = Color(0xFF6B9BFF)
     val BlueGrayAccent = Color(0xFF3A5A7C)
     val LichessGreen = Color(0xFF629924)
-    val ChessComGreen = Color(0xFF769656)
     val ButtonGreen = Color(0xFF6B8E23)
     val PositiveGreen = Color(0xFF00E676)
     val NegativeRed = Color(0xFFFF5252)
@@ -309,7 +307,9 @@ data class AnalysedGame(
 // Entry in the list of previous game retrieves
 data class RetrievedGamesEntry(
     val accountName: String,
-    val server: ChessServer
+    val server: ChessServer,
+    // Keep the cached payload accessible when a former online source becomes local.
+    val cachedGamesKey: String? = null
 )
 
 data class GameUiState(
@@ -424,11 +424,7 @@ data class GameUiState(
     val tvLoading: Boolean = false,
     val tvError: String? = null,
     val tvChannels: List<TvChannelInfo> = emptyList(),
-    // Daily puzzle (Chess.com)
-    val showDailyPuzzleScreen: Boolean = false,
-    val dailyPuzzleLoading: Boolean = false,
-    val dailyPuzzle: PuzzleInfo? = null,
-    // Streamers (Chess.com)
+    // Streamers (Lichess)
     val showStreamersScreen: Boolean = false,
     val streamersLoading: Boolean = false,
     val streamersList: List<StreamerInfo> = emptyList(),

@@ -48,6 +48,8 @@ fun ChessBoardView(
     onTap: (() -> Unit)? = null,
     onPreviousMove: (() -> Unit)? = null,
     onNextMove: (() -> Unit)? = null,
+    onGoToStart: (() -> Unit)? = null,
+    onGoToEnd: (() -> Unit)? = null,
     moveArrows: List<MoveArrow> = emptyList(),  // Up to 8 arrows from PV line
     showArrowNumbers: Boolean = false,  // Show move numbers on arrows
     whiteArrowColor: Color = Color(0xCC3399FF),  // Default blue
@@ -65,6 +67,9 @@ fun ChessBoardView(
     val currentOnMove by rememberUpdatedState(onMove)
     val currentOnPreviousMove by rememberUpdatedState(onPreviousMove)
     val currentOnNextMove by rememberUpdatedState(onNextMove)
+    val currentOnGoToStart by rememberUpdatedState(onGoToStart)
+    val currentOnGoToEnd by rememberUpdatedState(onGoToEnd)
+    val hasJumpNavigation = onGoToStart != null || onGoToEnd != null
 
     // Selection and drag state
     var selectedSquare by remember { mutableStateOf<Square?>(null) }
@@ -110,11 +115,12 @@ fun ChessBoardView(
                     Modifier.pointerInput(Unit) {
                         detectTapGestures { onTap() }
                     }
-                } else if (interactionEnabled && (onMove != null || onPreviousMove != null || onNextMove != null)) {
+                } else if (interactionEnabled && (onMove != null || onPreviousMove != null || onNextMove != null || hasJumpNavigation)) {
                     Modifier
-                        .pointerInput(board, board.getFen(), flipped) {
-                            detectTapGestures { offset ->
-                                if (currentOnMove == null) return@detectTapGestures
+                        .pointerInput(board, board.getFen(), flipped, hasJumpNavigation) {
+                            var firstTap: Offset? = null
+                            fun handleSingleTap(offset: Offset) {
+                                if (currentOnMove == null) return
                                 squareSize = size.width / 8f
                                 val tappedSquare = positionToSquare(offset.x, offset.y, squareSize)
                                 if (tappedSquare != null) {
@@ -139,6 +145,33 @@ fun ChessBoardView(
                                     }
                                 }
                             }
+                            detectTapGestures(
+                                onPress = { offset ->
+                                    if (firstTap == null) firstTap = offset
+                                    if (!tryAwaitRelease()) firstTap = null
+                                },
+                                onDoubleTap = if (hasJumpNavigation) { offset ->
+                                    val first = firstTap
+                                    firstTap = null
+                                    // Compose pairs taps by time only. Keep fast source/target
+                                    // taps as piece moves unless both taps are close together.
+                                    val sameHalf = first != null && (first.x < size.width / 2f) == (offset.x < size.width / 2f)
+                                    val tolerance = minOf(viewConfiguration.touchSlop * 2, size.width / 16f)
+                                    if (sameHalf && first != null && (offset - first).getDistance() <= tolerance) {
+                                        selectedSquare = null
+                                        legalMoves = emptySet()
+                                        if (offset.x < size.width / 2f) currentOnGoToStart?.invoke()
+                                        else currentOnGoToEnd?.invoke()
+                                    } else {
+                                        first?.let(::handleSingleTap)
+                                        handleSingleTap(offset)
+                                    }
+                                } else null,
+                                onTap = { offset ->
+                                    firstTap = null
+                                    handleSingleTap(offset)
+                                }
+                            )
                         }
                         .pointerInput(board, board.getFen(), flipped) {
                             var gestureStart: Offset? = null

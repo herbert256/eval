@@ -19,7 +19,7 @@ The selected instruction text is followed by these six tags, in this order, even
 
 - `fen`: the current position, including an explored variation.
 - `color`: `White` or `Black`, read from that FEN.
-- `server`: `lichess.org` or `chess.com` when known. Local FEN positions have no server.
+- `server`: `lichess.org` when known. Local FEN positions have no server.
 - `player`: for position reports, the side-to-move player's name; for profile reports, the selected player.
 - `pgn`: the available full game PGN. The separate FEN is authoritative for the current position.
 - `board`: generated chessboard HTML/JavaScript. It belongs in report presentation, not model request bodies.

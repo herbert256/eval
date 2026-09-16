@@ -50,10 +50,10 @@ class AiInstructionHandoffIntegrationTest {
     }
 
     @Test fun player_request_has_empty_position_context_and_no_stale_game() {
-        val payload = send(AiReportContext(title = "Profile", player = "Example", server = "chess.com"))
+        val payload = send(AiReportContext(title = "Profile", player = "Example", server = "lichess.org"))
         for (tag in listOf("fen", "color", "pgn", "board")) assertTrue(payload.contains("<$tag></$tag>"))
         assertTrue(payload.contains("<player>Example</player>"))
-        assertTrue(payload.contains("<server>chess.com</server>"))
+        assertTrue(payload.contains("<server>lichess.org</server>"))
     }
 
     @Test fun context_data_cannot_become_control_tags_and_tokens_expand_once() {

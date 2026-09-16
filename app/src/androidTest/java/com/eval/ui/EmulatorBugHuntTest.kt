@@ -78,10 +78,10 @@ class EmulatorBugHuntTest {
 
     @Test fun imported_site_links_accept_only_supported_web_hosts() {
         val sites = listOf(
-            "https://lichess.org/abcd1234", "https://www.chess.com/game/live/1234",
+            "https://lichess.org/abcd1234", "https://www.lichess.org/abcd1234",
             "https://LICHESS.ORG/abcd1234", "lichess.org/abcd1234",
             "javascript:lichess.org", "https://lichess.org.example.com/game",
-            "https://example.com/chess.com/game", "https://chess.com@elsewhere.example/game"
+            "https://example.com/lichess.org/game", "https://lichess.org@elsewhere.example/game"
         )
         val actual = sites.map { site ->
             var result: String? = null
@@ -460,17 +460,12 @@ class EmulatorBugHuntTest {
         } finally { scope.cancel() }
     }
 
-    @Test fun public_games_can_be_retrieved_from_both_servers() = runBlocking {
-        val repository = ChessRepository()
-        for ((label, result) in listOf(
-            "Lichess" to repository.getLichessGames("DrNykterstein", 1),
-            "Chess.com" to repository.getChessComGames("hikaru", 1)
-        )) {
-            assertTrue("$label: $result", result is Result.Success)
-            val games = (result as Result.Success).data
-            assertTrue(label, games.isNotEmpty())
-            assertFalse(label, games.first().pgn.isNullOrBlank())
-        }
+    @Test fun public_games_can_be_retrieved_from_lichess() = runBlocking {
+        val result = ChessRepository().getLichessGames("DrNykterstein", 1)
+        assertTrue("Lichess: $result", result is Result.Success)
+        val games = (result as Result.Success).data
+        assertTrue(games.isNotEmpty())
+        assertFalse(games.first().pgn.isNullOrBlank())
     }
 
     @Test fun pgn_collection_selection_analyses_both_games_and_keeps_the_draw() {

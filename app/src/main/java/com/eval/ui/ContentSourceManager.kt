@@ -60,7 +60,7 @@ internal class ContentSourceManager(
                 updateUiState {
                     copy(
                         tournamentsLoading = false,
-                        tournamentsError = "Chess.com tournaments not yet supported"
+                        tournamentsError = "Tournaments are available on Lichess"
                     )
                 }
             }
@@ -306,35 +306,6 @@ internal class ContentSourceManager(
         }
     }
 
-    // ==================== CHESS.COM DAILY PUZZLE ====================
-
-    fun showDailyPuzzle() {
-        updateUiState {
-            copy(
-                showDailyPuzzleScreen = true,
-                dailyPuzzleLoading = true,
-                dailyPuzzle = null
-            )
-        }
-
-        viewModelScope.launch {
-            handleApiResult(
-                result = repository.getChessComDailyPuzzle(),
-                onSuccess = { copy(dailyPuzzleLoading = false, dailyPuzzle = it) },
-                onError = { copy(dailyPuzzleLoading = false, errorMessage = it) }
-            )
-        }
-    }
-
-    fun dismissDailyPuzzle() {
-        updateUiState {
-            copy(
-                showDailyPuzzleScreen = false,
-                dailyPuzzle = null
-            )
-        }
-    }
-
     // ==================== LICHESS STREAMERS ====================
 
     fun showStreamers() {
@@ -370,11 +341,6 @@ internal class ContentSourceManager(
     }
 
     // ==================== PLAYER INFO & RANKINGS ====================
-
-    fun showPlayerInfo(username: String, server: ChessServer?) {
-        // Always use Lichess as default server
-        showPlayerInfoWithServer(username, server ?: ChessServer.LICHESS)
-    }
 
     fun showPlayerInfoWithServer(username: String, server: ChessServer) {
         updateUiState {
@@ -435,7 +401,8 @@ internal class ContentSourceManager(
                             showPlayerInfoScreen = true,
                             playerInfoLoading = false,
                             playerInfo = minimalPlayerInfo,
-                            playerInfoError = "Profile not found on ${server.name.replace("_", ".")}",
+                            playerInfoError = if (server == ChessServer.LOCAL) "Online profiles are only available for Lichess games"
+                                else "Profile not found on Lichess",
                             playerGamesLoading = false,
                             playerGames = emptyList(),
                             playerGamesHasMore = false
@@ -449,7 +416,7 @@ internal class ContentSourceManager(
     private suspend fun fetchPlayerGames(username: String, server: ChessServer, count: Int) {
         val result = when (server) {
             ChessServer.LICHESS -> repository.getLichessGames(username, count)
-            ChessServer.CHESS_COM -> repository.getChessComGames(username, count)
+            ChessServer.LOCAL -> Result.Error("Online retrieval is unavailable for local games")
         }
         handleApiResult(
             result = result,
@@ -486,7 +453,7 @@ internal class ContentSourceManager(
                 val newCount = currentGames.size + pageSize
                 val result = when (playerInfo.server) {
                     ChessServer.LICHESS -> repository.getLichessGames(playerInfo.username, newCount)
-                    ChessServer.CHESS_COM -> repository.getChessComGames(playerInfo.username, newCount)
+                    ChessServer.LOCAL -> Result.Error("Online retrieval is unavailable for local games")
                 }
                 handleApiResult(
                     result = result,
@@ -564,7 +531,7 @@ internal class ContentSourceManager(
         viewModelScope.launch {
             val result = when (server) {
                 ChessServer.LICHESS -> repository.getLichessLeaderboard()
-                ChessServer.CHESS_COM -> repository.getChessComLeaderboard()
+                ChessServer.LOCAL -> Result.Error("Rankings are available on Lichess")
             }
 
             handleApiResult(

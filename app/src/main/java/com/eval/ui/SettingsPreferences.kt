@@ -14,7 +14,6 @@ data class SettingsSnapshotV3(
     val generalSettings: GeneralSettings = GeneralSettings(),
     val aiInstructions: List<AiInstructionEntry> = emptyList(),
     val lichessUsername: String = "DrNykterstein",
-    val chessComUsername: String = "MagnusCarlsen",
     val lichessMaxGames: Int = 10,
     val aiAppDontAskAgain: Boolean = false,
     val firstGameRetrievedVersion: Long = 0L,
@@ -64,9 +63,6 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
     val savedLichessUsername: String
         get() = prefs.getString(KEY_LICHESS_USERNAME, "DrNykterstein") ?: "DrNykterstein"
 
-    val savedChessComUsername: String
-        get() = prefs.getString(KEY_CHESSCOM_USERNAME, "MagnusCarlsen") ?: "MagnusCarlsen"
-
     val lichessMaxGames: Int
         get() = prefs.getInt(KEY_LICHESS_MAX_GAMES, 10)
 
@@ -76,10 +72,6 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
 
     fun saveLichessUsername(username: String) {
         prefs.edit().putString(KEY_LICHESS_USERNAME, username).apply()
-    }
-
-    fun saveChessComUsername(username: String) {
-        prefs.edit().putString(KEY_CHESSCOM_USERNAME, username).apply()
     }
 
     fun saveLichessMaxGames(max: Int) {
@@ -394,7 +386,6 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             generalSettings = loadGeneralSettings(),
             aiInstructions = loadAiInstructions(),
             lichessUsername = savedLichessUsername,
-            chessComUsername = savedChessComUsername,
             lichessMaxGames = lichessMaxGames,
             aiAppDontAskAgain = getAiAppDontAskAgain(),
             firstGameRetrievedVersion = getFirstGameRetrievedVersion(),
@@ -444,7 +435,6 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         val editor = replacingSettingsEditor()
 
         editor.putString(KEY_LICHESS_USERNAME, snapshot.lichessUsername)
-        editor.putString(KEY_CHESSCOM_USERNAME, snapshot.chessComUsername)
         editor.putInt(KEY_LICHESS_MAX_GAMES, snapshot.lichessMaxGames.coerceIn(1, 25))
 
         editor.putBoolean(KEY_MOVE_SOUNDS_ENABLED, snapshot.generalSettings.moveSoundsEnabled)
@@ -601,8 +591,6 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         private const val KEY_LICHESS_USERNAME = "lichess_username"
         private const val KEY_LICHESS_MAX_GAMES = "lichess_max_games"
 
-        // Chess.com settings
-        private const val KEY_CHESSCOM_USERNAME = "chesscom_username"
 
         // Retrieved games storage - list of lists
         const val KEY_RETRIEVES_LIST = "retrieves_list"
@@ -749,9 +737,9 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
     }
 
     val lastServerUser: String?
-        get() = prefs.getString(KEY_LAST_SERVER_USER, null)
+        get() = if (lastServerName != null) prefs.getString(KEY_LAST_SERVER_USER, null) else null
 
     val lastServerName: String?
-        get() = prefs.getString(KEY_LAST_SERVER_NAME, null)
+        get() = prefs.getString(KEY_LAST_SERVER_NAME, null)?.takeIf { it == "lichess.org" }
 
 }

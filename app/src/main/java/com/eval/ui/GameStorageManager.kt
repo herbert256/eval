@@ -4,6 +4,7 @@ import android.content.SharedPreferences
 import com.eval.data.ChessServer
 import com.eval.data.LichessGame
 import com.google.gson.Gson
+import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
 
 /**
@@ -41,6 +42,10 @@ class GameStorageManager(
         return "${SettingsPreferences.KEY_RETRIEVED_GAMES_PREFIX}${serverPrefix}_${accountName.lowercase()}"
     }
 
+    private fun getRetrievedGamesKey(entry: RetrievedGamesEntry): String =
+        entry.cachedGamesKey?.takeIf { it.startsWith(SettingsPreferences.KEY_RETRIEVED_GAMES_PREFIX) }
+            ?: getRetrievedGamesKey(entry.accountName, entry.server)
+
     /**
      * Store retrieved games for a specific account.
      */
@@ -61,7 +66,7 @@ class GameStorageManager(
         // Trim to max size
         while (retrievesList.size > SettingsPreferences.MAX_RETRIEVES) {
             val removed = retrievesList.removeAt(retrievesList.size - 1)
-            trimmedKeys.add(getRetrievedGamesKey(removed.accountName, removed.server))
+            trimmedKeys.add(getRetrievedGamesKey(removed))
         }
 
         // Single atomic editor apply — previously the three writes (remove old
@@ -85,14 +90,33 @@ class GameStorageManager(
      * Load the list of previous retrieves.
      */
     fun loadRetrievesList(): List<RetrievedGamesEntry> {
-        return loadJsonList(SettingsPreferences.KEY_RETRIEVES_LIST)
+        val json = prefs.getString(SettingsPreferences.KEY_RETRIEVES_LIST, null) ?: return emptyList()
+        return try {
+            JsonParser().parse(json).asJsonArray.mapNotNull { element ->
+                // Retired sources remain usable as local history. Keep their original
+                // payload key instead of relabelling them as online Lichess games.
+                runCatching {
+                    val entry = element.asJsonObject
+                    val account = entry.get("accountName").asString
+                    val source = entry.get("server").asString
+                    if (source != ChessServer.LICHESS.name && source != ChessServer.LOCAL.name) {
+                        entry.addProperty("cachedGamesKey",
+                            "${SettingsPreferences.KEY_RETRIEVED_GAMES_PREFIX}${source.lowercase()}_${account.lowercase()}")
+                        entry.addProperty("server", ChessServer.LOCAL.name)
+                    }
+                    gson.fromJson(entry, RetrievedGamesEntry::class.java)
+                }.getOrNull()
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
     }
 
     /**
      * Load games for a specific retrieve entry.
      */
     fun loadGamesForRetrieve(entry: RetrievedGamesEntry): List<LichessGame> {
-        val key = getRetrievedGamesKey(entry.accountName, entry.server)
+        val key = getRetrievedGamesKey(entry)
         return loadJsonList(key)
     }
 

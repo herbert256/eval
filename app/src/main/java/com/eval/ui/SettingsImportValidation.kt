@@ -121,7 +121,7 @@ internal object SettingsImportValidation {
 
     private val legacyTypes = buildMap {
         fun fields(type: String, vararg keys: String) = keys.forEach { put(it, type) }
-        fields("String", "ai_instructions_list", "ai_prompts_list", "chesscom_username", "fen_history",
+        fields("String", "ai_instructions_list", "ai_prompts_list", "fen_history",
             "last_server_name", "last_server_user", "lichess_username", "manual_arrow_mode")
         fields("Boolean", "ai_app_dont_ask_again", "analyse_nnue", "analyse_vis_board", "analyse_vis_gameinfo",
             "analyse_vis_movelist", "analyse_vis_pgn", "analyse_vis_resultbar", "analyse_vis_scorebarsgraph",

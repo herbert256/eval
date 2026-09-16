@@ -698,6 +698,8 @@ fun GameContent(
                 onMove = { from, to -> viewModel.makeManualMove(from, to) },
                 onPreviousMove = { viewModel.prevMove() },
                 onNextMove = { viewModel.nextMove() },
+                onGoToStart = { viewModel.goToStart() },
+                onGoToEnd = { viewModel.goToEnd() },
                 moveArrows = moveArrows,
                 showArrowNumbers = uiState.stockfishSettings.manualStage.showArrowNumbers,
                 whiteArrowColor = Color(uiState.stockfishSettings.manualStage.whiteArrowColor.toInt()),

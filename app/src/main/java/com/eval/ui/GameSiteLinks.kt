@@ -10,7 +10,7 @@ internal fun gameSiteHost(url: String): String? {
     if (!uri.scheme.equals("https", ignoreCase = true) && !uri.scheme.equals("http", ignoreCase = true)) return null
     if (uri.rawUserInfo != null) return null
     val host = uri.host?.lowercase(Locale.ROOT) ?: return null
-    return listOf("lichess.org", "chess.com").firstOrNull { host == it || host.endsWith(".$it") }
+    return listOf("lichess.org").firstOrNull { host == it || host.endsWith(".$it") }
 }
 
 internal fun gameSiteUrl(pgn: String): String? {
