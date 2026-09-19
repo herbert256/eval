@@ -30,6 +30,12 @@ Eval is an Android app that fetches your chess games from Lichess.org and analyz
 5. Select a game from the list
 6. Analysis starts automatically
 
+Player game lists show only the opponent's name. A white row means the
+requested player played White; a black row means they played Black. Results
+are **win**, **lost**, or **draw** from that player's perspective. Games
+without a confirmed result show a dash. The same layout is used for saved
+retrievals and games on player profiles.
+
 ## The Three Analysis Stages
 
 Every game goes through three stages automatically:

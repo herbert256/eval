@@ -34,12 +34,12 @@ class GameResultDisplayTest {
     @Test fun wins_keep_scores_and_the_correct_player_perspective() {
         val whiteWin = game("mate", "white")
         assertEquals("1-0", gameOutcome(whiteWin).text)
-        assertEquals("won", playerResultText(whiteWin, "alice"))
+        assertEquals("win", playerResultText(whiteWin, "alice"))
         assertEquals("lost", playerResultText(whiteWin, "BOB"))
         val blackWin = game("resign", "black")
         assertEquals("0-1", gameOutcome(blackWin).text)
         assertEquals("lost", playerResultText(blackWin, "Alice"))
-        assertEquals("won", playerResultText(blackWin, "Bob"))
+        assertEquals("win", playerResultText(blackWin, "Bob"))
         assertEquals("0-1", playerResultText(blackWin, "Observer"))
     }
 

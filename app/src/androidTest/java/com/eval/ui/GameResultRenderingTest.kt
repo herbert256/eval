@@ -58,12 +58,12 @@ class GameResultRenderingTest {
                     val expectedDashes = if (screen == 2) 3 else 2
                     if (visible.count { it == "-" } == expectedDashes &&
                         (if (screen == 2) "½-½" else "draw") in visible &&
-                        (if (screen == 2) "1-0" else "won") in visible) break
+                        (if (screen == 2) "1-0" else "win") in visible) break
                     SystemClock.sleep(50)
                 } while (SystemClock.uptimeMillis() < deadline)
                 assertEquals("screen=$screen: $visible", if (screen == 2) 3 else 2, visible.count { it == "-" })
                 assertTrue(visible.toString(), (if (screen == 2) "½-½" else "draw") in visible)
-                assertTrue(visible.toString(), (if (screen == 2) "1-0" else "won") in visible)
+                assertTrue(visible.toString(), (if (screen == 2) "1-0" else "win") in visible)
             }
         }
     }

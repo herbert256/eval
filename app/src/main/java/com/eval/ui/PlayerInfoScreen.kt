@@ -390,41 +390,35 @@ fun PlayerInfoScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .background(Color.White)
-                                    .padding(horizontal = 8.dp, vertical = 8.dp)
+                                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text(
                                     text = "Opponent",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp,
                                     color = Color.Black,
-                                    modifier = Modifier.weight(1.5f)
+                                    modifier = Modifier.weight(1.2f)
                                 )
                                 Text(
                                     text = "Format",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp,
                                     color = Color.Black,
-                                    modifier = Modifier.weight(1f),
-                                    textAlign = TextAlign.Center
+                                    modifier = Modifier.weight(0.7f)
                                 )
                                 Text(
                                     text = "Result",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp,
                                     color = Color.Black,
-                                    modifier = Modifier.weight(0.8f),
-                                    textAlign = TextAlign.Center
+                                    modifier = Modifier.width(48.dp),
+                                    textAlign = TextAlign.End
                                 )
                             }
 
                             // Table rows
                             currentGames.forEach { game ->
-                                val isUserWhite = game.players.white.user?.name?.equals(playerInfo.username, ignoreCase = true) == true
-                                val opponent = if (isUserWhite) {
-                                    game.players.black.user?.name ?: "Anonymous"
-                                } else {
-                                    game.players.white.user?.name ?: "Anonymous"
-                                }
                                 val format = buildString {
                                     append(game.speed.replaceFirstChar { it.uppercase() })
                                     game.clock?.let { clock ->
@@ -433,48 +427,12 @@ fun PlayerInfoScreen(
                                         append(" $minutes+$increment")
                                     }
                                 }
-                                val (resultText, resultColor) = when {
-                                    game.winner == "white" && isUserWhite -> "Won" to AppColors.PositiveGreen
-                                    game.winner == "black" && !isUserWhite -> "Won" to AppColors.PositiveGreen
-                                    game.winner == "white" && !isUserWhite -> "Lost" to AppColors.NegativeRed
-                                    game.winner == "black" && isUserWhite -> "Lost" to AppColors.NegativeRed
-                                    game.winner == null -> "Draw" to Color(0xFF90A4AE)
-                                    else -> "?" to AppColors.SubtleText
-                                }
-
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { onGameSelected(game) }
-                                        .background(Color(0xFF2D2D4A))
-                                        .padding(horizontal = 8.dp, vertical = 5.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = opponent,
-                                        fontSize = 13.sp,
-                                        color = Color.White,
-                                        modifier = Modifier.weight(1.5f),
-                                        maxLines = 1,
-                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                    )
-                                    Text(
-                                        text = format,
-                                        fontSize = 12.sp,
-                                        color = AppColors.SubtleText,
-                                        modifier = Modifier.weight(1f),
-                                        textAlign = TextAlign.Center,
-                                        maxLines = 1
-                                    )
-                                    Text(
-                                        text = resultText,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = resultColor,
-                                        modifier = Modifier.weight(0.8f),
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
+                                PlayerGameRow(
+                                    game = game,
+                                    username = playerInfo.username,
+                                    onClick = { onGameSelected(game) },
+                                    format = format
+                                )
                             }
 
                             // Pagination controls - show if we have more than one page or there might be more to fetch

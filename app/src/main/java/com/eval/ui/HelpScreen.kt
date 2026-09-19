@@ -32,6 +32,8 @@ private val helpSections = listOf(
         icon = "\uD83D\uDE80",
         content = "Enter your username in the Lichess card and tap 'Retrieve' to fetch games. " +
             "You can also browse tournaments, broadcasts, TV channels, streamers, or import PGN files. " +
+            "Player game lists show the opponent's name, a white or black row for the requested player's color, " +
+            "and win/lost/draw from that player's perspective (a dash if unfinished). " +
             "Select a game to start the analysis. On startup, the app loads the latest game for your saved Lichess username. " +
             "If no username is saved or retrieval fails, it restores your last analysed game when available."
     ),

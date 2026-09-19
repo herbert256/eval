@@ -18,7 +18,7 @@ import com.eval.data.ChessServer
 import com.eval.data.LichessGame
 
 private fun playerResultColor(result: String): Color = when (result) {
-    "won" -> AppColors.ResultWon
+    "win" -> AppColors.ResultWon
     "lost" -> AppColors.ResultLost
     "draw" -> AppColors.ResultDraw
     else -> AppColors.MediumGray
@@ -66,7 +66,7 @@ fun GameSelectionScreen(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 items(games, key = { it.id }) { game ->
-                    GameListItem(
+                    PlayerGameRow(
                         game = game,
                         username = username,
                         onClick = { onSelectGame(game) }
@@ -86,91 +86,72 @@ fun GameSelectionScreen(
     }
 }
 
-/**
- * Individual game row in the selection list (table-like layout).
- */
+/** A player's games show the opponent, their playing color, and their result. */
 @Composable
-private fun GameListItem(
+internal fun PlayerGameRow(
     game: LichessGame,
     username: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    format: String = game.speed
 ) {
-    // Determine if user played white or black
-    val userPlayedWhite = game.players.white.user?.name?.equals(username, ignoreCase = true) == true
-    val userPlayedBlack = game.players.black.user?.name?.equals(username, ignoreCase = true) == true
-
-    // Get opponent name
-    val opponentName = if (userPlayedWhite) {
-        game.players.black.user?.name
-            ?: game.players.black.aiLevel?.let { "Stockfish $it" }
-            ?: "Anonymous"
-    } else {
-        game.players.white.user?.name
-            ?: game.players.white.aiLevel?.let { "Stockfish $it" }
-            ?: "Anonymous"
+    val playsWhite = playerPlaysWhite(game, username)
+    fun displayName(player: com.eval.data.Player): String = player.user?.name
+        ?: player.aiLevel?.let { "Stockfish $it" }
+        ?: "Anonymous"
+    val opponentName = when (playsWhite) {
+        true -> displayName(game.players.black)
+        false -> displayName(game.players.white)
+        null -> "${displayName(game.players.white)} – ${displayName(game.players.black)}"
     }
-
     val resultText = playerResultText(game, username)
-    val resultColor = playerResultColor(resultText)
-
-    // Row colors based on which color the user played
-    val rowBackgroundColor = if (userPlayedBlack) Color.Black else Color.White
-    val rowTextColor = if (userPlayedBlack) Color.White else Color.Black
+    val rowBackgroundColor = when (playsWhite) {
+        true -> Color.White
+        false -> Color.Black
+        null -> AppColors.CardBackground
+    }
+    val rowTextColor = if (playsWhite == true) Color.Black else Color.White
+    val resultColor = if (playsWhite == true) when (resultText) {
+        "win" -> Color(0xFF256029)
+        "lost" -> Color(0xFFB71C1C)
+        "draw" -> Color(0xFF1565C0)
+        else -> Color.DarkGray
+    } else playerResultColor(resultText)
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .background(rowBackgroundColor)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // Column 1: Opponent name
-        Box(
-            modifier = Modifier
-                .weight(1.2f)
-                .background(rowBackgroundColor)
-                .padding(horizontal = 8.dp, vertical = 10.dp)
-        ) {
-            Text(
-                text = opponentName,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = rowTextColor,
-                maxLines = 1
-            )
-        }
-
-        // Column 2: Format/speed
-        Box(
-            modifier = Modifier
-                .weight(0.7f)
-                .background(rowBackgroundColor)
-                .padding(horizontal = 8.dp, vertical = 10.dp)
-        ) {
-            Text(
-                text = game.speed,
-                fontSize = 14.sp,
-                color = rowTextColor,
-                maxLines = 1
-            )
-        }
-
-        // Column 4: Result
-        Box(
-            modifier = Modifier
-                .width(56.dp)
-                .background(rowBackgroundColor)
-                .padding(horizontal = 4.dp, vertical = 10.dp),
-            contentAlignment = Alignment.CenterEnd
-        ) {
-            Text(
-                text = resultText,
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
-                color = resultColor,
-                maxLines = 1
-            )
-        }
+        Text(
+            text = opponentName,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+            color = rowTextColor,
+            modifier = Modifier.weight(1.2f),
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+        )
+        Text(
+            text = format,
+            fontSize = 14.sp,
+            color = rowTextColor,
+            modifier = Modifier.weight(0.7f),
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+        )
+        Text(
+            text = resultText,
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp,
+            color = resultColor,
+            modifier = Modifier.width(48.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+            maxLines = 1
+        )
     }
 }
 
@@ -353,9 +334,9 @@ fun SelectedRetrieveGamesScreen(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     items(currentGames, key = { it.id }) { game ->
-                        RetrieveGameListItem(
+                        PlayerGameRow(
                             game = game,
-                            accountName = entry.accountName,
+                            username = entry.accountName,
                             onClick = { onSelectGame(game) }
                         )
                     }
@@ -443,95 +424,6 @@ fun SelectedRetrieveGamesScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Cancel")
-        }
-    }
-}
-
-/**
- * Individual game row for retrieve games list - shows opponent, format, and result.
- * Shows won/lost/draw for completed games and a dash when no result is known.
- */
-@Composable
-private fun RetrieveGameListItem(
-    game: LichessGame,
-    accountName: String,
-    onClick: () -> Unit
-) {
-    // Determine if account played white or black
-    val accountPlayedWhite = game.players.white.user?.name?.equals(accountName, ignoreCase = true) == true
-    val accountPlayedBlack = game.players.black.user?.name?.equals(accountName, ignoreCase = true) == true
-
-    // Get opponent name
-    val opponentName = if (accountPlayedWhite) {
-        game.players.black.user?.name
-            ?: game.players.black.aiLevel?.let { "Stockfish $it" }
-            ?: "Anonymous"
-    } else {
-        game.players.white.user?.name
-            ?: game.players.white.aiLevel?.let { "Stockfish $it" }
-            ?: "Anonymous"
-    }
-
-    val resultText = playerResultText(game, accountName)
-    val resultColor = playerResultColor(resultText)
-
-    // Row colors based on which color the account played
-    val rowBackgroundColor = if (accountPlayedBlack) Color.Black else Color.White
-    val rowTextColor = if (accountPlayedBlack) Color.White else Color.Black
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        // Column 1: Opponent name
-        Box(
-            modifier = Modifier
-                .weight(1.2f)
-                .background(rowBackgroundColor)
-                .padding(horizontal = 8.dp, vertical = 10.dp)
-        ) {
-            Text(
-                text = opponentName,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = rowTextColor,
-                maxLines = 1
-            )
-        }
-
-        // Column 2: Format/speed
-        Box(
-            modifier = Modifier
-                .weight(0.7f)
-                .background(rowBackgroundColor)
-                .padding(horizontal = 8.dp, vertical = 10.dp)
-        ) {
-            Text(
-                text = game.speed,
-                fontSize = 14.sp,
-                color = rowTextColor,
-                maxLines = 1
-            )
-        }
-
-        // Column 3: Result
-        Box(
-            modifier = Modifier
-                .width(56.dp)
-                .background(rowBackgroundColor)
-                .padding(horizontal = 4.dp, vertical = 10.dp),
-            contentAlignment = Alignment.CenterEnd
-        ) {
-            Text(
-                text = resultText,
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
-                color = resultColor,
-                maxLines = 1
-            )
         }
     }
 }
@@ -663,7 +555,7 @@ fun AnalysedGamesSelectionScreen(
 }
 
 /**
- * Individual row for an analysed game - matches RetrieveGameListItem style.
+ * Individual row for an analysed game - matches the player game row style.
  * Shows white player on white row and black player on black row.
  */
 @Composable

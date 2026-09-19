@@ -28,14 +28,26 @@ internal fun gameOutcome(game: LichessGame): GameOutcome {
     }
 }
 
+/** Match the requested Lichess account consistently for row color and result. */
+internal fun playerPlaysWhite(game: LichessGame, playerName: String): Boolean? {
+    val account = playerName.trim()
+    if (account.isEmpty()) return null
+    fun matches(player: com.eval.data.Player): Boolean = player.user?.let {
+        it.name.equals(account, ignoreCase = true) || it.id.equals(account, ignoreCase = true)
+    } == true
+    return when {
+        matches(game.players.white) -> true
+        matches(game.players.black) -> false
+        else -> null
+    }
+}
+
 internal fun playerResultText(game: LichessGame, playerName: String): String {
     val outcome = gameOutcome(game)
     if (outcome == GameOutcome.UNKNOWN) return "-"
     if (outcome == GameOutcome.DRAW) return "draw"
-    val playsWhite = game.players.white.user?.name?.equals(playerName, ignoreCase = true) == true
-    val playsBlack = game.players.black.user?.name?.equals(playerName, ignoreCase = true) == true
-    if (!playsWhite && !playsBlack) return outcome.text
+    val playsWhite = playerPlaysWhite(game, playerName) ?: return outcome.text
     val won = (outcome == GameOutcome.WHITE_WIN && playsWhite) ||
-        (outcome == GameOutcome.BLACK_WIN && playsBlack)
-    return if (won) "won" else "lost"
+        (outcome == GameOutcome.BLACK_WIN && !playsWhite)
+    return if (won) "win" else "lost"
 }
