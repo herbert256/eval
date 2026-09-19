@@ -45,6 +45,9 @@ class EmulatorBugHuntTest {
 
     @Before fun launch() {
         previousSettings = SettingsPreferences(prefs).exportAllSettings()
+        // These local-game restoration cases exercise startup without an online account.
+        // Automatic account retrieval is covered by StartupGameLoadingTest.
+        SettingsPreferences(prefs).saveLichessUsername("")
         scenario = ActivityScenario.launch(MainActivity::class.java)
         scenario!!.onActivity { vm = ViewModelProvider(it)[GameViewModel::class.java] }
         await("Stockfish ready") { vm.uiState.value.stockfishReady }

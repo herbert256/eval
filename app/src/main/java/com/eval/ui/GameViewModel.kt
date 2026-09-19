@@ -226,21 +226,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 previousRetrievesList = retrievesList
             ) }
 
-            viewModelScope.launch {
+            gameLoader.loadStartupGame {
                 val ready = stockfish.initialize()
                 if (ready) {
                     analysisOrchestrator.configureForManualStage()
                 }
                 // stockfishReady is owned by the isReady collector below; no need
                 // to set it explicitly here (was racing with the collector on init).
-
-                // Auto-restore manual stage game from previous session
-                if (ready && _uiState.value.game == null) {
-                    val manualGame = gameStorage.loadManualStageGame()
-                    if (manualGame != null) {
-                        gameLoader.loadAnalysedGameDirectly(manualGame)
-                    }
-                }
+                ready
             }
 
             analysisResultCollector = viewModelScope.launch {

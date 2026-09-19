@@ -54,12 +54,28 @@ internal class GameLoader(
     val savedLichessUsername: String
         get() = settingsPrefs.savedLichessUsername
 
-    /**
-     * Automatically load a game and start analysis on app startup.
-     */
-    /**
-     * Reload the last stored analysed game.
-     */
+    /** Load the account's newest game, retaining the previous save as an offline fallback. */
+    fun loadStartupGame(prepareEngine: suspend () -> Boolean) {
+        // Reserve startup's place before engine initialization can suspend. A later
+        // import, reload, or selection owns the screen even if startup finishes last.
+        val generation = ++gameSelectionGeneration
+        viewModelScope.launch {
+            if (!prepareEngine() || generation != gameSelectionGeneration) return@launch
+            val username = settingsPrefs.knownLichessUsername
+            if (username != null) {
+                settingsPrefs.saveLastServerUser(username, "lichess.org")
+                updateUiState { copy(hasLastServerUser = true) }
+                fetchLastGameFromServer(ChessServer.LICHESS, username, generation)
+            }
+            if (generation == gameSelectionGeneration && getUiState().game == null) {
+                val retrievalError = getUiState().errorMessage
+                gameStorage.loadManualStageGame()?.let { loadAnalysedGameDirectly(it) }
+                if (retrievalError != null) updateUiState { copy(errorMessage = retrievalError) }
+            }
+        }
+    }
+
+    /** Retrieve the latest game for the last requested Lichess account. */
     fun reloadLastGame() {
         val username = settingsPrefs.lastServerUser
         val serverName = settingsPrefs.lastServerName
@@ -104,7 +120,8 @@ internal class GameLoader(
                         copy(
                             isLoading = false,
                             gameList = games,
-                            showGameSelection = false
+                            showGameSelection = false,
+                            gameSelectionUsername = username
                         )
                     }
                     loadGame(games.first(), server, username)

@@ -63,6 +63,12 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
     val savedLichessUsername: String
         get() = prefs.getString(KEY_LICHESS_USERNAME, "DrNykterstein") ?: "DrNykterstein"
 
+    // The example shown on a fresh install is not a user-selected account.
+    val knownLichessUsername: String?
+        get() = (if (prefs.contains(KEY_LICHESS_USERNAME))
+            prefs.getString(KEY_LICHESS_USERNAME, null) else lastServerUser)
+            ?.trim()?.takeIf { it.isNotEmpty() }
+
     val lichessMaxGames: Int
         get() = prefs.getInt(KEY_LICHESS_MAX_GAMES, 10)
 
