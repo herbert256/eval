@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.sp
 import com.eval.chess.ChessBoard
 import com.eval.chess.PieceColor
 import com.eval.chess.Square
+import com.eval.stockfish.AnalysisResult
 import com.eval.stockfish.PvLine
 
 // Chess piece Unicode symbols for analysis display
@@ -655,8 +656,6 @@ fun AnalysisPanel(
     modifier: Modifier = Modifier
 ) {
     val result = uiState.analysisResult
-    val turn = uiState.currentBoard.getTurn()
-    val isWhiteTurn = turn == PieceColor.WHITE
 
     // Show if analysis is enabled, ready, and has results
     // Keep showing even if result is stale (waiting for new position analysis) to avoid UI jumping
@@ -664,6 +663,19 @@ fun AnalysisPanel(
         return
     }
 
+    StockfishLinesCard(result, uiState.currentBoard, uiState.stockfishName, modifier, onExploreLine)
+}
+
+/** Shared with AI preparation; null exploration keeps the captured position fixed. */
+@Composable
+fun StockfishLinesCard(
+    result: AnalysisResult,
+    board: ChessBoard,
+    engineName: String,
+    modifier: Modifier = Modifier,
+    onExploreLine: ((String, Int) -> Unit)? = null
+) {
+    val isWhiteTurn = board.getTurn() == PieceColor.WHITE
     Card(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
@@ -681,7 +693,7 @@ fun AnalysisPanel(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = uiState.stockfishName,
+                    text = engineName,
                     modifier = Modifier.weight(1f).padding(end = 8.dp),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
@@ -700,15 +712,14 @@ fun AnalysisPanel(
                 )
             }
             result.lines.forEach { line ->
-                val rememberedOnMoveClick = remember(line.pv) { { moveIndex: Int ->
-                    onExploreLine(line.pv, moveIndex)
-                } }
+                val onMoveClick: ((Int) -> Unit)? = onExploreLine?.let { explore ->
+                    { moveIndex -> explore(line.pv, moveIndex) }
+                }
                 PvLineRow(
                     line = line,
-                    board = uiState.currentBoard,
+                    board = board,
                     isWhiteTurn = isWhiteTurn,
-                    userPlayedBlack = uiState.userPlayedBlack,
-                    onMoveClick = rememberedOnMoveClick
+                    onMoveClick = onMoveClick
                 )
             }
         }
@@ -723,8 +734,7 @@ private fun PvLineRow(
     line: PvLine,
     board: ChessBoard,
     isWhiteTurn: Boolean,
-    userPlayedBlack: Boolean,
-    onMoveClick: (Int) -> Unit
+    onMoveClick: ((Int) -> Unit)?
 ) {
     // Score display: always from WHITE's perspective (positive = good for white)
     // Convert score to WHITE's perspective (Stockfish gives score from side-to-move's view)
@@ -788,7 +798,7 @@ private fun PvLineRow(
                     color = AppColors.LightGray,
                     modifier = Modifier
                         .clip(RoundedCornerShape(3.dp))
-                        .clickable { onMoveClick(index) }
+                        .clickable(enabled = onMoveClick != null) { onMoveClick?.invoke(index) }
                         .background(AppColors.AnalysisMoveChipBg)
                         .padding(horizontal = 6.dp, vertical = 3.dp)
                 )

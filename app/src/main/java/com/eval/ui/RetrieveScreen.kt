@@ -122,6 +122,9 @@ fun RetrieveScreen(
     if (uiState.pendingAiReport != null) {
         AiInstructionSelectionScreen(
             progress = uiState.aiMovesProgress,
+            engineProgress = uiState.aiEngineProgress,
+            stopping = uiState.aiEngineStopping,
+            onStopAndContinue = { viewModel.stopAiEngineAndContinue() },
             error = uiState.aiReportError,
             instructions = uiState.aiInstructions,
             onSelectInstruction = { viewModel.launchSelectedAiInstruction(context, it) },

@@ -132,6 +132,9 @@ fun GameScreenContent(
     if (uiState.pendingAiReport != null) {
         AiInstructionSelectionScreen(
             progress = uiState.aiMovesProgress,
+            engineProgress = uiState.aiEngineProgress,
+            stopping = uiState.aiEngineStopping,
+            onStopAndContinue = { viewModel.stopAiEngineAndContinue() },
             error = uiState.aiReportError,
             instructions = uiState.aiInstructions,
             onSelectInstruction = { viewModel.launchSelectedAiInstruction(context, it) },
@@ -870,33 +873,66 @@ fun AiInstructionSelectionScreen(
     onSelectInstruction: (AiInstructionEntry) -> Unit,
     onDismiss: () -> Unit,
     progress: String? = null,
-    error: String? = null
+    error: String? = null,
+    engineProgress: AiEngineProgress? = null,
+    stopping: Boolean = false,
+    onStopAndContinue: () -> Unit = {}
 ) {
     androidx.activity.compose.BackHandler(onBack = onDismiss)
     Column(
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        EvalTitleBar("Select AI Instruction", onBackClick = onDismiss, onEvalClick = onDismiss)
-        if (progress != null) {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-            Text(progress, color = Color.White)
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        }
-        if (error != null) Text(error, color = MaterialTheme.colorScheme.error)
-        Column(
-            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            if (instructions.isEmpty()) {
-                Text("No instructions configured. Go to Settings > AI Instructions to add one.", color = AppColors.SubtleText)
+        EvalTitleBar(if (engineProgress != null) "Stockfish lines for AI" else "Select AI Instruction",
+            onBackClick = onDismiss, onEvalClick = onDismiss)
+        if (engineProgress != null) {
+            if (engineProgress.searching) {
+                LinearProgressIndicator(progress = { engineProgress.fraction }, modifier = Modifier.fillMaxWidth())
+            } else {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
-            instructions.sortedBy { it.name.lowercase() }.forEach { entry ->
-                Button(
-                    onClick = { onSelectInstruction(entry) }, modifier = Modifier.fillMaxWidth(),
-                    enabled = progress == null,
-                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.ButtonGreen)
-                ) { Text(entry.name) }
+            Text("Best ${engineProgress.lineCount} Stockfish lines", color = Color.White)
+            Text(if (stopping) "Opening AI with the latest complete lines…"
+                else if (!engineProgress.searching) "Starting Stockfish…"
+                else "${(engineProgress.fraction * 100).toInt()}% · " +
+                    "${engineProgress.elapsedMs / 1000}s / ${engineProgress.durationMs / 1000f}s",
+                color = AppColors.SubtleText)
+            val board = remember(engineProgress.fen) {
+                com.eval.chess.ChessBoard().apply { setFen(engineProgress.fen) }
+            }
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                val result = engineProgress.result
+                if (result != null) {
+                    StockfishLinesCard(result, board, engineProgress.engineName, Modifier.fillMaxWidth())
+                } else {
+                    Text("Waiting for the first complete set of lines…", color = AppColors.SubtleText)
+                }
+            }
+            Button(onClick = onStopAndContinue, enabled = !stopping, modifier = Modifier.fillMaxWidth()) {
+                Text("Stop and go to AI")
+            }
+            TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Cancel") }
+        } else {
+            if (progress != null) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                Text(progress, color = Color.White)
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+            if (error != null) Text(error, color = MaterialTheme.colorScheme.error)
+            Column(
+                modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (instructions.isEmpty()) {
+                    Text("No instructions configured. Go to Settings > AI Instructions to add one.", color = AppColors.SubtleText)
+                }
+                instructions.sortedBy { it.name.lowercase() }.forEach { entry ->
+                    Button(
+                        onClick = { onSelectInstruction(entry) }, modifier = Modifier.fillMaxWidth(),
+                        enabled = progress == null,
+                        colors = ButtonDefaults.buttonColors(containerColor = AppColors.ButtonGreen)
+                    ) { Text(entry.name) }
+                }
             }
         }
     }

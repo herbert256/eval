@@ -18,6 +18,7 @@ import com.google.gson.Gson
 import com.eval.stockfish.StockfishEngine
 import org.json.JSONObject
 import com.eval.audio.MoveSoundPlayer
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
@@ -47,6 +48,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private var analysisResultCollector: Job? = null
     private var stockfishReadyCollector: Job? = null
     private var aiReportJob: Job? = null
+    private var aiEngineStop: CompletableDeferred<Unit>? = null
 
     private val mainTimeline = GameTimeline()
     private val exploringTimeline = GameTimeline()
@@ -841,7 +843,14 @@ ${opening.moves} *
     fun dismissAiInstructionSelection() {
         aiReportJob?.cancel()
         aiReportJob = null
-        _uiState.update { it.copy(pendingAiReport = null, aiMovesProgress = null, aiReportError = null) }
+        aiEngineStop = null
+        _uiState.update { it.copy(pendingAiReport = null, aiMovesProgress = null,
+            aiEngineProgress = null, aiEngineStopping = false, aiReportError = null) }
+    }
+
+    fun stopAiEngineAndContinue() {
+        val stop = aiEngineStop ?: return
+        if (stop.complete(Unit)) _uiState.update { it.copy(aiEngineStopping = true) }
     }
 
     fun launchSelectedAiInstruction(context: android.content.Context, entry: AiInstructionEntry) {
@@ -852,7 +861,9 @@ ${opening.moves} *
             return
         }
         val settings = _uiState.value.stockfishSettings
-        _uiState.update { it.copy(aiMovesProgress = "Preparing moves list for AI…", aiReportError = null) }
+        val stop = CompletableDeferred<Unit>()
+        _uiState.update { it.copy(aiMovesProgress = "Preparing moves list for AI…",
+            aiEngineProgress = null, aiEngineStopping = false, aiReportError = null) }
         aiReportJob = viewModelScope.launch {
             try {
                 val moves = AiMovesList(getApplication()).generate(data.fen, settings.movesListForAi) { completed, total ->
@@ -865,11 +876,15 @@ ${opening.moves} *
                 _uiState.update { if (it.pendingAiReport !== data) it else it.copy(
                     aiMovesProgress = "Finding the best ${settings.engineMovesForAi.multiPv} Stockfish lines…"
                 ) }
-                val engine = AiEngineLines(getApplication()).generate(data.fen, settings.engineMovesForAi)
+                aiEngineStop = stop
+                val engine = AiEngineLines(getApplication()).generate(data.fen, settings.engineMovesForAi, stop) { progress ->
+                    _uiState.update { if (it.pendingAiReport !== data) it else it.copy(aiEngineProgress = progress) }
+                }
                 ensureActive()
                 if (_uiState.value.pendingAiReport !== data) return@launch
                 if (AiAppLauncher.launchAiReport(context, entry, data.copy(moves = moves, engine = engine))) {
-                    _uiState.update { it.copy(pendingAiReport = null, aiMovesProgress = null) }
+                    _uiState.update { it.copy(pendingAiReport = null, aiMovesProgress = null,
+                        aiEngineProgress = null, aiEngineStopping = false) }
                 }
             } catch (e: TimeoutCancellationException) {
                 _uiState.update { if (it.pendingAiReport !== data) it else it.copy(
@@ -882,7 +897,9 @@ ${opening.moves} *
                     aiReportError = "Could not prepare the Stockfish data. ${e.message.orEmpty()} Select the instruction to try again."
                 ) }
             } finally {
-                _uiState.update { if (it.pendingAiReport !== data) it else it.copy(aiMovesProgress = null) }
+                if (aiEngineStop === stop) aiEngineStop = null
+                _uiState.update { if (it.pendingAiReport !== data) it else it.copy(
+                    aiMovesProgress = null, aiEngineProgress = null, aiEngineStopping = false) }
             }
         }
     }

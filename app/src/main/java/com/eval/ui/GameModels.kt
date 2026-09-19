@@ -400,6 +400,8 @@ data class GameUiState(
     // Context captured when the user requests an AI report
     val pendingAiReport: AiReportContext? = null,
     val aiMovesProgress: String? = null,
+    val aiEngineProgress: AiEngineProgress? = null,
+    val aiEngineStopping: Boolean = false,
     val aiReportError: String? = null,
     // Opening Explorer
     val openingExplorerData: com.eval.data.OpeningExplorerResponse? = null,

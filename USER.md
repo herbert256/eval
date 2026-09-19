@@ -172,6 +172,17 @@ Go to **Settings > AI Prompts** to create, edit, copy, or delete prompt template
 - `@SERVER@` - Chess server name (e.g., "lichess.org")
 - `@DATE@` - Current date
 
+### Stockfish lines for AI
+
+When preparing the best Stockfish lines for an AI report, Eval shows timed
+progress and the same analysis card used in Manual mode, including scores,
+continuations, depth and nodes. The card updates with each complete set of
+lines. **Stop and go to AI** ends the search early and opens AI using the
+latest complete set for the captured position. If no complete set is ready,
+the handoff states that the search stopped before results were available.
+**Cancel** returns without sending a request. At the time limit, the handoff
+continues automatically as before.
+
 ## Export Features
 
 From the Share / Export screen (tap share icon during a game):

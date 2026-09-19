@@ -403,7 +403,10 @@ class StockfishEngine(private val context: Context) {
     }
 
     /** A finished MultiPV search, using only a full iteration at a common depth. */
-    suspend fun evaluateLines(fen: String, lineCount: Int, timeMs: Int): AnalysisResult = withContext(Dispatchers.IO) {
+    suspend fun evaluateLines(
+        fen: String, lineCount: Int, timeMs: Int,
+        onIteration: (AnalysisResult) -> Unit = {}
+    ): AnalysisResult = withContext(Dispatchers.IO) {
         require(lineCount in 1..32 && timeMs > 0)
         check(_isReady.value) { "Stockfish is not ready." }
         analysisJob?.cancelAndJoin()
@@ -422,7 +425,11 @@ class StockfishEngine(private val context: Context) {
                     val completedIteration = CompletedPvIteration(lineCount)
                     sendCommand("position fen $fen")
                     sendCommand("go movetime $timeMs")
-                    val completed = readAnalysisOutput("evaluateLines", fen, completedIteration::record)
+                    val completed = readAnalysisOutput("evaluateLines", fen) { info, line ->
+                        val previous = completedIteration.result
+                        completedIteration.record(info, line)
+                        completedIteration.result?.takeIf { it !== previous }?.let(onIteration)
+                    }
                     check(!completed.bestMove.isNullOrBlank() && completed.bestMove !in listOf("(none)", "0000")) {
                         "Stockfish did not finish the engine lines search."
                     }
