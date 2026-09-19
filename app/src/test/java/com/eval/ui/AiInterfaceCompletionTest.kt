@@ -8,6 +8,15 @@ import org.junit.Test
 class AiInterfaceCompletionTest {
     private fun field(text: String, cursor: Int = text.length) = TextFieldValue(text, TextRange(cursor))
 
+    @Test fun only_supported_controls_are_offered_and_prompt_choices_describe_literal_text() {
+        assertFalse(aiInterfaceCommands.any { it.name in setOf("default", "model", "edit") })
+        for (name in listOf("prompt", "system")) {
+            val description = aiInterfaceCommands.single { it.name == name }.description
+            assertTrue(description, description.contains("text"))
+            assertFalse(description, description.contains("saved"))
+        }
+    }
+
     @Test fun engine_placeholder_and_data_tag_are_available_in_both_pickers() {
         val token = insertAiInterfaceChoice(field("@"), requireNotNull(aiInterfaceCompletion(field(""), field("@"))),
             aiInterfacePlaceholders.single { it.name == "ENGINE" })

@@ -861,25 +861,30 @@ ${opening.moves} *
             return
         }
         val settings = _uiState.value.stockfishSettings
+        val usedNames = AiAppLauncher.usedContextNames(entry.instructions)
         val stop = CompletableDeferred<Unit>()
-        _uiState.update { it.copy(aiMovesProgress = "Preparing moves list for AI…",
+        _uiState.update { it.copy(aiMovesProgress = "Preparing AI request…",
             aiEngineProgress = null, aiEngineStopping = false, aiReportError = null) }
         aiReportJob = viewModelScope.launch {
             try {
-                val moves = AiMovesList(getApplication()).generate(data.fen, settings.movesListForAi) { completed, total ->
-                    _uiState.update {
-                        if (it.pendingAiReport !== data) it else it.copy(
-                            aiMovesProgress = "Evaluating moves: $completed of $total"
-                        )
+                val moves = if ("moves" in usedNames) {
+                    AiMovesList(getApplication()).generate(data.fen, settings.movesListForAi) { completed, total ->
+                        _uiState.update {
+                            if (it.pendingAiReport !== data) it else it.copy(
+                                aiMovesProgress = "Evaluating moves: $completed of $total"
+                            )
+                        }
                     }
-                }
-                _uiState.update { if (it.pendingAiReport !== data) it else it.copy(
-                    aiMovesProgress = "Finding the best ${settings.engineMovesForAi.multiPv} Stockfish lines…"
-                ) }
-                aiEngineStop = stop
-                val engine = AiEngineLines(getApplication()).generate(data.fen, settings.engineMovesForAi, stop) { progress ->
-                    _uiState.update { if (it.pendingAiReport !== data) it else it.copy(aiEngineProgress = progress) }
-                }
+                } else ""
+                val engine = if ("engine" in usedNames) {
+                    _uiState.update { if (it.pendingAiReport !== data) it else it.copy(
+                        aiMovesProgress = "Finding the best ${settings.engineMovesForAi.multiPv} Stockfish lines…"
+                    ) }
+                    aiEngineStop = stop
+                    AiEngineLines(getApplication()).generate(data.fen, settings.engineMovesForAi, stop) { progress ->
+                        _uiState.update { if (it.pendingAiReport !== data) it else it.copy(aiEngineProgress = progress) }
+                    }
+                } else ""
                 ensureActive()
                 if (_uiState.value.pendingAiReport !== data) return@launch
                 if (AiAppLauncher.launchAiReport(context, entry, data.copy(moves = moves, engine = engine))) {

@@ -154,7 +154,7 @@ If the companion AI app (`com.ai`) is installed, you can generate AI-powered ana
 1. Load a game and reach Manual stage
 2. Tap the **share icon** to open Share / Export
 3. Tap **Generate AI Reports**
-4. Select a prompt to use
+4. Select an AI instruction entry
 5. The AI app opens with the position data
 
 ### AI Prompt Categories
@@ -163,9 +163,15 @@ If the companion AI app (`com.ai`) is installed, you can generate AI-powered ana
 - **Chess Server Player** - Research a Lichess player profile
 - **Player** - General chess player profile research
 
-### Managing Prompts
+### Managing AI Instructions
 
-Go to **Settings > AI Prompts** to create, edit, copy, or delete prompt templates. Prompts support these placeholders:
+Go to **Settings > AI Instructions** to manage named instruction entries.
+Use `<prompt>text</prompt>` for the literal report question and
+`<system>text</system>` for literal system instructions. Neither looks up a
+saved prompt. `<default>`, `<model>` and `<edit>` are no longer controls.
+Only data with a matching placeholder in the instruction text is sent.
+Stockfish searches run only when `@MOVES@` or `@ENGINE@` is used.
+Supported placeholders include:
 - `@FEN@` - Current position in FEN notation
 - `@BOARD@` - Interactive HTML chessboard
 - `@PLAYER@` - Player name
@@ -174,7 +180,8 @@ Go to **Settings > AI Prompts** to create, edit, copy, or delete prompt template
 
 ### Stockfish lines for AI
 
-When preparing the best Stockfish lines for an AI report, Eval shows timed
+When the selected instruction uses `@ENGINE@`, Eval prepares the best
+Stockfish lines and shows timed
 progress and the same analysis card used in Manual mode, including scores,
 continuations, depth and nodes. The card updates with each complete set of
 lines. **Stop and go to AI** ends the search early and opens AI using the

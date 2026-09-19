@@ -120,38 +120,61 @@ object AiAppLauncher {
         )
     }
 
-    /** Send templates unchanged; only the receiving AI app expands their placeholders. */
+    private val commandTags = setOf("system", "prompt", "parameters", "agent", "flock", "swarm",
+        "type", "open", "close", "next", "email", "select", "return")
+    private val entryBlocks = Regex("<([A-Za-z_][A-Za-z0-9_.:-]*)>(.*?)</\\1>",
+        setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
+    private val placeholders = Regex("@([A-Za-z_][A-Za-z0-9_.:-]*)@")
+    private val wrapper = Regex("^\\s*<instructions>(.*?)</instructions>\\s*$",
+        setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
+    private val obsoleteFlags = Regex("</?(?:default|model|edit)>", RegexOption.IGNORE_CASE)
+
+    private data class InstructionParts(val template: String, val data: Map<String, String>, val wrapped: Boolean) {
+        val usedNames: Set<String> get() = placeholders.findAll(template)
+            .map { it.groupValues[1].lowercase(Locale.US) }.toSet()
+    }
+
+    private fun splitInstructions(instructions: String): InstructionParts {
+        val wrapped = wrapper.matchEntire(instructions)
+        val body = wrapped?.groupValues?.get(1) ?: instructions
+        val data = linkedMapOf<String, String>()
+        val template = buildString {
+            var end = 0
+            entryBlocks.findAll(body).forEach { entry ->
+                // Only remove obsolete standalone flags outside value bodies.
+                append(obsoleteFlags.replace(body.substring(end, entry.range.first), ""))
+                val tag = entry.groupValues[1].lowercase(Locale.US)
+                if (tag in commandTags) append(entry.value) else data[tag] = entry.groupValues[2]
+                end = entry.range.last + 1
+            }
+            append(obsoleteFlags.replace(body.substring(end), ""))
+        }
+        return InstructionParts(template, data, wrapped != null)
+    }
+
+    /** Data values are literal, so tokens inside those values do not request more data. */
+    internal fun usedContextNames(instructions: String): Set<String> = splitInstructions(instructions).usedNames
+
+    /** Send only referenced data fields; the receiving AI app expands the unchanged templates. */
     internal fun buildInstructions(instructions: String, data: AiReportContext): String {
+        val parts = splitInstructions(instructions)
+        val usedNames = parts.usedNames
         val values = linkedMapOf(
             "fen" to data.fen, "color" to data.color, "server" to data.server,
             "player" to data.player, "pgn" to data.pgn, "board" to data.board,
-            "moves" to data.moves, "engine" to data.engine
+            "moves" to data.moves, "engine" to data.engine,
+            "date" to if ("date" in usedNames) SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()) else ""
         )
-        val wrapper = Regex("^\\s*<instructions>(.*?)</instructions>\\s*$",
-            setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)).matchEntire(instructions)
-        val body = wrapper?.groupValues?.get(1) ?: instructions
-        val usedNames = Regex("@([A-Za-z_][A-Za-z0-9_.:-]*)@").findAll(body)
-            .map { it.groupValues[1].lowercase(Locale.US) }.toSet()
-        if ("date" in usedNames) {
-            values["date"] = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-        }
-        // Keep the standard context for templates saved only in AI. Replace caller-supplied
-        // top-level context declarations with one authoritative field per name. Never inspect
-        // markup inside a prompt, system, opening/closing body or other custom data block.
-        val template = Regex("<([A-Za-z_][A-Za-z0-9_.:-]*)>(.*?)</\\1>",
-            setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)).replace(body) {
-            if (it.groupValues[1].lowercase(Locale.US) in values) "" else it.value
+        val fields = parts.data.filterKeys { it in usedNames && it !in values }.toMutableMap()
+        values.filterKeys { it in usedNames }.forEach { (tag, value) ->
+            fields[tag] = if (tag == "board") value else value.htmlEscape()
         }
         val payload = buildString {
-            append(template)
-            if (isNotEmpty() && last() != '\n') append('\n')
-            for ((tag, value) in values) {
-                append("<$tag>")
-                append(if (tag == "board") value else value.htmlEscape())
-                append("</$tag>\n")
-            }
+            append(parts.template)
+            if (fields.isNotEmpty() && isNotEmpty() && last() != '\n') append('\n')
+            for ((tag, value) in fields) append("<$tag>$value</$tag>\n")
         }
-        return if (wrapper != null) "<instructions>$payload</instructions>" else payload
+        return if (parts.wrapped) "<instructions>$payload</instructions>" else payload
     }
 
     /**

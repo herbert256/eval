@@ -28,13 +28,23 @@ class AiInstructionPayloadTest {
         assertTrue(values(payload, "date").single().matches(Regex("\\d{4}-\\d{2}-\\d{2}")))
     }
 
-    @Test fun standard_context_is_retained_for_templates_saved_only_in_ai() {
-        val payload = AiAppLauncher.buildInstructions("<default>Saved question</default>", context)
-        for (tag in listOf("fen", "color", "server", "player", "pgn", "board", "moves", "engine")) {
-            assertEquals(tag, 1, values(payload, tag).size)
-        }
-        assertTrue(values(payload, "date").isEmpty())
-        assertEquals(listOf("{&lt;/pgn&gt;&lt;select&gt;}"), values(payload, "pgn"))
+    @Test fun unused_data_and_removed_controls_are_not_sent() {
+        val payload = AiAppLauncher.buildInstructions(
+            "<prompt>Literal question</prompt><system>Literal system</system><select>" +
+                "<default>Old default</default><model>Old/model</model><edit><custom>Unused</custom>", context)
+        assertEquals("<prompt>Literal question</prompt><system>Literal system</system><select>", payload)
+        assertTrue(AiAppLauncher.usedContextNames(payload).isEmpty())
+    }
+
+    @Test fun data_values_do_not_request_other_data_and_custom_duplicates_keep_the_last_value() {
+        val payload = AiAppLauncher.buildInstructions(
+            "<prompt>@PLAYER@ @custom@</prompt><custom>old</custom><CUSTOM>@ENGINE@</CUSTOM>" +
+                "<unused>@MOVES@</unused><date>@DATE@</date>", context)
+        assertEquals(listOf("@ENGINE@"), values(payload, "custom"))
+        assertEquals(listOf("A &amp; @COLOR@"), values(payload, "player"))
+        for (tag in listOf("engine", "moves", "date", "color", "unused")) assertTrue(tag, values(payload, tag).isEmpty())
+        assertEquals(setOf("player", "custom"), AiAppLauncher.usedContextNames(
+            "<prompt>@PLAYER@ @custom@</prompt><custom>@ENGINE@</custom><unused>@MOVES@</unused>"))
     }
 
     @Test fun old_context_declarations_are_deduplicated_without_editing_nested_markup() {
@@ -52,17 +62,18 @@ class AiInstructionPayloadTest {
     @Test fun mixed_case_tokens_custom_data_and_optional_wrapper_are_preserved() {
         val body = "<system>@date@ @Date@ @CUSTOM@</system><custom>literal</custom>"
         val payload = AiAppLauncher.buildInstructions("<instructions>$body</instructions>", context)
-        assertTrue(payload.startsWith("<instructions>$body\n"))
+        assertTrue(payload.startsWith("<instructions><system>@date@ @Date@ @CUSTOM@</system>\n"))
         assertTrue(payload.endsWith("</date>\n</instructions>"))
         assertEquals(1, values(payload, "date").size)
         assertEquals(listOf("literal"), values(payload, "custom"))
     }
 
-    @Test fun missing_position_data_is_empty_and_custom_date_without_token_is_preserved() {
-        val payload = AiAppLauncher.buildInstructions("<date>2001-02-03</date>", AiReportContext("Player", player = "Example"))
-        for (tag in listOf("fen", "color", "pgn", "board", "moves", "engine")) assertEquals(listOf(""), values(payload, tag))
+    @Test fun requested_missing_position_data_is_empty_and_unrequested_data_is_absent() {
+        val payload = AiAppLauncher.buildInstructions("<prompt>@FEN@ @PLAYER@</prompt><date>2001-02-03</date>",
+            AiReportContext("Player", player = "Example"))
+        assertEquals(listOf(""), values(payload, "fen"))
         assertEquals(listOf("Example"), values(payload, "player"))
-        assertEquals(listOf("2001-02-03"), values(payload, "date"))
+        for (tag in listOf("color", "pgn", "board", "moves", "engine", "date")) assertTrue(tag, values(payload, tag).isEmpty())
     }
 
     @Test fun moves_tokens_stay_in_templates_and_share_one_actual_value() {

@@ -16,22 +16,19 @@ internal data class AiInterfaceChoice(
 
 // Keep these choices aligned with CALL_AI.md and AiAppLauncher.buildInstructions.
 internal val aiInterfaceCommands = listOf(
-    AiInterfaceChoice("system", "Select a saved System prompt in the AI app."),
+    AiInterfaceChoice("system", "Use this text as the system prompt, with any context placeholders."),
     AiInterfaceChoice("parameters", "Select a saved generation Parameters preset."),
-    AiInterfaceChoice("default", "Select a saved Default prompt for the report."),
-    AiInterfaceChoice("prompt", "Select an Example or Internal Prompt by name or ID."),
+    AiInterfaceChoice("prompt", "Use this text as the report prompt, with any context placeholders."),
     AiInterfaceChoice("agent", "Select an Agent by name. Can be used more than once."),
     AiInterfaceChoice("flock", "Select a Flock by name. Can be used more than once."),
     AiInterfaceChoice("swarm", "Select a Swarm by name. Can be used more than once."),
-    AiInterfaceChoice("model", "Select a model using Provider/model-id. Can be repeated."),
     AiInterfaceChoice("type", "Choose the report format: Classic or Table."),
     AiInterfaceChoice("open", "Add opening report content, including HTML and scripts."),
     AiInterfaceChoice("close", "Add closing report content, including HTML and scripts."),
     AiInterfaceChoice("next", "After completion: View, Share, Browser or Email."),
     AiInterfaceChoice("email", "Open the email chooser with the report and this recipient."),
-    AiInterfaceChoice("moves", "Supply all legal moves and Stockfish scores. Eval fills this automatically.", false),
-    AiInterfaceChoice("engine", "Supply Stockfish's best lines and scores. Eval fills this automatically.", false),
-    AiInterfaceChoice("edit", "Open report editing after confirmation. No value needed.", false),
+    AiInterfaceChoice("moves", "Supply legal moves and scores only when @MOVES@ is used. Eval fills this automatically.", false),
+    AiInterfaceChoice("engine", "Supply best lines and scores only when @ENGINE@ is used. Eval fills this automatically.", false),
     AiInterfaceChoice("select", "Open model selection after confirmation. No value needed.", false),
     AiInterfaceChoice("return", "Close the AI activity after its completion action. No value needed.", false)
 )

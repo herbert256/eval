@@ -2,7 +2,7 @@ package com.eval.ui
 
 import java.util.UUID
 
-/** Named control instructions. Model prompts and system prompts belong to the AI app. */
+/** Named instructions containing literal prompts, controls and context placeholders. */
 data class AiInstructionEntry(
     val id: String = UUID.randomUUID().toString(),
     val name: String = "",

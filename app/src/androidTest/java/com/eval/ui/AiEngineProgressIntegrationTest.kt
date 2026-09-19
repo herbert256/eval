@@ -59,7 +59,11 @@ class AiEngineProgressIntegrationTest {
         exerciseScreen(stop = false)
     }
 
-    private fun exerciseScreen(stop: Boolean) {
+    @Test fun unused_engine_placeholders_skip_both_searches_and_send_no_context() {
+        exerciseScreen(stop = false, needsEngine = false)
+    }
+
+    private fun exerciseScreen(stop: Boolean, needsEngine: Boolean = true) {
         val sent = CopyOnWriteArrayList<Intent>()
         val receiver = object : ContextWrapper(context) {
             override fun startActivity(intent: Intent) { sent.add(intent) }
@@ -75,7 +79,7 @@ class AiEngineProgressIntegrationTest {
                 val state = field.get(vm) as MutableStateFlow<GameUiState>
                 val data = AiReportContext("Progress test", fen = fen)
                 state.value = state.value.copy(pendingAiReport = data, stockfishSettings = state.value.stockfishSettings.copy(
-                    movesListForAi = AiMovesSettings(secondsForMove = 0.05f, hashMb = 8),
+                    movesListForAi = AiMovesSettings(secondsForMove = if (needsEngine) 0.05f else 2f, hashMb = 8),
                     engineMovesForAi = AiEngineSettings(secondsForPosition = 60f, hashMb = 8)
                 ))
                 activity.setContent {
@@ -87,7 +91,16 @@ class AiEngineProgressIntegrationTest {
                             onStopAndContinue = vm::stopAiEngineAndContinue)
                     }
                 }
-                vm.launchSelectedAiInstruction(receiver, AiInstructionEntry(instructions = "<prompt>Explain @ENGINE@</prompt>"))
+                vm.launchSelectedAiInstruction(receiver, AiInstructionEntry(instructions =
+                    if (needsEngine) "<prompt>Explain @ENGINE@</prompt>" else "<prompt>Literal question</prompt>"))
+            }
+            if (!needsEngine) {
+                waitUntil(5000) { vm.uiState.value.pendingAiReport == null }
+                assertNull(vm.uiState.value.aiEngineProgress)
+                assertNull(vm.uiState.value.aiReportError)
+                assertEquals(1, sent.size)
+                assertEquals("<prompt>Literal question</prompt>", sent.single().getStringExtra("instructions"))
+                return@use
             }
             // Cold app startup also restores the current game and initializes its engine.
             waitUntil(45000) { vm.uiState.value.aiEngineProgress?.let { it.result != null && it.elapsedMs >= 500 } == true }
@@ -113,7 +126,8 @@ class AiEngineProgressIntegrationTest {
                 assertEquals(1, sent.size)
                 assertEquals("com.ai.ACTION_NEW_REPORT", sent.single().action)
                 val payload = requireNotNull(sent.single().getStringExtra("instructions"))
-                assertTrue(payload, payload.contains("<fen>$fen</fen>"))
+                assertFalse("Unrequested FEN must not be sent", payload.contains("<fen>"))
+                assertFalse("Unrequested moves must not be sent", payload.contains("<moves>"))
                 val engine = payload.substringAfter("<engine>").substringBefore("</engine>")
                 assertTrue(engine, engine.startsWith("Top 3 Stockfish lines"))
                 val rows = engine.lines().drop(1)
