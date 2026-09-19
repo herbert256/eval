@@ -27,7 +27,12 @@ class AiMovesSettingsScreenTest {
         repeat(40) {
             instrumentation.waitForIdleSync()
             if (visible().any { it.text?.toString() == text }) return
-            val bounds = Rect().also(visible().first { it.isScrollable }::getBoundsInScreen)
+            val scrollable = visible().firstOrNull { it.isScrollable }
+            if (scrollable == null) {
+                SystemClock.sleep(100)
+                return@repeat
+            }
+            val bounds = Rect().also(scrollable::getBoundsInScreen)
             val x = bounds.centerX().toFloat()
             val fromY = bounds.top + bounds.height() * 0.75f
             val toY = bounds.top + bounds.height() * 0.5f
@@ -70,6 +75,8 @@ class AiMovesSettingsScreenTest {
                 }
             }
             waitFor { visible().any { it.text?.toString() == "Preview Stage" } }
+            assertTrue(click(visible().first { it.text?.toString() == "Moves list for AI" }))
+            waitFor { visible().any { it.text?.toString() == "Seconds per move" } }
             scrollTo("0.25 s")
             waitFor { visible().any { it.text?.toString() == "Moves list for AI" } }
             assertTrue("Title bar remains visible when scrolling to the fourth card", visible().any { it.text?.toString() == "Stockfish" })
@@ -115,6 +122,8 @@ class AiMovesSettingsScreenTest {
                 activity.setContent { EvalTheme { StockfishSettingsScreen(StockfishSettings(), {}, {}, { saved = it }) } }
             }
             waitFor { visible().any { it.text?.toString() == "Preview Stage" } }
+            assertTrue(click(visible().first { it.text?.toString() == "Engine moves for AI" }))
+            waitFor { visible().any { it.text?.toString() == "Number of lines" } }
             scrollTo("Seconds per position")
             assertTrue(visible().any { it.text?.toString() == "Engine moves for AI" })
             assertTrue(visible().any { it.text?.toString() == "Stockfish" })
