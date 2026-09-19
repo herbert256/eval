@@ -71,11 +71,19 @@ data class ManualStageSettings(
     val multiLinesArrowColor: Long = DEFAULT_MULTI_LINES_ARROW_COLOR
 )
 
-// Combined Stockfish settings for all stages
+data class AiMovesSettings(
+    val secondsForMove: Float = 0.25f,
+    val threads: Int = 1,
+    val hashMb: Int = 32,
+    val useNnue: Boolean = true
+)
+
+// Combined Stockfish settings for analysis and AI handoff
 data class StockfishSettings(
     val previewStage: PreviewStageSettings = PreviewStageSettings(),
     val analyseStage: AnalyseStageSettings = AnalyseStageSettings(),
-    val manualStage: ManualStageSettings = ManualStageSettings()
+    val manualStage: ManualStageSettings = ManualStageSettings(),
+    val movesListForAi: AiMovesSettings = AiMovesSettings()
 )
 
 // Default board colors
@@ -382,6 +390,8 @@ data class GameUiState(
     val showSharePositionDialog: Boolean = false,
     // Context captured when the user requests an AI report
     val pendingAiReport: AiReportContext? = null,
+    val aiMovesProgress: String? = null,
+    val aiReportError: String? = null,
     // Opening Explorer
     val openingExplorerData: com.eval.data.OpeningExplorerResponse? = null,
     val openingExplorerLoading: Boolean = false,

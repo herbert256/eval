@@ -289,10 +289,12 @@ class StockfishEngine(private val context: Context) {
 
     /**
      * Reads analysis output lines until bestmove, calling parseInfoLine() for info lines.
-     * Returns the number of lines read.
+     * Returns the number of lines read and the final bestmove, if the search completed.
      * Must be called from a coroutine context (checks isActive).
      */
-    private suspend fun CoroutineScope.readAnalysisOutput(caller: String, fen: String): Int {
+    private data class SearchCompletion(val linesRead: Int, val bestMove: String? = null)
+
+    private suspend fun CoroutineScope.readAnalysisOutput(caller: String, fen: String): SearchCompletion {
         var linesRead = 0
         var idlePolls = 0
         val maxIdlePolls = 10
@@ -319,12 +321,12 @@ class StockfishEngine(private val context: Context) {
                     parseInfoLine(line, fen)
                 }
                 line.startsWith("bestmove") -> {
-                    break
+                    return SearchCompletion(linesRead, line.split(' ').getOrNull(1))
                 }
             }
         }
 
-        return linesRead
+        return SearchCompletion(linesRead)
     }
 
     private suspend fun readLineWithTimeout(timeoutMs: Long): String? {
@@ -353,6 +355,40 @@ class StockfishEngine(private val context: Context) {
         startAnalysis("analyzeWithTime", fen, "go movetime $timeMs") { linesRead ->
             if (linesRead < 3) {
                 android.util.Log.e("StockfishEngine", "analyzeWithTime: analysis ended early, only $linesRead lines read")
+            }
+        }
+    }
+
+    /** Evaluate one legal root move, retaining the original side-to-move/mate perspective.
+     * Used sequentially by the dedicated AI moves engine; never returns an unfinished score.
+     */
+    suspend fun evaluateMove(fen: String, move: String, timeMs: Int): AnalysisResult = withContext(Dispatchers.IO) {
+        require(Regex("[a-h][1-8][a-h][1-8][qrbn]?").matches(move))
+        require(timeMs > 0)
+        check(_isReady.value) { "Stockfish is not ready." }
+        analysisJob?.cancelAndJoin()
+        analysisMutex.withLock {
+            try {
+                kotlinx.coroutines.withTimeout(timeMs.toLong() + READY_TIMEOUT_MS + 5000) {
+                    sendCommand("stop")
+                    synchronized(pvLinesLock) {
+                        pvLines.clear()
+                        currentNodes = 0
+                        currentNps = 0
+                        _analysisResult.value = null
+                    }
+                    check(waitForEngineReady("evaluateMove")) { "Stockfish did not become ready." }
+                    sendCommand("position fen $fen")
+                    sendCommand("go movetime $timeMs searchmoves $move")
+                    val completed = readAnalysisOutput("evaluateMove", fen)
+                    val result = _analysisResult.value
+                    check(completed.bestMove == move && result?.fen == fen && result.bestMove == move) {
+                        "Stockfish did not finish evaluating $move."
+                    }
+                    checkNotNull(result)
+                }
+            } finally {
+                sendCommand("stop")
             }
         }
     }
@@ -402,8 +438,8 @@ class StockfishEngine(private val context: Context) {
                     sendCommand(goCommand)
 
                     // Read analysis output
-                    val linesRead = readAnalysisOutput(caller, fen)
-                    onComplete?.invoke(linesRead)
+                    val completed = readAnalysisOutput(caller, fen)
+                    onComplete?.invoke(completed.linesRead)
                 } catch (e: Exception) {
                     if (e !is CancellationException) {
                         android.util.Log.e("StockfishEngine", "$caller: exception: ${e.message}")

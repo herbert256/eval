@@ -19,6 +19,9 @@ import com.eval.stockfish.StockfishEngine
 import org.json.JSONObject
 import com.eval.audio.MoveSoundPlayer
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -43,6 +46,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private var analysisResultCollector: Job? = null
     private var stockfishReadyCollector: Job? = null
+    private var aiReportJob: Job? = null
 
     private val mainTimeline = GameTimeline()
     private val exploringTimeline = GameTimeline()
@@ -812,6 +816,7 @@ ${opening.moves} *
     // ===== Named AI instructions =====
 
     fun requestGameAiReport() {
+        dismissAiInstructionSelection()
         val state = _uiState.value
         val server = getGameSiteUrl()?.let { gameSiteHost(it) }.orEmpty()
         val moveIndex = if (state.isExploringLine) -1 else state.currentMoveIndex
@@ -827,23 +832,54 @@ ${opening.moves} *
     }
 
     fun requestPlayerAiReport(playerName: String, server: String = "") {
+        dismissAiInstructionSelection()
         _uiState.update { it.copy(pendingAiReport = AiReportContext(
             title = "Player Analysis: $playerName", player = playerName, server = server
         )) }
     }
 
     fun dismissAiInstructionSelection() {
-        _uiState.update { it.copy(pendingAiReport = null) }
+        aiReportJob?.cancel()
+        aiReportJob = null
+        _uiState.update { it.copy(pendingAiReport = null, aiMovesProgress = null, aiReportError = null) }
     }
 
-    fun launchSelectedAiInstruction(context: android.content.Context, entry: AiInstructionEntry): Boolean {
-        val data = _uiState.value.pendingAiReport ?: return false
+    fun launchSelectedAiInstruction(context: android.content.Context, entry: AiInstructionEntry) {
+        val data = _uiState.value.pendingAiReport ?: return
+        if (aiReportJob?.isActive == true) return
         if (!AiAppLauncher.isAiAppInstalled(context)) {
             showAiAppNotInstalledDialog()
-            return false
+            return
         }
-        return AiAppLauncher.launchAiReport(context, entry, data).also { launched ->
-            if (launched) dismissAiInstructionSelection()
+        val settings = _uiState.value.stockfishSettings.movesListForAi
+        _uiState.update { it.copy(aiMovesProgress = "Preparing moves list for AI…", aiReportError = null) }
+        aiReportJob = viewModelScope.launch {
+            try {
+                val moves = AiMovesList(getApplication()).generate(data.fen, settings) { completed, total ->
+                    _uiState.update {
+                        if (it.pendingAiReport !== data) it else it.copy(
+                            aiMovesProgress = "Evaluating moves: $completed of $total"
+                        )
+                    }
+                }
+                ensureActive()
+                if (_uiState.value.pendingAiReport !== data) return@launch
+                if (AiAppLauncher.launchAiReport(context, entry, data.copy(moves = moves))) {
+                    _uiState.update { it.copy(pendingAiReport = null, aiMovesProgress = null) }
+                }
+            } catch (e: TimeoutCancellationException) {
+                _uiState.update { if (it.pendingAiReport !== data) it else it.copy(
+                    aiReportError = "Stockfish timed out. Select the instruction to try again."
+                ) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { if (it.pendingAiReport !== data) it else it.copy(
+                    aiReportError = "Could not prepare the moves list. ${e.message.orEmpty()} Select the instruction to try again."
+                ) }
+            } finally {
+                _uiState.update { if (it.pendingAiReport !== data) it else it.copy(aiMovesProgress = null) }
+            }
         }
     }
 

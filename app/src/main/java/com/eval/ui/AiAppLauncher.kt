@@ -124,7 +124,8 @@ object AiAppLauncher {
     internal fun buildInstructions(instructions: String, data: AiReportContext): String {
         val values = linkedMapOf(
             "fen" to data.fen, "color" to data.color, "server" to data.server,
-            "player" to data.player, "pgn" to data.pgn, "board" to data.board
+            "player" to data.player, "pgn" to data.pgn, "board" to data.board,
+            "moves" to data.moves
         )
         val wrapper = Regex("^\\s*<instructions>(.*?)</instructions>\\s*$",
             setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)).matchEntire(instructions)

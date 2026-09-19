@@ -12,7 +12,7 @@ entered manually. The AI app also accepts the editor's paired flag tags.
 
 Eval sends `com.ai.ACTION_NEW_REPORT`, restricted to package `com.ai`, with `title` and `instructions` extras. There are no `prompt` or `system` extras.
 
-Eval leaves placeholders in the selected instruction text unchanged and sends the six standard context tags below, even when a value is unavailable. Repeated placeholders share one data field. When the interface uses a date placeholder, Eval also sends one `date` tag with the actual current local date. Existing top-level declarations of these supplied fields are deduplicated.
+Eval leaves placeholders in the selected instruction text unchanged and sends the seven standard context tags below, even when a value is unavailable. Repeated placeholders share one data field. When the interface uses a date placeholder, Eval also sends one `date` tag with the actual current local date. Existing top-level declarations of these supplied fields are deduplicated.
 
 ```xml
 <fen>r4rk1/1b2bppp/ppq1p3/2ppB2n/5P2/1P1BP3/P1PPQ1PP/R4RK1 w - - 0 15</fen>
@@ -23,6 +23,7 @@ Eval leaves placeholders in the selected instruction text unchanged and sends th
 
 *</pgn>
 <board>Generated board HTML and JavaScript</board>
+<moves>All legal moves, each with its Stockfish evaluation</moves>
 ```
 
 - `fen`: the current position, including an explored variation.
@@ -30,13 +31,14 @@ Eval leaves placeholders in the selected instruction text unchanged and sends th
 - `server`: `lichess.org` when known. Local FEN positions have no server.
 - `player`: for position reports, the side-to-move player's name; for profile reports, the selected player.
 - `pgn`: the available full game PGN. The separate FEN is authoritative for the current position.
+- `moves`: every legal move at the captured FEN, including all promotions, with SAN, UCI, Stockfish evaluation and search depth. Scores use White's perspective: positive favors White; negative favors Black; +M/-M marks mate for White/Black.
 - `board`: generated chessboard HTML/JavaScript. It belongs in report presentation, not model request bodies.
 
-A player-only report has empty FEN, color, PGN and board tags. It does not inherit the last opened game.
+A player-only report has empty FEN, color, PGN, board and moves tags. It does not inherit the last opened game.
 
-Plain values use XML escaping (`&amp;`, `&lt;`, `&gt;`, `&quot;`, `&#39;`). The receiver decodes those values once. Board markup is raw inside its enclosing tag. All six context tags and `<open>`/`<close>` bodies must be removed before interpreting control tags, so markup and PGN are never interpreted as commands.
+Plain values use XML escaping (`&amp;`, `&lt;`, `&gt;`, `&quot;`, `&#39;`). The receiver decodes those values once. Board markup is raw inside its enclosing tag. All seven context tags and `<open>`/`<close>` bodies must be removed before interpreting control tags, so markup and PGN are never interpreted as commands.
 
-Instructions may use `@FEN@`, `@COLOR@`, `@SERVER@`, `@PLAYER@`, `@PGN@`, `@BOARD@` and `@DATE@`. For example:
+Instructions may use `@FEN@`, `@COLOR@`, `@SERVER@`, `@PLAYER@`, `@PGN@`, `@MOVES@`, `@BOARD@` and `@DATE@`. For example:
 
 ```xml
 <type>Classic</type><select><next>View</next>
@@ -59,3 +61,7 @@ Saved templates are resolved by ID or unique name. Unresolved `<system>` or `<pr
 ## Existing Eval settings
 
 Settings schema v3 uses `aiInstructions` and the preference key `ai_instructions_list`. The upgrade retains old entry IDs, names and instruction text; a legacy email field becomes an `<email>` instruction. Old prompt, system-prompt and category fields are not retained in active Eval storage. Schema v2 exports and legacy preference-map exports can still be imported. New exports contain only instruction entries.
+
+## Moves list for AI
+
+The fourth card in Settings → Stockfish controls the moves list independently of board analysis: seconds per move, threads, hash memory and NNUE. Defaults are 0.25 seconds per move, one thread, 32 MB and NNUE on. Before every position handoff, Eval evaluates each legal root move with these settings and shows cancellable progress. The complete list is always supplied, including when only an AI-saved template uses it. If any search fails, the user can retry; no partial list is sent. Terminal positions send “No legal moves in this position.” Player-only requests send an empty moves field.

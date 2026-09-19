@@ -114,6 +114,12 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
                 whiteArrowColor = prefs.getLong(KEY_MANUAL_WHITE_ARROW_COLOR, DEFAULT_WHITE_ARROW_COLOR),
                 blackArrowColor = prefs.getLong(KEY_MANUAL_BLACK_ARROW_COLOR, DEFAULT_BLACK_ARROW_COLOR),
                 multiLinesArrowColor = prefs.getLong(KEY_MANUAL_MULTILINES_ARROW_COLOR, DEFAULT_MULTI_LINES_ARROW_COLOR)
+            ),
+            movesListForAi = AiMovesSettings(
+                secondsForMove = prefs.getFloat(KEY_AI_MOVES_SECONDS, AiMovesSettings().secondsForMove),
+                threads = prefs.getInt(KEY_AI_MOVES_THREADS, AiMovesSettings().threads),
+                hashMb = prefs.getInt(KEY_AI_MOVES_HASH, AiMovesSettings().hashMb),
+                useNnue = prefs.getBoolean(KEY_AI_MOVES_NNUE, AiMovesSettings().useNnue)
             )
         )
     }
@@ -142,6 +148,10 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             .putLong(KEY_MANUAL_WHITE_ARROW_COLOR, settings.manualStage.whiteArrowColor)
             .putLong(KEY_MANUAL_BLACK_ARROW_COLOR, settings.manualStage.blackArrowColor)
             .putLong(KEY_MANUAL_MULTILINES_ARROW_COLOR, settings.manualStage.multiLinesArrowColor)
+            .putFloat(KEY_AI_MOVES_SECONDS, settings.movesListForAi.secondsForMove)
+            .putInt(KEY_AI_MOVES_THREADS, settings.movesListForAi.threads)
+            .putInt(KEY_AI_MOVES_HASH, settings.movesListForAi.hashMb)
+            .putBoolean(KEY_AI_MOVES_NNUE, settings.movesListForAi.useNnue)
             .apply()
     }
 
@@ -529,6 +539,10 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             .putLong(KEY_MANUAL_WHITE_ARROW_COLOR, settings.manualStage.whiteArrowColor)
             .putLong(KEY_MANUAL_BLACK_ARROW_COLOR, settings.manualStage.blackArrowColor)
             .putLong(KEY_MANUAL_MULTILINES_ARROW_COLOR, settings.manualStage.multiLinesArrowColor)
+            .putFloat(KEY_AI_MOVES_SECONDS, settings.movesListForAi.secondsForMove)
+            .putInt(KEY_AI_MOVES_THREADS, settings.movesListForAi.threads)
+            .putInt(KEY_AI_MOVES_HASH, settings.movesListForAi.hashMb)
+            .putBoolean(KEY_AI_MOVES_NNUE, settings.movesListForAi.useNnue)
     }
 
     private fun putBoardLayoutSettings(editor: SharedPreferences.Editor, settings: BoardLayoutSettings) {
@@ -627,6 +641,12 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         private const val KEY_MANUAL_WHITE_ARROW_COLOR = "manual_white_arrow_color"
         private const val KEY_MANUAL_BLACK_ARROW_COLOR = "manual_black_arrow_color"
         private const val KEY_MANUAL_MULTILINES_ARROW_COLOR = "manual_multilines_arrow_color"
+
+        // AI moves list settings
+        private const val KEY_AI_MOVES_SECONDS = "ai_moves_seconds"
+        private const val KEY_AI_MOVES_THREADS = "ai_moves_threads"
+        private const val KEY_AI_MOVES_HASH = "ai_moves_hash"
+        private const val KEY_AI_MOVES_NNUE = "ai_moves_nnue"
 
         // Board layout settings
         private const val KEY_BOARD_SHOW_COORDINATES = "board_show_coordinates"

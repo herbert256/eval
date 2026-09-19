@@ -167,10 +167,11 @@ AI reports use Android intents to the external `com.ai` app:
 - Eval stores `AiInstructionEntry(id, name, instructions)` in `ai_instructions_list`.
 - Every position or player report requires selection of a named instruction.
 - Prompts and system prompts are created/stored in the AI app.
-- Append `<fen>`, `<color>`, `<server>`, `<player>`, `<pgn>`, `<board>` in that order, including empty fields when unavailable.
+- Append `<fen>`, `<color>`, `<server>`, `<player>`, `<pgn>`, `<board>`, `<moves>` in that order, including empty fields when unavailable.
 - FEN/color describe the current position. For position reports player is the side-to-move player's name; for profile reports it is the selected player. PGN is the available full game; board is generated HTML/JavaScript.
-- Plain context values use XML escaping; `<board>` contains raw generated HTML/JavaScript. Receivers must treat all six fields as data, not control tags, and decode plain values once.
-- Instructions may use `@FEN@`, `@COLOR@`, `@SERVER@`, `@PLAYER@`, `@PGN@`, `@BOARD@`, `@DATE@`.
+- Moves list for AI is the fourth Stockfish settings card: seconds per legal move, threads, hash, NNUE. A dedicated engine evaluates every legal root move at the captured FEN before handoff; scores use White's perspective. Progress is cancellable; failures never send a partial list. Include moves with standard context so AI-owned templates can use it.
+- Plain context values use XML escaping; `<board>` contains raw generated HTML/JavaScript. Receivers must treat all seven fields as data, not control tags, and decode plain values once.
+- Instructions may use `@FEN@`, `@COLOR@`, `@SERVER@`, `@PLAYER@`, `@PGN@`, `@MOVES@`, `@BOARD@`, `@DATE@`.
 - Settings schema v3 imports v2 and legacy maps. Legacy names/instructions migrate, email becomes an instruction tag, and prompt/system/category fields are removed from active storage.
 
 ## Content Sources

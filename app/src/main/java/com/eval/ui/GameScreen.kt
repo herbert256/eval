@@ -131,6 +131,8 @@ fun GameScreenContent(
 
     if (uiState.pendingAiReport != null) {
         AiInstructionSelectionScreen(
+            progress = uiState.aiMovesProgress,
+            error = uiState.aiReportError,
             instructions = uiState.aiInstructions,
             onSelectInstruction = { viewModel.launchSelectedAiInstruction(context, it) },
             onDismiss = { viewModel.dismissAiInstructionSelection() }
@@ -866,7 +868,9 @@ fun SharePositionScreen(
 fun AiInstructionSelectionScreen(
     instructions: List<AiInstructionEntry>,
     onSelectInstruction: (AiInstructionEntry) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    progress: String? = null,
+    error: String? = null
 ) {
     androidx.activity.compose.BackHandler(onBack = onDismiss)
     Column(
@@ -874,6 +878,12 @@ fun AiInstructionSelectionScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         EvalTitleBar("Select AI Instruction", onBackClick = onDismiss, onEvalClick = onDismiss)
+        if (progress != null) {
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            Text(progress, color = Color.White)
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+        if (error != null) Text(error, color = MaterialTheme.colorScheme.error)
         Column(
             modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -884,6 +894,7 @@ fun AiInstructionSelectionScreen(
             instructions.sortedBy { it.name.lowercase() }.forEach { entry ->
                 Button(
                     onClick = { onSelectInstruction(entry) }, modifier = Modifier.fillMaxWidth(),
+                    enabled = progress == null,
                     colors = ButtonDefaults.buttonColors(containerColor = AppColors.ButtonGreen)
                 ) { Text(entry.name) }
             }

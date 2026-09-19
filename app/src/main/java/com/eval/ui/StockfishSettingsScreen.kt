@@ -107,6 +107,10 @@ fun StockfishSettingsScreen(
     var manualMultiPv by remember { mutableStateOf(stockfishSettings.manualStage.multiPv) }
     var manualNnue by remember { mutableStateOf(stockfishSettings.manualStage.useNnue) }
 
+    var aiMoves by remember { mutableStateOf(stockfishSettings.movesListForAi) }
+    val aiSecondsOptions = listOf(0.05f, 0.10f, 0.25f, 0.50f, 1f, 2f, 5f, 10f)
+    val aiHashOptions = listOf(8, 16, 32, 64, 128, 256)
+
     // Options for steppers
     val previewSecondsOptions = listOf(0.01f, 0.05f, 0.10f, 0.25f, 0.50f)
     val previewThreadsOptions = (1..4).toList()
@@ -123,6 +127,7 @@ fun StockfishSettingsScreen(
 
     fun saveAllSettings() {
         onSave(stockfishSettings.copy(
+            movesListForAi = aiMoves,
             previewStage = PreviewStageSettings(
                 secondsForMove = previewSeconds,
                 threads = previewThreads,
@@ -157,8 +162,7 @@ fun StockfishSettingsScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(16.dp)
-            .verticalScroll(rememberScrollState()),
+            .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         EvalTitleBar(
@@ -167,272 +171,340 @@ fun StockfishSettingsScreen(
             onEvalClick = onBackToGame
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // ===== PREVIEW STAGE CARD =====
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
-            ),
-            modifier = Modifier.fillMaxWidth()
+        Column(
+            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // ===== PREVIEW STAGE CARD =====
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                ),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
-                    text = "Preview Stage",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.White
-                )
-
-                // Seconds for move
-                SettingStepper(
-                    label = "Seconds for move",
-                    value = String.format("%.2f s", previewSeconds),
-                    onDecrement = {
-                        previewSeconds = stepInList(previewSeconds, previewSecondsOptions, -1)
-                        saveAllSettings()
-                    },
-                    onIncrement = {
-                        previewSeconds = stepInList(previewSeconds, previewSecondsOptions, 1)
-                        saveAllSettings()
-                    },
-                    canDecrement = previewSecondsOptions.indexOf(previewSeconds) > 0,
-                    canIncrement = previewSecondsOptions.indexOf(previewSeconds) < previewSecondsOptions.lastIndex
-                )
-
-                // Number of threads
-                SettingStepper(
-                    label = "Number of threads",
-                    value = previewThreads.toString(),
-                    onDecrement = {
-                        previewThreads = stepInList(previewThreads, previewThreadsOptions, -1)
-                        saveAllSettings()
-                    },
-                    onIncrement = {
-                        previewThreads = stepInList(previewThreads, previewThreadsOptions, 1)
-                        saveAllSettings()
-                    },
-                    canDecrement = previewThreadsOptions.indexOf(previewThreads) > 0,
-                    canIncrement = previewThreadsOptions.indexOf(previewThreads) < previewThreadsOptions.lastIndex
-                )
-
-                // Hash memory
-                SettingStepper(
-                    label = "Hash memory (MB)",
-                    value = "$previewHash MB",
-                    onDecrement = {
-                        previewHash = stepInList(previewHash, previewHashOptions, -1)
-                        saveAllSettings()
-                    },
-                    onIncrement = {
-                        previewHash = stepInList(previewHash, previewHashOptions, 1)
-                        saveAllSettings()
-                    },
-                    canDecrement = previewHashOptions.indexOf(previewHash) > 0,
-                    canIncrement = previewHashOptions.indexOf(previewHash) < previewHashOptions.lastIndex
-                )
-
-                // Use NNUE toggle
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text("Use NNUE", color = Color.White)
-                    Switch(
-                        checked = previewNnue,
-                        onCheckedChange = {
-                            previewNnue = it
-                            saveAllSettings()
-                        }
+                    Text(
+                        text = "Preview Stage",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White
                     )
+
+                    // Seconds for move
+                    SettingStepper(
+                        label = "Seconds for move",
+                        value = String.format("%.2f s", previewSeconds),
+                        onDecrement = {
+                            previewSeconds = stepInList(previewSeconds, previewSecondsOptions, -1)
+                            saveAllSettings()
+                        },
+                        onIncrement = {
+                            previewSeconds = stepInList(previewSeconds, previewSecondsOptions, 1)
+                            saveAllSettings()
+                        },
+                        canDecrement = previewSecondsOptions.indexOf(previewSeconds) > 0,
+                        canIncrement = previewSecondsOptions.indexOf(previewSeconds) < previewSecondsOptions.lastIndex
+                    )
+
+                    // Number of threads
+                    SettingStepper(
+                        label = "Number of threads",
+                        value = previewThreads.toString(),
+                        onDecrement = {
+                            previewThreads = stepInList(previewThreads, previewThreadsOptions, -1)
+                            saveAllSettings()
+                        },
+                        onIncrement = {
+                            previewThreads = stepInList(previewThreads, previewThreadsOptions, 1)
+                            saveAllSettings()
+                        },
+                        canDecrement = previewThreadsOptions.indexOf(previewThreads) > 0,
+                        canIncrement = previewThreadsOptions.indexOf(previewThreads) < previewThreadsOptions.lastIndex
+                    )
+
+                    // Hash memory
+                    SettingStepper(
+                        label = "Hash memory (MB)",
+                        value = "$previewHash MB",
+                        onDecrement = {
+                            previewHash = stepInList(previewHash, previewHashOptions, -1)
+                            saveAllSettings()
+                        },
+                        onIncrement = {
+                            previewHash = stepInList(previewHash, previewHashOptions, 1)
+                            saveAllSettings()
+                        },
+                        canDecrement = previewHashOptions.indexOf(previewHash) > 0,
+                        canIncrement = previewHashOptions.indexOf(previewHash) < previewHashOptions.lastIndex
+                    )
+
+                    // Use NNUE toggle
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Use NNUE", color = Color.White)
+                        Switch(
+                            checked = previewNnue,
+                            onCheckedChange = {
+                                previewNnue = it
+                                saveAllSettings()
+                            }
+                        )
+                    }
                 }
             }
-        }
 
-        // ===== ANALYSE STAGE CARD =====
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+            // ===== ANALYSE STAGE CARD =====
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                ),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
-                    text = "Analyse Stage",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.White
-                )
-
-                // Seconds for move
-                SettingStepper(
-                    label = "Seconds for move",
-                    value = String.format("%.2f s", analyseSeconds),
-                    onDecrement = {
-                        analyseSeconds = stepInList(analyseSeconds, analyseSecondsOptions, -1)
-                        saveAllSettings()
-                    },
-                    onIncrement = {
-                        analyseSeconds = stepInList(analyseSeconds, analyseSecondsOptions, 1)
-                        saveAllSettings()
-                    },
-                    canDecrement = analyseSecondsOptions.indexOf(analyseSeconds) > 0,
-                    canIncrement = analyseSecondsOptions.indexOf(analyseSeconds) < analyseSecondsOptions.lastIndex
-                )
-
-                // Number of threads
-                SettingStepper(
-                    label = "Number of threads",
-                    value = analyseThreads.toString(),
-                    onDecrement = {
-                        analyseThreads = stepInList(analyseThreads, analyseThreadsOptions, -1)
-                        saveAllSettings()
-                    },
-                    onIncrement = {
-                        analyseThreads = stepInList(analyseThreads, analyseThreadsOptions, 1)
-                        saveAllSettings()
-                    },
-                    canDecrement = analyseThreadsOptions.indexOf(analyseThreads) > 0,
-                    canIncrement = analyseThreadsOptions.indexOf(analyseThreads) < analyseThreadsOptions.lastIndex
-                )
-
-                // Hash memory
-                SettingStepper(
-                    label = "Hash memory (MB)",
-                    value = "$analyseHash MB",
-                    onDecrement = {
-                        analyseHash = stepInList(analyseHash, analyseHashOptions, -1)
-                        saveAllSettings()
-                    },
-                    onIncrement = {
-                        analyseHash = stepInList(analyseHash, analyseHashOptions, 1)
-                        saveAllSettings()
-                    },
-                    canDecrement = analyseHashOptions.indexOf(analyseHash) > 0,
-                    canIncrement = analyseHashOptions.indexOf(analyseHash) < analyseHashOptions.lastIndex
-                )
-
-                // Use NNUE toggle
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text("Use NNUE", color = Color.White)
-                    Switch(
-                        checked = analyseNnue,
-                        onCheckedChange = {
-                            analyseNnue = it
-                            saveAllSettings()
-                        }
+                    Text(
+                        text = "Analyse Stage",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White
                     )
+
+                    // Seconds for move
+                    SettingStepper(
+                        label = "Seconds for move",
+                        value = String.format("%.2f s", analyseSeconds),
+                        onDecrement = {
+                            analyseSeconds = stepInList(analyseSeconds, analyseSecondsOptions, -1)
+                            saveAllSettings()
+                        },
+                        onIncrement = {
+                            analyseSeconds = stepInList(analyseSeconds, analyseSecondsOptions, 1)
+                            saveAllSettings()
+                        },
+                        canDecrement = analyseSecondsOptions.indexOf(analyseSeconds) > 0,
+                        canIncrement = analyseSecondsOptions.indexOf(analyseSeconds) < analyseSecondsOptions.lastIndex
+                    )
+
+                    // Number of threads
+                    SettingStepper(
+                        label = "Number of threads",
+                        value = analyseThreads.toString(),
+                        onDecrement = {
+                            analyseThreads = stepInList(analyseThreads, analyseThreadsOptions, -1)
+                            saveAllSettings()
+                        },
+                        onIncrement = {
+                            analyseThreads = stepInList(analyseThreads, analyseThreadsOptions, 1)
+                            saveAllSettings()
+                        },
+                        canDecrement = analyseThreadsOptions.indexOf(analyseThreads) > 0,
+                        canIncrement = analyseThreadsOptions.indexOf(analyseThreads) < analyseThreadsOptions.lastIndex
+                    )
+
+                    // Hash memory
+                    SettingStepper(
+                        label = "Hash memory (MB)",
+                        value = "$analyseHash MB",
+                        onDecrement = {
+                            analyseHash = stepInList(analyseHash, analyseHashOptions, -1)
+                            saveAllSettings()
+                        },
+                        onIncrement = {
+                            analyseHash = stepInList(analyseHash, analyseHashOptions, 1)
+                            saveAllSettings()
+                        },
+                        canDecrement = analyseHashOptions.indexOf(analyseHash) > 0,
+                        canIncrement = analyseHashOptions.indexOf(analyseHash) < analyseHashOptions.lastIndex
+                    )
+
+                    // Use NNUE toggle
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Use NNUE", color = Color.White)
+                        Switch(
+                            checked = analyseNnue,
+                            onCheckedChange = {
+                                analyseNnue = it
+                                saveAllSettings()
+                            }
+                        )
+                    }
                 }
             }
-        }
 
-        // ===== MANUAL STAGE CARD =====
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+            // ===== MANUAL STAGE CARD =====
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                ),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
-                    text = "Manual Stage",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.White
-                )
-
-                // Depth
-                SettingStepper(
-                    label = "Depth",
-                    value = manualDepth.toString(),
-                    onDecrement = {
-                        manualDepth = stepInList(manualDepth, manualDepthOptions, -1)
-                        saveAllSettings()
-                    },
-                    onIncrement = {
-                        manualDepth = stepInList(manualDepth, manualDepthOptions, 1)
-                        saveAllSettings()
-                    },
-                    canDecrement = manualDepthOptions.indexOf(manualDepth) > 0,
-                    canIncrement = manualDepthOptions.indexOf(manualDepth) < manualDepthOptions.lastIndex
-                )
-
-                // Number of threads
-                SettingStepper(
-                    label = "Number of threads",
-                    value = manualThreads.toString(),
-                    onDecrement = {
-                        manualThreads = stepInList(manualThreads, manualThreadsOptions, -1)
-                        saveAllSettings()
-                    },
-                    onIncrement = {
-                        manualThreads = stepInList(manualThreads, manualThreadsOptions, 1)
-                        saveAllSettings()
-                    },
-                    canDecrement = manualThreadsOptions.indexOf(manualThreads) > 0,
-                    canIncrement = manualThreadsOptions.indexOf(manualThreads) < manualThreadsOptions.lastIndex
-                )
-
-                // Hash memory
-                SettingStepper(
-                    label = "Hash memory (MB)",
-                    value = "$manualHash MB",
-                    onDecrement = {
-                        manualHash = stepInList(manualHash, manualHashOptions, -1)
-                        saveAllSettings()
-                    },
-                    onIncrement = {
-                        manualHash = stepInList(manualHash, manualHashOptions, 1)
-                        saveAllSettings()
-                    },
-                    canDecrement = manualHashOptions.indexOf(manualHash) > 0,
-                    canIncrement = manualHashOptions.indexOf(manualHash) < manualHashOptions.lastIndex
-                )
-
-                // MultiPV lines
-                SettingStepper(
-                    label = "MultiPV lines",
-                    value = manualMultiPv.toString(),
-                    onDecrement = {
-                        manualMultiPv = stepInList(manualMultiPv, manualMultiPvOptions, -1)
-                        saveAllSettings()
-                    },
-                    onIncrement = {
-                        manualMultiPv = stepInList(manualMultiPv, manualMultiPvOptions, 1)
-                        saveAllSettings()
-                    },
-                    canDecrement = manualMultiPvOptions.indexOf(manualMultiPv) > 0,
-                    canIncrement = manualMultiPvOptions.indexOf(manualMultiPv) < manualMultiPvOptions.lastIndex
-                )
-
-                // Use NNUE toggle
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text("Use NNUE", color = Color.White)
-                    Switch(
-                        checked = manualNnue,
-                        onCheckedChange = {
-                            manualNnue = it
-                            saveAllSettings()
-                        }
+                    Text(
+                        text = "Manual Stage",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White
                     )
+
+                    // Depth
+                    SettingStepper(
+                        label = "Depth",
+                        value = manualDepth.toString(),
+                        onDecrement = {
+                            manualDepth = stepInList(manualDepth, manualDepthOptions, -1)
+                            saveAllSettings()
+                        },
+                        onIncrement = {
+                            manualDepth = stepInList(manualDepth, manualDepthOptions, 1)
+                            saveAllSettings()
+                        },
+                        canDecrement = manualDepthOptions.indexOf(manualDepth) > 0,
+                        canIncrement = manualDepthOptions.indexOf(manualDepth) < manualDepthOptions.lastIndex
+                    )
+
+                    // Number of threads
+                    SettingStepper(
+                        label = "Number of threads",
+                        value = manualThreads.toString(),
+                        onDecrement = {
+                            manualThreads = stepInList(manualThreads, manualThreadsOptions, -1)
+                            saveAllSettings()
+                        },
+                        onIncrement = {
+                            manualThreads = stepInList(manualThreads, manualThreadsOptions, 1)
+                            saveAllSettings()
+                        },
+                        canDecrement = manualThreadsOptions.indexOf(manualThreads) > 0,
+                        canIncrement = manualThreadsOptions.indexOf(manualThreads) < manualThreadsOptions.lastIndex
+                    )
+
+                    // Hash memory
+                    SettingStepper(
+                        label = "Hash memory (MB)",
+                        value = "$manualHash MB",
+                        onDecrement = {
+                            manualHash = stepInList(manualHash, manualHashOptions, -1)
+                            saveAllSettings()
+                        },
+                        onIncrement = {
+                            manualHash = stepInList(manualHash, manualHashOptions, 1)
+                            saveAllSettings()
+                        },
+                        canDecrement = manualHashOptions.indexOf(manualHash) > 0,
+                        canIncrement = manualHashOptions.indexOf(manualHash) < manualHashOptions.lastIndex
+                    )
+
+                    // MultiPV lines
+                    SettingStepper(
+                        label = "MultiPV lines",
+                        value = manualMultiPv.toString(),
+                        onDecrement = {
+                            manualMultiPv = stepInList(manualMultiPv, manualMultiPvOptions, -1)
+                            saveAllSettings()
+                        },
+                        onIncrement = {
+                            manualMultiPv = stepInList(manualMultiPv, manualMultiPvOptions, 1)
+                            saveAllSettings()
+                        },
+                        canDecrement = manualMultiPvOptions.indexOf(manualMultiPv) > 0,
+                        canIncrement = manualMultiPvOptions.indexOf(manualMultiPv) < manualMultiPvOptions.lastIndex
+                    )
+
+                    // Use NNUE toggle
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Use NNUE", color = Color.White)
+                        Switch(
+                            checked = manualNnue,
+                            onCheckedChange = {
+                                manualNnue = it
+                                saveAllSettings()
+                            }
+                        )
+                    }
+                }
+            }
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = AppColors.CardBackground)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text("Moves list for AI", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Color.White)
+                    Text(
+                        "Evaluate every legal move before sending a position to AI. More time per move gives deeper analysis and a longer wait.",
+                        color = AppColors.SubtleText
+                    )
+                    SettingStepper(
+                        label = "Seconds per move",
+                        value = "${aiMoves.secondsForMove} s",
+                        onDecrement = {
+                            aiMoves = aiMoves.copy(secondsForMove = stepInList(aiMoves.secondsForMove, aiSecondsOptions, -1))
+                            saveAllSettings()
+                        },
+                        onIncrement = {
+                            aiMoves = aiMoves.copy(secondsForMove = stepInList(aiMoves.secondsForMove, aiSecondsOptions, 1))
+                            saveAllSettings()
+                        },
+                        canDecrement = aiMoves.secondsForMove > aiSecondsOptions.first(),
+                        canIncrement = aiMoves.secondsForMove < aiSecondsOptions.last()
+                    )
+                    SettingStepper(
+                        label = "Number of threads",
+                        value = aiMoves.threads.toString(),
+                        onDecrement = { aiMoves = aiMoves.copy(threads = aiMoves.threads - 1); saveAllSettings() },
+                        onIncrement = { aiMoves = aiMoves.copy(threads = aiMoves.threads + 1); saveAllSettings() },
+                        canDecrement = aiMoves.threads > 1,
+                        canIncrement = aiMoves.threads < 4
+                    )
+                    SettingStepper(
+                        label = "Hash memory (MB)",
+                        value = "${aiMoves.hashMb} MB",
+                        onDecrement = {
+                            aiMoves = aiMoves.copy(hashMb = stepInList(aiMoves.hashMb, aiHashOptions, -1))
+                            saveAllSettings()
+                        },
+                        onIncrement = {
+                            aiMoves = aiMoves.copy(hashMb = stepInList(aiMoves.hashMb, aiHashOptions, 1))
+                            saveAllSettings()
+                        },
+                        canDecrement = aiMoves.hashMb > aiHashOptions.first(),
+                        canIncrement = aiMoves.hashMb < aiHashOptions.last()
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Use NNUE", color = Color.White)
+                        Switch(checked = aiMoves.useNnue, onCheckedChange = {
+                            aiMoves = aiMoves.copy(useNnue = it)
+                            saveAllSettings()
+                        })
+                    }
                 }
             }
         }

@@ -8,6 +8,18 @@ import org.junit.Test
 class AiInterfaceCompletionTest {
     private fun field(text: String, cursor: Int = text.length) = TextFieldValue(text, TextRange(cursor))
 
+    @Test fun moves_placeholder_is_available_with_an_explanation_and_inserts_the_complete_token() {
+        val typed = field("@")
+        val choice = aiInterfacePlaceholders.single { it.name == "MOVES" }
+        assertTrue(choice.description.contains("Stockfish"))
+        val inserted = insertAiInterfaceChoice(typed, requireNotNull(aiInterfaceCompletion(field(""), typed)), choice)
+        assertEquals("@MOVES@", inserted.text)
+        assertEquals(TextRange(7), inserted.selection)
+        val tag = insertAiInterfaceChoice(field("<"), requireNotNull(aiInterfaceCompletion(field(""), field("<"))),
+            aiInterfaceCommands.single { it.name == "moves" })
+        assertEquals("<moves></moves>", tag.text)
+    }
+
     @Test fun command_insertion_preserves_both_sides_and_places_cursor_inside_the_pair() {
         val before = field("before after", 7)
         val typed = field("before <after", 8)

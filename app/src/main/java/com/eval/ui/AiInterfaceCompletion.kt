@@ -29,6 +29,7 @@ internal val aiInterfaceCommands = listOf(
     AiInterfaceChoice("close", "Add closing report content, including HTML and scripts."),
     AiInterfaceChoice("next", "After completion: View, Share, Browser or Email."),
     AiInterfaceChoice("email", "Open the email chooser with the report and this recipient."),
+    AiInterfaceChoice("moves", "Supply all legal moves and Stockfish scores. Eval fills this automatically.", false),
     AiInterfaceChoice("edit", "Open report editing after confirmation. No value needed.", false),
     AiInterfaceChoice("select", "Open model selection after confirmation. No value needed.", false),
     AiInterfaceChoice("return", "Close the AI activity after its completion action. No value needed.", false)
@@ -40,6 +41,7 @@ internal val aiInterfacePlaceholders = listOf(
     AiInterfaceChoice("SERVER", "The chess server, when known."),
     AiInterfaceChoice("PLAYER", "The side-to-move player or the selected profile player."),
     AiInterfaceChoice("PGN", "The available game moves and headers."),
+    AiInterfaceChoice("MOVES", "All legal moves in the current position, with Stockfish scores from White's perspective."),
     AiInterfaceChoice("BOARD", "An interactive chessboard for opening or closing report content."),
     AiInterfaceChoice("DATE", "Today's local date in year-month-day format.")
 )
