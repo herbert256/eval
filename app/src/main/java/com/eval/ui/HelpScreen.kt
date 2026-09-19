@@ -102,8 +102,9 @@ private val helpSections = listOf(
         content = "Create named instructions in Settings > AI Instructions. Each entry has a name and instructions; you can edit, copy or delete it.\n\n" +
             "When requesting any AI report, select a named instruction. Prompts and system prompts are created and stored in the AI app.\n\n" +
             "Eval sends one data field for each standard position/player value and includes the current date when its placeholder is used. The AI app replaces placeholders in prompts, system prompts and report presentation; Eval keeps that text unchanged. Repeated placeholders share one data field. Unavailable values are empty.\n\n" +
-            "Instruction placeholders: @FEN@, @COLOR@, @SERVER@, @PLAYER@, @PGN@, @MOVES@, @BOARD@ and @DATE@. @COLOR@ is White or Black according to the side to move.\n\n" +
-            "@MOVES@ contains every legal move at the current position with its Stockfish evaluation. Scores use White's perspective; +M/-M marks mate for White/Black. Settings > Stockfish > Moves list for AI controls time per move, threads, memory and NNUE. Eval shows cancellable progress before handing off the complete list."
+            "Instruction placeholders: @FEN@, @COLOR@, @SERVER@, @PLAYER@, @PGN@, @MOVES@, @ENGINE@, @BOARD@ and @DATE@. @COLOR@ is White or Black according to the side to move.\n\n" +
+            "@MOVES@ contains every legal move at the current position with its Stockfish evaluation. Scores use White's perspective; +M/-M marks mate for White/Black. Settings > Stockfish > Moves list for AI controls time per move, threads, memory and NNUE. Eval shows cancellable progress before handing off the complete list.\n\n" +
+            "@ENGINE@ contains Stockfish's best continuations, ranked for the side to move, with scores and search depth. Settings > Stockfish > Engine moves for AI controls the number of lines, time per position, threads, memory and NNUE. Both data sets use the same captured position."
     ),
     HelpEntry(
         title = "Game Sources",

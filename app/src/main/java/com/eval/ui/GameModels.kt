@@ -78,12 +78,21 @@ data class AiMovesSettings(
     val useNnue: Boolean = true
 )
 
+data class AiEngineSettings(
+    val secondsForPosition: Float = 2f,
+    val threads: Int = 1,
+    val hashMb: Int = 32,
+    val multiPv: Int = 3,
+    val useNnue: Boolean = true
+)
+
 // Combined Stockfish settings for analysis and AI handoff
 data class StockfishSettings(
     val previewStage: PreviewStageSettings = PreviewStageSettings(),
     val analyseStage: AnalyseStageSettings = AnalyseStageSettings(),
     val manualStage: ManualStageSettings = ManualStageSettings(),
-    val movesListForAi: AiMovesSettings = AiMovesSettings()
+    val movesListForAi: AiMovesSettings = AiMovesSettings(),
+    val engineMovesForAi: AiEngineSettings = AiEngineSettings()
 )
 
 // Default board colors

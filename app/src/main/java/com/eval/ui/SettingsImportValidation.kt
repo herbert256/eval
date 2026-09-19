@@ -8,6 +8,10 @@ import com.google.gson.JsonObject
 internal object SettingsImportValidation {
     private data class NumericRule(val path: String, val key: String, val min: Double, val max: Double)
     private val numericRules = listOf(
+        NumericRule("stockfishSettings.engineMovesForAi.secondsForPosition", "ai_engine_seconds", 0.25, 60.0),
+        NumericRule("stockfishSettings.engineMovesForAi.threads", "ai_engine_threads", 1.0, 4.0),
+        NumericRule("stockfishSettings.engineMovesForAi.hashMb", "ai_engine_hash", 8.0, 256.0),
+        NumericRule("stockfishSettings.engineMovesForAi.multiPv", "ai_engine_lines", 1.0, 32.0),
         NumericRule("stockfishSettings.movesListForAi.secondsForMove", "ai_moves_seconds", 0.05, 10.0),
         NumericRule("stockfishSettings.movesListForAi.threads", "ai_moves_threads", 1.0, 4.0),
         NumericRule("stockfishSettings.movesListForAi.hashMb", "ai_moves_hash", 8.0, 256.0),
@@ -144,5 +148,8 @@ internal object SettingsImportValidation {
         fields("Float", "analyse_seconds", "preview_seconds", "ai_moves_seconds")
         fields("Int", "ai_moves_threads", "ai_moves_hash")
         fields("Boolean", "ai_moves_nnue")
+        fields("Float", "ai_engine_seconds")
+        fields("Int", "ai_engine_threads", "ai_engine_hash", "ai_engine_lines")
+        fields("Boolean", "ai_engine_nnue")
     }
 }

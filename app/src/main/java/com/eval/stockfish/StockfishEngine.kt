@@ -281,6 +281,7 @@ class StockfishEngine(private val context: Context) {
             val line = readLineWithTimeout(remaining) ?: break
             if (line == "readyok") return true
         }
+        currentCoroutineContext().ensureActive()
         val alive = process?.isAlive == true
         android.util.Log.e("StockfishEngine", "$caller: ${if (alive) "Timed out waiting for readyok" else "Engine closed its output"}")
         _isReady.value = false
@@ -294,7 +295,11 @@ class StockfishEngine(private val context: Context) {
      */
     private data class SearchCompletion(val linesRead: Int, val bestMove: String? = null)
 
-    private suspend fun CoroutineScope.readAnalysisOutput(caller: String, fen: String): SearchCompletion {
+    private suspend fun CoroutineScope.readAnalysisOutput(
+        caller: String,
+        fen: String,
+        onExactInfo: ((AnalysisResult, PvLine) -> Unit)? = null
+    ): SearchCompletion {
         var linesRead = 0
         var idlePolls = 0
         val maxIdlePolls = 10
@@ -318,7 +323,10 @@ class StockfishEngine(private val context: Context) {
             linesRead++
             when {
                 line.startsWith("info depth") && line.contains("score") -> {
-                    parseInfoLine(line, fen)
+                    val parsed = parseInfoLine(line, fen)
+                    if (parsed != null && !line.contains(" lowerbound") && !line.contains(" upperbound")) {
+                        _analysisResult.value?.let { onExactInfo?.invoke(it, parsed) }
+                    }
                 }
                 line.startsWith("bestmove") -> {
                     return SearchCompletion(linesRead, line.split(' ').getOrNull(1))
@@ -326,6 +334,7 @@ class StockfishEngine(private val context: Context) {
             }
         }
 
+        currentCoroutineContext().ensureActive()
         return SearchCompletion(linesRead)
     }
 
@@ -393,6 +402,40 @@ class StockfishEngine(private val context: Context) {
         }
     }
 
+    /** A finished MultiPV search, using only a full iteration at a common depth. */
+    suspend fun evaluateLines(fen: String, lineCount: Int, timeMs: Int): AnalysisResult = withContext(Dispatchers.IO) {
+        require(lineCount in 1..32 && timeMs > 0)
+        check(_isReady.value) { "Stockfish is not ready." }
+        analysisJob?.cancelAndJoin()
+        analysisMutex.withLock {
+            try {
+                kotlinx.coroutines.withTimeout(timeMs.toLong() + READY_TIMEOUT_MS + 5000) {
+                    sendCommand("stop")
+                    sendCommand("setoption name MultiPV value $lineCount")
+                    synchronized(pvLinesLock) {
+                        pvLines.clear()
+                        currentNodes = 0
+                        currentNps = 0
+                        _analysisResult.value = null
+                    }
+                    check(waitForEngineReady("evaluateLines")) { "Stockfish did not become ready." }
+                    val completedIteration = CompletedPvIteration(lineCount)
+                    sendCommand("position fen $fen")
+                    sendCommand("go movetime $timeMs")
+                    val completed = readAnalysisOutput("evaluateLines", fen, completedIteration::record)
+                    check(!completed.bestMove.isNullOrBlank() && completed.bestMove !in listOf("(none)", "0000")) {
+                        "Stockfish did not finish the engine lines search."
+                    }
+                    checkNotNull(completedIteration.result) {
+                        "Stockfish did not finish all $lineCount lines. Increase the time per position and try again."
+                    }
+                }
+            } finally {
+                sendCommand("stop")
+            }
+        }
+    }
+
     /**
      * Common analysis launcher used by both analyze() and analyzeWithTime().
      * Handles job cancellation, mutex locking, engine readiness, position setup,
@@ -450,7 +493,7 @@ class StockfishEngine(private val context: Context) {
         }
     }
 
-    private fun parseInfoLine(line: String, fen: String) {
+    private fun parseInfoLine(line: String, fen: String): PvLine? {
         try {
             // Extract depth
             val depthMatch = Regex("depth (\\d+)").find(line)
@@ -517,8 +560,10 @@ class StockfishEngine(private val context: Context) {
                     fen = fen
                 )
             }
+            return pvLine
         } catch (e: Exception) {
             e.printStackTrace()
+            return null
         }
     }
 

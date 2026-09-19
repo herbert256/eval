@@ -8,6 +8,15 @@ import org.junit.Test
 class AiInterfaceCompletionTest {
     private fun field(text: String, cursor: Int = text.length) = TextFieldValue(text, TextRange(cursor))
 
+    @Test fun engine_placeholder_and_data_tag_are_available_in_both_pickers() {
+        val token = insertAiInterfaceChoice(field("@"), requireNotNull(aiInterfaceCompletion(field(""), field("@"))),
+            aiInterfacePlaceholders.single { it.name == "ENGINE" })
+        assertEquals("@ENGINE@", token.text)
+        val tag = insertAiInterfaceChoice(field("<"), requireNotNull(aiInterfaceCompletion(field(""), field("<"))),
+            aiInterfaceCommands.single { it.name == "engine" })
+        assertEquals("<engine></engine>", tag.text)
+    }
+
     @Test fun moves_placeholder_is_available_with_an_explanation_and_inserts_the_complete_token() {
         val typed = field("@")
         val choice = aiInterfacePlaceholders.single { it.name == "MOVES" }

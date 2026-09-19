@@ -108,6 +108,8 @@ fun StockfishSettingsScreen(
     var manualNnue by remember { mutableStateOf(stockfishSettings.manualStage.useNnue) }
 
     var aiMoves by remember { mutableStateOf(stockfishSettings.movesListForAi) }
+    var aiEngine by remember { mutableStateOf(stockfishSettings.engineMovesForAi) }
+    val aiEngineSecondsOptions = listOf(0.25f, 0.5f, 1f, 2f, 5f, 10f, 30f, 60f)
     val aiSecondsOptions = listOf(0.05f, 0.10f, 0.25f, 0.50f, 1f, 2f, 5f, 10f)
     val aiHashOptions = listOf(8, 16, 32, 64, 128, 256)
 
@@ -128,6 +130,7 @@ fun StockfishSettingsScreen(
     fun saveAllSettings() {
         onSave(stockfishSettings.copy(
             movesListForAi = aiMoves,
+            engineMovesForAi = aiEngine,
             previewStage = PreviewStageSettings(
                 secondsForMove = previewSeconds,
                 threads = previewThreads,
@@ -502,6 +505,77 @@ fun StockfishSettingsScreen(
                         Text("Use NNUE", color = Color.White)
                         Switch(checked = aiMoves.useNnue, onCheckedChange = {
                             aiMoves = aiMoves.copy(useNnue = it)
+                            saveAllSettings()
+                        })
+                    }
+                }
+            }
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = AppColors.CardBackground)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text("Engine moves for AI", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Color.White)
+                    Text(
+                        "Send the best Stockfish continuations to AI. Search time is shared across the selected lines; more time gives deeper analysis.",
+                        color = AppColors.SubtleText
+                    )
+                    SettingStepper(
+                        label = "Number of lines",
+                        value = aiEngine.multiPv.toString(),
+                        onDecrement = { aiEngine = aiEngine.copy(multiPv = aiEngine.multiPv - 1); saveAllSettings() },
+                        onIncrement = { aiEngine = aiEngine.copy(multiPv = aiEngine.multiPv + 1); saveAllSettings() },
+                        canDecrement = aiEngine.multiPv > 1,
+                        canIncrement = aiEngine.multiPv < 32
+                    )
+                    SettingStepper(
+                        label = "Seconds per position",
+                        value = "${aiEngine.secondsForPosition} s",
+                        onDecrement = {
+                            aiEngine = aiEngine.copy(secondsForPosition = stepInList(aiEngine.secondsForPosition, aiEngineSecondsOptions, -1))
+                            saveAllSettings()
+                        },
+                        onIncrement = {
+                            aiEngine = aiEngine.copy(secondsForPosition = stepInList(aiEngine.secondsForPosition, aiEngineSecondsOptions, 1))
+                            saveAllSettings()
+                        },
+                        canDecrement = aiEngine.secondsForPosition > aiEngineSecondsOptions.first(),
+                        canIncrement = aiEngine.secondsForPosition < aiEngineSecondsOptions.last()
+                    )
+                    SettingStepper(
+                        label = "Number of threads",
+                        value = aiEngine.threads.toString(),
+                        onDecrement = { aiEngine = aiEngine.copy(threads = aiEngine.threads - 1); saveAllSettings() },
+                        onIncrement = { aiEngine = aiEngine.copy(threads = aiEngine.threads + 1); saveAllSettings() },
+                        canDecrement = aiEngine.threads > 1,
+                        canIncrement = aiEngine.threads < 4
+                    )
+                    SettingStepper(
+                        label = "Hash memory (MB)",
+                        value = "${aiEngine.hashMb} MB",
+                        onDecrement = {
+                            aiEngine = aiEngine.copy(hashMb = stepInList(aiEngine.hashMb, aiHashOptions, -1))
+                            saveAllSettings()
+                        },
+                        onIncrement = {
+                            aiEngine = aiEngine.copy(hashMb = stepInList(aiEngine.hashMb, aiHashOptions, 1))
+                            saveAllSettings()
+                        },
+                        canDecrement = aiEngine.hashMb > aiHashOptions.first(),
+                        canIncrement = aiEngine.hashMb < aiHashOptions.last()
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Use NNUE", color = Color.White)
+                        Switch(checked = aiEngine.useNnue, onCheckedChange = {
+                            aiEngine = aiEngine.copy(useNnue = it)
                             saveAllSettings()
                         })
                     }

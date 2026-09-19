@@ -18,5 +18,6 @@ data class AiReportContext(
     val player: String = "",
     val pgn: String = "",
     val board: String = "",
-    val moves: String = ""
+    val moves: String = "",
+    val engine: String = ""
 )

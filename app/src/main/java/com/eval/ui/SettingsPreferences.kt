@@ -120,6 +120,13 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
                 threads = prefs.getInt(KEY_AI_MOVES_THREADS, AiMovesSettings().threads),
                 hashMb = prefs.getInt(KEY_AI_MOVES_HASH, AiMovesSettings().hashMb),
                 useNnue = prefs.getBoolean(KEY_AI_MOVES_NNUE, AiMovesSettings().useNnue)
+            ),
+            engineMovesForAi = AiEngineSettings(
+                secondsForPosition = prefs.getFloat(KEY_AI_ENGINE_SECONDS, AiEngineSettings().secondsForPosition),
+                threads = prefs.getInt(KEY_AI_ENGINE_THREADS, AiEngineSettings().threads),
+                hashMb = prefs.getInt(KEY_AI_ENGINE_HASH, AiEngineSettings().hashMb),
+                multiPv = prefs.getInt(KEY_AI_ENGINE_LINES, AiEngineSettings().multiPv),
+                useNnue = prefs.getBoolean(KEY_AI_ENGINE_NNUE, AiEngineSettings().useNnue)
             )
         )
     }
@@ -152,6 +159,11 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             .putInt(KEY_AI_MOVES_THREADS, settings.movesListForAi.threads)
             .putInt(KEY_AI_MOVES_HASH, settings.movesListForAi.hashMb)
             .putBoolean(KEY_AI_MOVES_NNUE, settings.movesListForAi.useNnue)
+            .putFloat(KEY_AI_ENGINE_SECONDS, settings.engineMovesForAi.secondsForPosition)
+            .putInt(KEY_AI_ENGINE_THREADS, settings.engineMovesForAi.threads)
+            .putInt(KEY_AI_ENGINE_HASH, settings.engineMovesForAi.hashMb)
+            .putInt(KEY_AI_ENGINE_LINES, settings.engineMovesForAi.multiPv)
+            .putBoolean(KEY_AI_ENGINE_NNUE, settings.engineMovesForAi.useNnue)
             .apply()
     }
 
@@ -543,6 +555,11 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             .putInt(KEY_AI_MOVES_THREADS, settings.movesListForAi.threads)
             .putInt(KEY_AI_MOVES_HASH, settings.movesListForAi.hashMb)
             .putBoolean(KEY_AI_MOVES_NNUE, settings.movesListForAi.useNnue)
+            .putFloat(KEY_AI_ENGINE_SECONDS, settings.engineMovesForAi.secondsForPosition)
+            .putInt(KEY_AI_ENGINE_THREADS, settings.engineMovesForAi.threads)
+            .putInt(KEY_AI_ENGINE_HASH, settings.engineMovesForAi.hashMb)
+            .putInt(KEY_AI_ENGINE_LINES, settings.engineMovesForAi.multiPv)
+            .putBoolean(KEY_AI_ENGINE_NNUE, settings.engineMovesForAi.useNnue)
     }
 
     private fun putBoardLayoutSettings(editor: SharedPreferences.Editor, settings: BoardLayoutSettings) {
@@ -647,6 +664,13 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         private const val KEY_AI_MOVES_THREADS = "ai_moves_threads"
         private const val KEY_AI_MOVES_HASH = "ai_moves_hash"
         private const val KEY_AI_MOVES_NNUE = "ai_moves_nnue"
+
+        // AI engine lines settings
+        private const val KEY_AI_ENGINE_SECONDS = "ai_engine_seconds"
+        private const val KEY_AI_ENGINE_THREADS = "ai_engine_threads"
+        private const val KEY_AI_ENGINE_HASH = "ai_engine_hash"
+        private const val KEY_AI_ENGINE_LINES = "ai_engine_lines"
+        private const val KEY_AI_ENGINE_NNUE = "ai_engine_nnue"
 
         // Board layout settings
         private const val KEY_BOARD_SHOW_COORDINATES = "board_show_coordinates"

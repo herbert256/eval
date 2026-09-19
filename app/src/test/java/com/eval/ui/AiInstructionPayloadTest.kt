@@ -7,7 +7,8 @@ class AiInstructionPayloadTest {
     private val context = AiReportContext(
         title = "Test", fen = "position", color = "White", server = "lichess.org",
         player = "A & @COLOR@", pgn = "{</pgn><select>}",
-        board = "<div id=\"board\">Board & text</div>", moves = "e4 (e2e4): +0.20"
+        board = "<div id=\"board\">Board & text</div>", moves = "e4 (e2e4): +0.20",
+        engine = "1. +0.20 (depth 12): e4 e5 Nf3"
     )
 
     private fun values(payload: String, tag: String) = Regex("<$tag>(.*?)</$tag>", RegexOption.DOT_MATCHES_ALL)
@@ -29,7 +30,7 @@ class AiInstructionPayloadTest {
 
     @Test fun standard_context_is_retained_for_templates_saved_only_in_ai() {
         val payload = AiAppLauncher.buildInstructions("<default>Saved question</default>", context)
-        for (tag in listOf("fen", "color", "server", "player", "pgn", "board", "moves")) {
+        for (tag in listOf("fen", "color", "server", "player", "pgn", "board", "moves", "engine")) {
             assertEquals(tag, 1, values(payload, tag).size)
         }
         assertTrue(values(payload, "date").isEmpty())
@@ -59,7 +60,7 @@ class AiInstructionPayloadTest {
 
     @Test fun missing_position_data_is_empty_and_custom_date_without_token_is_preserved() {
         val payload = AiAppLauncher.buildInstructions("<date>2001-02-03</date>", AiReportContext("Player", player = "Example"))
-        for (tag in listOf("fen", "color", "pgn", "board", "moves")) assertEquals(listOf(""), values(payload, tag))
+        for (tag in listOf("fen", "color", "pgn", "board", "moves", "engine")) assertEquals(listOf(""), values(payload, tag))
         assertEquals(listOf("Example"), values(payload, "player"))
         assertEquals(listOf("2001-02-03"), values(payload, "date"))
     }
@@ -69,6 +70,14 @@ class AiInstructionPayloadTest {
         val payload = AiAppLauncher.buildInstructions("<moves>@MOVES@</moves><MOVES>old</MOVES>$template", context)
         assertTrue(payload.startsWith(template))
         assertEquals(listOf(context.moves), values(payload, "moves"))
+        assertFalse(payload.contains("old"))
+    }
+
+    @Test fun engine_tokens_are_left_for_ai_and_repeated_declarations_share_one_value() {
+        val template = "<system>Use @ENGINE@ and @engine@</system><prompt>Explain @ENGINE@</prompt>"
+        val payload = AiAppLauncher.buildInstructions("<engine>@ENGINE@</engine><ENGINE>old</ENGINE>$template", context)
+        assertTrue(payload.startsWith(template))
+        assertEquals(listOf(context.engine), values(payload, "engine"))
         assertFalse(payload.contains("old"))
     }
 }

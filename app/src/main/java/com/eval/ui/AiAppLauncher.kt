@@ -125,7 +125,7 @@ object AiAppLauncher {
         val values = linkedMapOf(
             "fen" to data.fen, "color" to data.color, "server" to data.server,
             "player" to data.player, "pgn" to data.pgn, "board" to data.board,
-            "moves" to data.moves
+            "moves" to data.moves, "engine" to data.engine
         )
         val wrapper = Regex("^\\s*<instructions>(.*?)</instructions>\\s*$",
             setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)).matchEntire(instructions)

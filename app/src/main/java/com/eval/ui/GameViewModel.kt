@@ -851,20 +851,24 @@ ${opening.moves} *
             showAiAppNotInstalledDialog()
             return
         }
-        val settings = _uiState.value.stockfishSettings.movesListForAi
+        val settings = _uiState.value.stockfishSettings
         _uiState.update { it.copy(aiMovesProgress = "Preparing moves list for AI…", aiReportError = null) }
         aiReportJob = viewModelScope.launch {
             try {
-                val moves = AiMovesList(getApplication()).generate(data.fen, settings) { completed, total ->
+                val moves = AiMovesList(getApplication()).generate(data.fen, settings.movesListForAi) { completed, total ->
                     _uiState.update {
                         if (it.pendingAiReport !== data) it else it.copy(
                             aiMovesProgress = "Evaluating moves: $completed of $total"
                         )
                     }
                 }
+                _uiState.update { if (it.pendingAiReport !== data) it else it.copy(
+                    aiMovesProgress = "Finding the best ${settings.engineMovesForAi.multiPv} Stockfish lines…"
+                ) }
+                val engine = AiEngineLines(getApplication()).generate(data.fen, settings.engineMovesForAi)
                 ensureActive()
                 if (_uiState.value.pendingAiReport !== data) return@launch
-                if (AiAppLauncher.launchAiReport(context, entry, data.copy(moves = moves))) {
+                if (AiAppLauncher.launchAiReport(context, entry, data.copy(moves = moves, engine = engine))) {
                     _uiState.update { it.copy(pendingAiReport = null, aiMovesProgress = null) }
                 }
             } catch (e: TimeoutCancellationException) {
@@ -875,7 +879,7 @@ ${opening.moves} *
                 throw e
             } catch (e: Exception) {
                 _uiState.update { if (it.pendingAiReport !== data) it else it.copy(
-                    aiReportError = "Could not prepare the moves list. ${e.message.orEmpty()} Select the instruction to try again."
+                    aiReportError = "Could not prepare the Stockfish data. ${e.message.orEmpty()} Select the instruction to try again."
                 ) }
             } finally {
                 _uiState.update { if (it.pendingAiReport !== data) it else it.copy(aiMovesProgress = null) }
