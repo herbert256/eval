@@ -1053,19 +1053,9 @@ fun GameContent(
                         Text(date, fontSize = 13.sp, color = Color.White)
                     }
                 }
-                // Result - don't show for ongoing games
-                val isOngoingStatus = game.status == "*" || game.status == "started" ||
-                    game.status == "unknown" || game.status.isBlank()
-                if (!isOngoingStatus) {
-                    val resultText = when (game.winner) {
-                        "white" -> "1-0"
-                        "black" -> "0-1"
-                        else -> if (game.status == "draw" || game.status == "stalemate") "½-½" else game.status
-                    }
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        Text("Result:", fontSize = 13.sp, color = AppColors.SubtleText, modifier = Modifier.width(labelWidth))
-                        Text(resultText, fontSize = 13.sp, color = Color.White)
-                    }
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    Text("Result:", fontSize = 13.sp, color = AppColors.SubtleText, modifier = Modifier.width(labelWidth))
+                    Text(gameOutcome(game).text, fontSize = 13.sp, color = Color.White)
                 }
                 // Termination - extract from PGN headers
                 game.pgn?.let { pgn ->

@@ -1083,18 +1083,13 @@ private fun TournamentRow(
 }
 
 @Composable
-private fun TournamentGameRow(
+internal fun TournamentGameRow(
     game: com.eval.data.LichessGame,
     onClick: () -> Unit
 ) {
     val whiteName = game.players.white.user?.name ?: "White"
     val blackName = game.players.black.user?.name ?: "Black"
-    val result = when (game.winner) {
-        "white" -> "1-0"
-        "black" -> "0-1"
-        null -> if (game.status == "started") "*" else "½-½"
-        else -> "?"
-    }
+    val result = gameOutcome(game).text
 
     Row(
         modifier = Modifier
@@ -1546,13 +1541,13 @@ private fun PgnEventRow(
 }
 
 @Composable
-private fun PgnGameRow(
+internal fun PgnGameRow(
     game: com.eval.data.LichessGame,
     onClick: () -> Unit
 ) {
     val whiteName = game.players.white.user?.name ?: "White"
     val blackName = game.players.black.user?.name ?: "Black"
-    val result = game.status
+    val result = gameOutcome(game).text
 
     Row(
         modifier = Modifier

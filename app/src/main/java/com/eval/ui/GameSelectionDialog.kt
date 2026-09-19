@@ -17,6 +17,13 @@ import androidx.compose.ui.unit.sp
 import com.eval.data.ChessServer
 import com.eval.data.LichessGame
 
+private fun playerResultColor(result: String): Color = when (result) {
+    "won" -> AppColors.ResultWon
+    "lost" -> AppColors.ResultLost
+    "draw" -> AppColors.ResultDraw
+    else -> AppColors.MediumGray
+}
+
 /**
  * Full screen game selection view.
  */
@@ -103,21 +110,8 @@ private fun GameListItem(
             ?: "Anonymous"
     }
 
-    // Determine result from user's perspective
-    val isOngoingGame = game.status == "*" || game.status == "started" ||
-        game.status == "unknown" || game.status.isBlank()
-    val (resultText, resultColor) = when {
-        isOngoingGame -> "" to Color.Transparent  // No result for ongoing games
-        game.winner == "white" && userPlayedWhite -> "won" to AppColors.ResultWon
-        game.winner == "black" && userPlayedBlack -> "won" to AppColors.ResultWon
-        game.winner == "white" && userPlayedBlack -> "lost" to AppColors.ResultLost
-        game.winner == "black" && userPlayedWhite -> "lost" to AppColors.ResultLost
-        game.status == "draw" || game.status == "stalemate" -> "draw" to AppColors.ResultDraw
-        game.winner == null && (game.status == "draw" || game.status == "stalemate" || game.status == "timeout" || game.status == "outoftime") -> {
-            "draw" to Color(0xFF2196F3)
-        }
-        else -> game.status to Color.Gray
-    }
+    val resultText = playerResultText(game, username)
+    val resultColor = playerResultColor(resultText)
 
     // Row colors based on which color the user played
     val rowBackgroundColor = if (userPlayedBlack) Color.Black else Color.White
@@ -455,7 +449,7 @@ fun SelectedRetrieveGamesScreen(
 
 /**
  * Individual game row for retrieve games list - shows opponent, format, and result.
- * Result is "1" green if won, "0" red if lost, "1/2" if draw.
+ * Shows won/lost/draw for completed games and a dash when no result is known.
  */
 @Composable
 private fun RetrieveGameListItem(
@@ -478,18 +472,8 @@ private fun RetrieveGameListItem(
             ?: "Anonymous"
     }
 
-    // Determine result from account's perspective
-    // Don't show results for ongoing games (status "*", "started", "unknown", etc.)
-    val isOngoingGame = game.status == "*" || game.status == "started" ||
-        game.status == "unknown" || game.status.isBlank()
-    val (resultText, resultColor) = when {
-        isOngoingGame -> "" to Color.Transparent  // No result for ongoing games
-        game.winner == "white" && accountPlayedWhite -> "won" to AppColors.ResultWon
-        game.winner == "black" && accountPlayedBlack -> "won" to AppColors.ResultWon
-        game.winner == "white" && accountPlayedBlack -> "lost" to AppColors.ResultLost
-        game.winner == "black" && accountPlayedWhite -> "lost" to AppColors.ResultLost
-        else -> "draw" to AppColors.ResultDraw
-    }
+    val resultText = playerResultText(game, accountName)
+    val resultColor = playerResultColor(resultText)
 
     // Row colors based on which color the account played
     val rowBackgroundColor = if (accountPlayedBlack) Color.Black else Color.White
@@ -692,8 +676,7 @@ private fun AnalysedGameListItem(
         "1-0" -> "1-0" to AppColors.ResultWon
         "0-1" -> "0-1" to AppColors.ResultLost
         "1/2-1/2" -> "1/2" to AppColors.ResultDraw
-        "*" -> "" to Color.Transparent
-        else -> "" to Color.Transparent
+        else -> "-" to AppColors.MediumGray
     }
 
     val dateText = try {
