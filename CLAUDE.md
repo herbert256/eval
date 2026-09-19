@@ -228,7 +228,7 @@ Use `restartAnalysisForExploringLine()` in `AnalysisOrchestrator`: stop -> newGa
 
 ## UI Conventions
 
-- **No popups**: All views are full-screen with `EvalTitleBar`. No `AlertDialog`, `Dialog`, or `ExposedDropdownMenu`.
+- **Full-screen views**: Use `EvalTitleBar` and avoid `AlertDialog`, `Dialog`, or `ExposedDropdownMenu`. The AI interface editor is an explicit exception: typing `<` or `@` opens a choice popup while retaining the editor underneath.
 - **Early return pattern**: Overlay screens use `if (showX) { XScreen(...); return }`
 - **Radio buttons**: Selection controls use inline radio button groups (not dropdowns)
 - **Dark theme only**: Hardcoded dark color scheme via `AppColors` object
@@ -239,7 +239,7 @@ Use `restartAnalysisForExploringLine()` in `AnalysisOrchestrator`: stop -> newGa
 ## Verification Checklist
 
 - [ ] Build: `JAVA_HOME=/opt/homebrew/opt/openjdk@17 ./gradlew assembleDebug`
-- [ ] No `AlertDialog`, `Dialog`, or `ExposedDropdownMenu` in UI code
+- [ ] No `AlertDialog`, `Dialog`, or `ExposedDropdownMenu` outside the AI interface editor's choice popups
 - [ ] Title bar visible on all screens
 - [ ] Load game from Lichess
 - [ ] Full analysis pipeline (Preview -> Analyse -> Manual)

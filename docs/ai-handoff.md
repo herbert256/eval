@@ -2,6 +2,14 @@
 
 Eval stores named instruction entries (`id`, `name`, `instructions`). Both position and player reports require the user to choose an entry. Prompts and system prompts are created and stored in the AI app.
 
+In **Edit AI interface** (or **New AI interface**), type `<` to choose a command
+or `@` to choose a context placeholder. Each popup lists names and short
+descriptions. A command inserts matching opening and closing tags; the cursor
+starts between them for commands that need a value. Flags need no value and
+leave the cursor after the tag pair. A placeholder inserts its complete token.
+Cancel keeps the typed character so custom tags and literal text can still be
+entered manually. The AI app also accepts the editor's paired flag tags.
+
 Eval sends `com.ai.ACTION_NEW_REPORT`, restricted to package `com.ai`, with `title` and `instructions` extras. There are no `prompt` or `system` extras.
 
 The selected instruction text is followed by these six tags, in this order, even when a value is unavailable:
