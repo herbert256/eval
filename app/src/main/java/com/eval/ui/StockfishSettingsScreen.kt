@@ -88,14 +88,13 @@ private fun SettingStepper(
 @Composable
 private fun CollapsibleStockfishCard(
     title: String,
-    containerColor: Color = MaterialTheme.colorScheme.surfaceVariant,
     spacing: Dp = 12.dp,
     content: @Composable ColumnScope.() -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = containerColor)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Row(
             modifier = Modifier
@@ -441,7 +440,7 @@ fun StockfishSettingsScreen(
                 }
             }
 
-            CollapsibleStockfishCard(title = "Moves list for AI", containerColor = AppColors.CardBackground, spacing = 16.dp) {
+            CollapsibleStockfishCard(title = "Moves list for AI", spacing = 16.dp) {
                 Text(
                     "Evaluate every legal move before sending a position to AI. More time per move gives deeper analysis and a longer wait.",
                     color = AppColors.SubtleText
@@ -495,7 +494,7 @@ fun StockfishSettingsScreen(
                 }
             }
 
-            CollapsibleStockfishCard(title = "Engine moves for AI", containerColor = AppColors.CardBackground, spacing = 16.dp) {
+            CollapsibleStockfishCard(title = "Engine moves for AI", spacing = 16.dp) {
                 Text(
                     "Send the best Stockfish continuations to AI. Search time is shared across the selected lines; more time gives deeper analysis.",
                     color = AppColors.SubtleText
