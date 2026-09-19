@@ -101,7 +101,7 @@ private val helpSections = listOf(
         icon = "⚙",
         content = "Create named instructions in Settings > AI Instructions. Each entry has a name and instructions; you can edit, copy or delete it.\n\n" +
             "When requesting any AI report, select a named instruction. Prompts and system prompts are created and stored in the AI app.\n\n" +
-            "Eval appends <fen>, <color>, <server>, <player>, <pgn> and <board> to the selected instructions. The FEN and color describe the current position; PGN contains the available game. Board contains HTML/JavaScript for the report. Unavailable values are empty.\n\n" +
+            "Eval sends one data field for each standard position/player value and includes the current date when its placeholder is used. The AI app replaces placeholders in prompts, system prompts and report presentation; Eval keeps that text unchanged. Repeated placeholders share one data field. Unavailable values are empty.\n\n" +
             "Instruction placeholders: @FEN@, @COLOR@, @SERVER@, @PLAYER@, @PGN@, @BOARD@ and @DATE@. @COLOR@ is White or Black according to the side to move."
     ),
     HelpEntry(

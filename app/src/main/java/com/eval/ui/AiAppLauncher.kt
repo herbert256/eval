@@ -120,27 +120,37 @@ object AiAppLauncher {
         )
     }
 
-    /** Plain context fields are XML-escaped; board is the generated HTML/JavaScript. */
+    /** Send templates unchanged; only the receiving AI app expands their placeholders. */
     internal fun buildInstructions(instructions: String, data: AiReportContext): String {
         val values = linkedMapOf(
-            "FEN" to data.fen, "COLOR" to data.color, "SERVER" to data.server,
-            "PLAYER" to data.player, "PGN" to data.pgn, "BOARD" to data.board,
-            "DATE" to SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+            "fen" to data.fen, "color" to data.color, "server" to data.server,
+            "player" to data.player, "pgn" to data.pgn, "board" to data.board
         )
-        // A single pass prevents tokens inside PGN or player names being expanded again.
-        val expanded = Regex("@(FEN|COLOR|SERVER|PLAYER|PGN|BOARD|DATE)@").replace(instructions) {
-            values.getValue(it.groupValues[1])
+        val wrapper = Regex("^\\s*<instructions>(.*?)</instructions>\\s*$",
+            setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)).matchEntire(instructions)
+        val body = wrapper?.groupValues?.get(1) ?: instructions
+        val usedNames = Regex("@([A-Za-z_][A-Za-z0-9_.:-]*)@").findAll(body)
+            .map { it.groupValues[1].lowercase(Locale.US) }.toSet()
+        if ("date" in usedNames) {
+            values["date"] = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
         }
-        return buildString {
-            append(expanded)
+        // Keep the standard context for templates saved only in AI. Replace caller-supplied
+        // top-level context declarations with one authoritative field per name. Never inspect
+        // markup inside a prompt, system, opening/closing body or other custom data block.
+        val template = Regex("<([A-Za-z_][A-Za-z0-9_.:-]*)>(.*?)</\\1>",
+            setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)).replace(body) {
+            if (it.groupValues[1].lowercase(Locale.US) in values) "" else it.value
+        }
+        val payload = buildString {
+            append(template)
             if (isNotEmpty() && last() != '\n') append('\n')
-            for (tag in listOf("fen", "color", "server", "player", "pgn", "board")) {
-                val value = values.getValue(tag.uppercase(Locale.US))
+            for ((tag, value) in values) {
                 append("<$tag>")
                 append(if (tag == "board") value else value.htmlEscape())
                 append("</$tag>\n")
             }
         }
+        return if (wrapper != null) "<instructions>$payload</instructions>" else payload
     }
 
     /**

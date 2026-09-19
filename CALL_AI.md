@@ -44,10 +44,10 @@ uppercase/mixed-case tag names.
 
 | Tag | Meaning |
 |---|---|
-| `<system>Name</system>` | Select a saved **System prompt** as the report-level override for all selected models. |
+| `<system>Name or text</system>` | Select a saved **System prompt**; if no definition resolves, use the content as literal system-prompt text. Applies as the report-level override for all selected models. |
 | `<parameters>Name</parameters>` | Select a saved **Parameters** preset as the report-level generation settings. |
 | `<default>Name</default>` | Select a saved **Default prompt** for every selected model when no explicit question is present, ahead of worker defaults. Works with bare models too. |
-| `<prompt>Name</prompt>` | Select an existing Example Prompt or eligible Internal Prompt, by ID or unique name. This is a different catalog from Default prompts. |
+| `<prompt>Name or text</prompt>` | Select an existing Example Prompt or eligible Internal Prompt, by ID or unique name. If no definition resolves, use the content as literal system-prompt text, leaving the report question unchanged. This is a different catalog from Default prompts. |
 | `<agent>Name</agent>` | Select a configured Agent by name; repeatable. |
 | `<flock>Name</flock>` | Select a configured Flock by name; repeatable. |
 | `<swarm>Name</swarm>` | Select a configured Swarm by name; repeatable. |
@@ -64,10 +64,13 @@ uppercase/mixed-case tag names.
 Names in `<system>`, `<parameters>` and `<default>` are trimmed and matched
 ignoring case. Stable definition IDs also work and take priority over name
 matches. XML-escape names containing special characters, for example
-`Research &amp; writing`. Missing, ambiguous or empty names, and an empty
-saved default prompt, are shown on confirmation and disable continuation.
-An unresolved legacy `<prompt>` reference instead opens the saved-prompt
-picker.
+`Research &amp; writing`. Unresolved `<system>` and `<prompt>` values
+(including ambiguous names) are used as literal system-prompt text instead.
+Missing, ambiguous or empty `<parameters>` / `<default>` names, and an
+empty saved default prompt, are shown on confirmation and disable continuation.
+When `<prompt>` falls back to system text, the question still comes from the
+explicit `prompt` extra, `<default>` or worker defaults; if none is supplied,
+the saved-prompt picker supplies the question.
 
 Prompt precedence is: a template selected with `<prompt>` (when supplied),
 otherwise explicit `prompt` text, then `<default>`, then the selected
@@ -78,7 +81,9 @@ worker default.
 
 `<system>` sets the report-level system choice, above
 worker/provider defaults, the literal `system` extra and system text inside
-a Parameters preset. The parameter preset applies above worker/provider
+a Parameters preset. An unresolved `<prompt>` has the same system precedence,
+but `<system>` wins when both are supplied. Literal system text supports the
+same placeholder substitution as saved system templates. The parameter preset applies above worker/provider
 parameter defaults. Users can change report-level choices in report setup.
 Saved definitions and worker assignments are unchanged by a request.
 Generation captures the resolved prompt and parameters for retry/regenerate.
@@ -92,55 +97,56 @@ viewer.
 
 ## Context and placeholder substitution
 
-There are two stages:
+1. **Eval sends templates and data separately.** It does not replace tokens
+   in prompt, system-prompt or presentation text. The standard six context
+   fields below are always sent so templates saved only in AI can use them.
+   Each unique supported placeholder has one matching lowercase data tag;
+   repeated tokens reuse that value. `@DATE@` additionally supplies `<date>`
+   with the current local date (`yyyy-MM-dd`). Token detection ignores case.
+2. **AI expands the text.** Matching `@name@` placeholders in the effective
+   prompt and system prompt use the supplied data, ignoring case. AI also
+   expands opening/closing report presentation. For example,
+   `<player>Alice</player>` supplies both `@PLAYER@` and `@player@`.
+   Supplied values are decoded and inserted literally in one pass.
 
-1. **Eval prepares instructions.** In its saved instruction text, Eval
-   expands the exact uppercase tokens `@FEN@`, `@COLOR@`, `@SERVER@`,
-   `@PLAYER@`, `@PGN@`, `@BOARD@` and `@DATE@` once. `@DATE@` uses local
-   `yyyy-MM-dd`. Other custom tokens are left for AI. Eval then appends all
-   six context tags below, in order, including empty values.
-2. **AI resolves its templates.** Matching `@name@` placeholders in system
-   and default prompts use entries from the received instructions, ignoring
-   case. For example, `<topic>Amsterdam</topic>` supplies both `@topic@` and
-   `@TOPIC@`. AI also expands context in selected legacy saved prompts and
-   opening/closing presentation.
-
-| Eval-appended tag | Value |
+| Eval-supplied tag | Value |
 |---|---|
 | `<fen>…</fen>` | Current position, including an explored variation. |
 | `<color>…</color>` | `White` or `Black`, from the FEN's side to move. |
-| `<server>…</server>` | `lichess.org` when known, otherwise empty. |
+| `<server>…</server>` | Chess server when known, otherwise empty. |
 | `<player>…</player>` | Side-to-move player's name for a position report; selected player for a profile report. May be empty when unknown. |
 | `<pgn>…</pgn>` | Available game PGN; the separate FEN is authoritative for the current position. |
 | `<board>…</board>` | Generated board HTML/JavaScript. |
+| `<date>…</date>` | Current local date when a date placeholder is used in the interface text. |
 
 A player-only request sends empty `fen`, `color`, `pgn` and `board`; it does
-not reuse the last opened position. Eval XML-escapes the five plain fields
-(`&amp;`, `&lt;`, `&gt;`, `&quot;`, `&#39;`); `board` is raw markup. Its
-inline token expansion in the saved instruction text inserts values as-is;
-use the appended fields for plain model context.
+not reuse the last opened position. Plain fields are XML-escaped (`&amp;`,
+`&lt;`, `&gt;`, `&quot;`, `&#39;`); `board` is raw markup. Eval replaces
+existing top-level declarations for supplied context fields with one
+actual-value tag per name, including a declaration such as
+`<date>@DATE@</date>`. Tokens inside prompt, system, presentation and custom
+text bodies remain unchanged. Optional `<instructions>` wrappers are supported.
 
 AI decodes plain entry values once and preserves raw `open`, `close` and
 `board` bodies. Custom names start with a letter or underscore and may also
 contain digits, dots, hyphens and colons. Values may span lines and retain
-whitespace. An empty entry replaces its token with empty text; when data
-entries repeat, the last value is used. Eval's appended context therefore
-wins over an earlier duplicate context entry. Use each saved-definition
+whitespace. An empty entry replaces its token with empty text; when custom
+data entries repeat, the last value is used. Use each saved-definition
 selector once; the first selector of each kind is read for routing.
 
-System/default substitution is a single pass: tokens inside an inserted
-value remain literal. Other unmatched tokens remain unchanged, apart from
-existing default-prompt built-ins such as `@MODEL@`, `@PROVIDER@`, `@AGENT@`
-and `@DATE@` when no matching external entry overrides them. Eval does not
-append a `date` field automatically: add `<date>@DATE@</date>` to its saved
-instructions to give saved system and default templates the same explicit
-date value.
+Tokens inside an inserted value are not recursively expanded by external
+substitution. Unmatched tokens remain unchanged, apart from existing AI
+built-ins such as `@MODEL@`, `@PROVIDER@`, `@AGENT@` and `@DATE@` in default
+prompts. Supplied external values take precedence over those built-ins.
+For a saved system template that needs the date, include `@DATE@` in the
+Eval interface text, for example in `<date>@DATE@</date>`, to request the
+same explicit date value.
 
-Keep `@BOARD@` in `<open>`/`<close>` for presentation. A system or default
-template that explicitly uses `@BOARD@` receives that raw value like any
-other named entry; caller-supplied normal prompts and the legacy saved-prompt
-path omit the board token. Data and presentation bodies are removed before
-interpreting commands, so `<select>` or `<email>` inside such a body is data.
+Keep `@BOARD@` in `<open>`/`<close>` for report presentation. Board markup is
+not added to model prompts merely because its data tag is supplied; a
+prompt or system template that explicitly uses `@BOARD@` receives its value.
+Data and presentation bodies are removed before interpreting commands, so
+`<select>` or `<email>` inside a data body is not executed.
 
 HTML opening/closing bodies are inserted verbatim, including CSS, scripts
 and event handlers, in Complete/Short HTML and the zipped HTML index. They
@@ -153,9 +159,9 @@ when written inside a JavaScript string.
 ## Examples
 
 The definition and worker names below are examples: create them in AI first
-or substitute names/IDs that already exist. Eval automatically appends its
-six context tags; do not paste a fixed FEN or duplicate those tags into an
-Eval instruction entry.
+or substitute names/IDs that already exist. Eval automatically supplies the six
+standard context tags and any requested date value; do not paste a fixed
+FEN or duplicate context values into an Eval instruction entry.
 
 ### 1. Eval position report with all three named selections
 
@@ -181,8 +187,8 @@ Save this instruction text in Eval:
 <open>@BOARD@</open>
 ```
 
-Eval inserts the current date and board, appends the current position and
-player fields, and sends only `title` and `instructions`. AI shows the
+Eval keeps the template tokens unchanged, supplies the date, board, position
+and player values in separate data tags, and sends only `title` and `instructions`. AI shows the
 expanded default/system prompts on confirmation, then model selection and
 report setup. The named default applies even to a directly selected model.
 The user starts generation; completion opens the report view.
@@ -267,10 +273,10 @@ The user confirms, selects models and generates. No `prompt`, literal
 `.putExtra("prompt", "Compare Amsterdam and Utrecht.")`, that explicit
 question takes precedence over **City summary**.
 
-### 5. Missing names and literal values
+### 5. Literal system text and placeholder values
 
 ```xml
-<system>System that does not exist</system>
+<system>Write about @topic@. Keep @literal@ unchanged.</system>
 <parameters>Concise</parameters>
 <default>City summary</default>
 <topic>Amsterdam &amp; Utrecht</topic>
@@ -279,12 +285,12 @@ question takes precedence over **City summary**.
 <select>
 ```
 
-Assuming only the system name is missing, AI shows
-`System prompt not found: System that does not exist` and disables
-continuation. Correct the name and resend. Once resolved, `@topic@` becomes
-`Amsterdam & Utrecht`, `@language@` becomes empty, and `@literal@` becomes the
-literal text `@topic@` in system/default templates. An unmatched `@unknown@`
-stays unchanged.
+If no saved system prompt matches that content, AI uses it directly and
+previews `Write about Amsterdam & Utrecht. Keep @topic@ unchanged.`.
+`@language@` becomes empty in system/default templates. Substitution runs
+once, so the inserted `@topic@` stays literal; an unmatched `@unknown@` also
+stays unchanged. An unresolved `<prompt>` supplies literal system text in
+the same way, while `<default>City summary</default>` supplies the question.
 <!-- END SHARED AI INTENT CONTRACT -->
 
 ## Eval implementation

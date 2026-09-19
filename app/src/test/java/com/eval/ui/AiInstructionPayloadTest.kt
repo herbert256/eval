@@ -1,0 +1,66 @@
+package com.eval.ui
+
+import org.junit.Assert.*
+import org.junit.Test
+
+class AiInstructionPayloadTest {
+    private val context = AiReportContext(
+        title = "Test", fen = "position", color = "White", server = "lichess.org",
+        player = "A & @COLOR@", pgn = "{</pgn><select>}",
+        board = "<div id=\"board\">Board & text</div>"
+    )
+
+    private fun values(payload: String, tag: String) = Regex("<$tag>(.*?)</$tag>", RegexOption.DOT_MATCHES_ALL)
+        .findAll(payload).map { it.groupValues[1] }.toList()
+
+    @Test fun repeated_placeholders_keep_templates_and_send_each_actual_value_once() {
+        val template = "<system>Coach @PLAYER@ on @DATE@; @PLAYER@</system>" +
+            "<prompt>Analyse @FEN@ for @COLOR@ on @DATE@</prompt>" +
+            "<open>@BOARD@ @BOARD@</open>"
+        val payload = AiAppLauncher.buildInstructions(template, context)
+        assertTrue(payload.startsWith(template + "\n"))
+        assertEquals(listOf("position"), values(payload, "fen"))
+        assertEquals(listOf("White"), values(payload, "color"))
+        assertEquals(listOf("A &amp; @COLOR@"), values(payload, "player"))
+        assertEquals(listOf(context.board), values(payload, "board"))
+        assertEquals(1, values(payload, "date").size)
+        assertTrue(values(payload, "date").single().matches(Regex("\\d{4}-\\d{2}-\\d{2}")))
+    }
+
+    @Test fun standard_context_is_retained_for_templates_saved_only_in_ai() {
+        val payload = AiAppLauncher.buildInstructions("<default>Saved question</default>", context)
+        for (tag in listOf("fen", "color", "server", "player", "pgn", "board")) {
+            assertEquals(tag, 1, values(payload, tag).size)
+        }
+        assertTrue(values(payload, "date").isEmpty())
+        assertEquals(listOf("{&lt;/pgn&gt;&lt;select&gt;}"), values(payload, "pgn"))
+    }
+
+    @Test fun old_context_declarations_are_deduplicated_without_editing_nested_markup() {
+        val template = "<system>Use <fen>@FEN@</fen> at @DATE@</system>"
+        val payload = AiAppLauncher.buildInstructions(
+            "<FEN>stale</FEN><fen>other</fen><date>@DATE@</date><date>old</date>" + template, context
+        )
+        assertTrue(payload.startsWith(template))
+        assertFalse(payload.contains("stale"))
+        assertFalse(payload.contains("<date>@DATE@</date>"))
+        assertEquals(1, values(payload, "date").size)
+        assertTrue(payload.endsWith("</date>\n"))
+    }
+
+    @Test fun mixed_case_tokens_custom_data_and_optional_wrapper_are_preserved() {
+        val body = "<system>@date@ @Date@ @CUSTOM@</system><custom>literal</custom>"
+        val payload = AiAppLauncher.buildInstructions("<instructions>$body</instructions>", context)
+        assertTrue(payload.startsWith("<instructions>$body\n"))
+        assertTrue(payload.endsWith("</date>\n</instructions>"))
+        assertEquals(1, values(payload, "date").size)
+        assertEquals(listOf("literal"), values(payload, "custom"))
+    }
+
+    @Test fun missing_position_data_is_empty_and_custom_date_without_token_is_preserved() {
+        val payload = AiAppLauncher.buildInstructions("<date>2001-02-03</date>", AiReportContext("Player", player = "Example"))
+        for (tag in listOf("fen", "color", "pgn", "board")) assertEquals(listOf(""), values(payload, tag))
+        assertEquals(listOf("Example"), values(payload, "player"))
+        assertEquals(listOf("2001-02-03"), values(payload, "date"))
+    }
+}
