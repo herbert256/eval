@@ -37,7 +37,7 @@ class FullScreenSettingsTest {
         } finally { context.deleteSharedPreferences(name) }
     }
 
-    @Test fun toggling_full_screen_controls_system_bars_and_survives_a_fresh_activity() {
+    @Test fun full_screen_hides_only_status_bar_and_survives_a_fresh_activity() {
         val prefs = context.getSharedPreferences(SettingsPreferences.PREFS_NAME, Context.MODE_PRIVATE)
         val settings = SettingsPreferences(prefs)
         val previous = settings.exportAllSettings()
@@ -53,11 +53,11 @@ class FullScreenSettingsTest {
                         val insets = ViewCompat.getRootWindowInsets(activity.window.decorView)
                         matched = insets != null &&
                             insets.isVisible(WindowInsetsCompat.Type.statusBars()) == !hidden &&
-                            insets.isVisible(WindowInsetsCompat.Type.navigationBars()) == !hidden
+                            insets.isVisible(WindowInsetsCompat.Type.navigationBars())
                     }
                     if (!matched) Thread.sleep(50)
                 }
-                assertTrue("System bars hidden=$hidden", matched)
+                assertTrue("Status bar hidden=$hidden; navigation bar visible", matched)
             }
             lateinit var firstVm: GameViewModel
             awaitBars(false)

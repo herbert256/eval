@@ -249,6 +249,8 @@ Per-stage configuration:
 Create and manage prompt templates for the AI app.
 
 ### General
+
+- Full screen hides the Android status bar, like the AI app. Swipe down from the top to reveal it temporarily; Android navigation remains visible. The app keeps focused fields above the keyboard.
 - Rows per page for pagination (5-50)
 - Move sounds on/off
 - Lichess username (for score perspective coloring)

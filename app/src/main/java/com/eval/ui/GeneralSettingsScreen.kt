@@ -76,7 +76,7 @@ fun GeneralSettingsScreen(
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Full screen", color = Color.White)
                         Text(
-                            text = "Hide system bars; swipe from an edge to reveal them",
+                            text = "Hide the status bar; swipe down from the top to reveal it. Android navigation stays visible.",
                             style = MaterialTheme.typography.bodySmall,
                             color = AppColors.SubtleText
                         )

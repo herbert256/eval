@@ -181,7 +181,7 @@ private val helpSections = listOf(
             "• Move list shows colored scores - green moves are good, red are mistakes\n" +
             "• In Manual mode, swipe left for the previous move or right for the next; start on an empty square or an opponent's piece to avoid dragging your own piece\n" +
             "• Double-tap the left half of the board for the start position, or the right half for the last move\n" +
-            "• Enable Full screen in Settings → General settings to hide system bars; swipe from an edge to reveal them"
+            "• Enable Full screen in Settings → General settings to hide the Android status bar, like the AI app. Swipe down from the top to reveal it temporarily. Android navigation remains available."
     ),
     HelpEntry(
         title = "Live Games",
