@@ -31,8 +31,8 @@ class AiInstructionPayloadTest {
     @Test fun unused_data_and_removed_controls_are_not_sent() {
         val payload = AiAppLauncher.buildInstructions(
             "<prompt>Literal question</prompt><system>Literal system</system><select>" +
-                "<default>Old default</default><model>Old/model</model><edit><custom>Unused</custom>", context)
-        assertEquals("<prompt>Literal question</prompt><system>Literal system</system><select>", payload)
+                "<default>Old default</default><model>gpt-4o@OpenAI</model><edit><custom>Unused</custom>", context)
+        assertEquals("<prompt>Literal question</prompt><system>Literal system</system><model>gpt-4o@OpenAI</model>", payload)
         assertTrue(AiAppLauncher.usedContextNames(payload).isEmpty())
     }
 

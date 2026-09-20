@@ -120,14 +120,14 @@ object AiAppLauncher {
         )
     }
 
-    private val commandTags = setOf("system", "prompt", "parameters", "agent", "flock", "swarm",
-        "open", "close", "next", "email", "select", "return")
+    private val commandTags = setOf("system", "prompt", "parameters", "model", "agent", "flock", "swarm",
+        "open", "close", "next", "email", "return")
     private val entryBlocks = Regex("<([A-Za-z_][A-Za-z0-9_.:-]*)>(.*?)</\\1>",
         setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
     private val placeholders = Regex("@([A-Za-z_][A-Za-z0-9_.:-]*)@")
     private val wrapper = Regex("^\\s*<instructions>(.*?)</instructions>\\s*$",
         setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
-    private val obsoleteFlags = Regex("</?(?:default|model|edit|type)>", RegexOption.IGNORE_CASE)
+    private val obsoleteFlags = Regex("</?(?:default|edit|type|select)>", RegexOption.IGNORE_CASE)
 
     private data class InstructionParts(val template: String, val data: Map<String, String>, val wrapped: Boolean) {
         val usedNames: Set<String> get() = placeholders.findAll(template)

@@ -49,7 +49,7 @@ class SettingsImportRoundTripTest {
             listOf(
                 AiInstructionEntry(
                     name = "RoundTrip",
-                    instructions = "<select>"
+                    instructions = "<prompt>Round-trip question</prompt>"
                 )
             )
         )

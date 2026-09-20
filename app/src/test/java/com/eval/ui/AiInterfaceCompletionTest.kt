@@ -9,7 +9,9 @@ class AiInterfaceCompletionTest {
     private fun field(text: String, cursor: Int = text.length) = TextFieldValue(text, TextRange(cursor))
 
     @Test fun only_supported_controls_are_offered_and_prompt_choices_describe_literal_text() {
-        assertFalse(aiInterfaceCommands.any { it.name in setOf("default", "model", "edit") })
+        assertFalse(aiInterfaceCommands.any { it.name in setOf("default", "edit", "type", "select") })
+        assertTrue(aiInterfaceCommands.any { it.name == "model" })
+        assertNull(aiInterfaceCompletion(field("<model>gpt-4o"), field("<model>gpt-4o@")))
         for (name in listOf("prompt", "system")) {
             val description = aiInterfaceCommands.single { it.name == name }.description
             assertTrue(description, description.contains("text"))
@@ -68,8 +70,8 @@ class AiInterfaceCompletionTest {
     @Test fun value_free_commands_leave_the_cursor_after_the_pair() {
         val typed = field("<")
         val pending = requireNotNull(aiInterfaceCompletion(field(""), typed))
-        val inserted = insertAiInterfaceChoice(typed, pending, aiInterfaceCommands.first { it.name == "select" })
-        assertEquals("<select></select>", inserted.text)
+        val inserted = insertAiInterfaceChoice(typed, pending, aiInterfaceCommands.first { it.name == "return" })
+        assertEquals("<return></return>", inserted.text)
         assertEquals(TextRange(inserted.text.length), inserted.selection)
     }
 

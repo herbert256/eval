@@ -19,6 +19,7 @@ internal val aiInterfaceCommands = listOf(
     AiInterfaceChoice("system", "Use this text as the system prompt, with any context placeholders."),
     AiInterfaceChoice("parameters", "Select a saved generation Parameters preset."),
     AiInterfaceChoice("prompt", "Use this text as the report prompt, with any context placeholders."),
+    AiInterfaceChoice("model", "Select a model using model@provider. Can be used more than once."),
     AiInterfaceChoice("agent", "Select an Agent by name. Can be used more than once."),
     AiInterfaceChoice("flock", "Select a Flock by name. Can be used more than once."),
     AiInterfaceChoice("swarm", "Select a Swarm by name. Can be used more than once."),
@@ -28,7 +29,6 @@ internal val aiInterfaceCommands = listOf(
     AiInterfaceChoice("email", "Open the email chooser with the report and this recipient."),
     AiInterfaceChoice("moves", "Supply legal moves and scores only when @MOVES@ is used. Eval fills this automatically.", false),
     AiInterfaceChoice("engine", "Supply best lines and scores only when @ENGINE@ is used. Eval fills this automatically.", false),
-    AiInterfaceChoice("select", "Open model selection after confirmation. No value needed.", false),
     AiInterfaceChoice("return", "Close the AI activity after its completion action. No value needed.", false)
 )
 
@@ -58,6 +58,9 @@ internal fun aiInterfaceCompletion(
     if (current.selection.start != offset + 1) return null
     val expected = previous.text.replaceRange(previous.selection.min, previous.selection.max, trigger.toString())
     if (current.text != expected) return null
+    // In model@provider, @ separates the model ID from its provider.
+    if (kind == AiInterfaceChoiceKind.PLACEHOLDER &&
+        Regex("<model>[^<]*$", RegexOption.IGNORE_CASE).containsMatchIn(current.text.take(offset))) return null
     // Let users finish a manually entered placeholder after dismissing its picker.
     if (kind == AiInterfaceChoiceKind.PLACEHOLDER &&
         Regex("@[A-Za-z_][A-Za-z0-9_.:-]*$").containsMatchIn(current.text.take(offset))) return null
