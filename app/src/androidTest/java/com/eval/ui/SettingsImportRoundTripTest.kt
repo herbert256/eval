@@ -49,7 +49,7 @@ class SettingsImportRoundTripTest {
             listOf(
                 AiInstructionEntry(
                     name = "RoundTrip",
-                    instructions = "<type>Classic</type><select>"
+                    instructions = "<select>"
                 )
             )
         )

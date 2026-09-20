@@ -22,7 +22,6 @@ internal val aiInterfaceCommands = listOf(
     AiInterfaceChoice("agent", "Select an Agent by name. Can be used more than once."),
     AiInterfaceChoice("flock", "Select a Flock by name. Can be used more than once."),
     AiInterfaceChoice("swarm", "Select a Swarm by name. Can be used more than once."),
-    AiInterfaceChoice("type", "Choose the report format: Classic or Table."),
     AiInterfaceChoice("open", "Add opening report content, including HTML and scripts."),
     AiInterfaceChoice("close", "Add closing report content, including HTML and scripts."),
     AiInterfaceChoice("next", "After completion: View, Share, Browser or Email."),
