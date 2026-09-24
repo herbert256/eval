@@ -11,8 +11,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -28,8 +31,7 @@ enum class SettingsSubScreen {
     BOARD_LAYOUT,
     GRAPH_SETTINGS,
     INTERFACE_VISIBILITY,
-    AI_INSTRUCTIONS,          // Instructions list for external AI app
-    AI_INSTRUCTION_EDIT       // Edit a single instruction
+    AI_SETUP
 }
 
 /**
@@ -54,16 +56,18 @@ fun SettingsScreen(
     onUpdateAiInstruction: (AiInstructionEntry) -> Unit,
     onDeleteAiInstruction: (String) -> Unit,
     onExportSettings: () -> Unit,
-    onImportSettings: (Uri) -> Unit
+    onImportSettings: (Uri) -> Unit,
+    aiSystemPrompts: List<AiPromptEntry> = emptyList(),
+    aiReportPrompts: List<AiPromptEntry> = emptyList(),
+    onSaveAiPrompt: (AiPromptEntry, Boolean) -> Unit = { _, _ -> },
+    onDeleteAiPrompt: (String, Boolean) -> Unit = { _, _ -> }
 ) {
-    var currentSubScreen by remember { mutableStateOf(SettingsSubScreen.MAIN) }
-    var editingInstructionId by remember { mutableStateOf<String?>(null) }
+    var currentSubScreen by rememberSaveable { mutableStateOf(SettingsSubScreen.MAIN) }
 
     // Handle Android back button
     BackHandler {
         when (currentSubScreen) {
             SettingsSubScreen.MAIN -> onBack()
-            SettingsSubScreen.AI_INSTRUCTION_EDIT -> currentSubScreen = SettingsSubScreen.AI_INSTRUCTIONS
             else -> currentSubScreen = SettingsSubScreen.MAIN
         }
     }
@@ -111,45 +115,14 @@ fun SettingsScreen(
             onBackToGame = onBack,
             onSave = onSaveInterfaceVisibility
         )
-        SettingsSubScreen.AI_INSTRUCTIONS -> AiInstructionsListScreen(
-            instructions = aiInstructions,
-            onBackToSettings = { currentSubScreen = SettingsSubScreen.MAIN },
-            onBackToGame = onBack,
-            onEditInstruction = { id ->
-                editingInstructionId = id
-                currentSubScreen = SettingsSubScreen.AI_INSTRUCTION_EDIT
-            },
-            onAddInstruction = {
-                editingInstructionId = null
-                currentSubScreen = SettingsSubScreen.AI_INSTRUCTION_EDIT
-            },
-            onCopyInstruction = { instruction ->
-                val copy = instruction.copy(
-                    id = java.util.UUID.randomUUID().toString(),
-                    name = instruction.name + " (copy)"
-                )
-                onAddAiInstruction(copy)
-                editingInstructionId = copy.id
-                currentSubScreen = SettingsSubScreen.AI_INSTRUCTION_EDIT
-            },
-            onDeleteInstruction = onDeleteAiInstruction
+        SettingsSubScreen.AI_SETUP -> AiSetupScreen(
+            systemPrompts = aiSystemPrompts, prompts = aiReportPrompts, instructions = aiInstructions,
+            onBack = { currentSubScreen = SettingsSubScreen.MAIN }, onBackToGame = onBack,
+            onSavePrompt = onSaveAiPrompt, onDeletePrompt = onDeleteAiPrompt,
+            onSaveInstruction = { entry ->
+                if (aiInstructions.any { it.id == entry.id }) onUpdateAiInstruction(entry) else onAddAiInstruction(entry)
+            }, onDeleteInstruction = onDeleteAiInstruction
         )
-        SettingsSubScreen.AI_INSTRUCTION_EDIT -> {
-            val existingInstruction = editingInstructionId?.let { id -> aiInstructions.firstOrNull { it.id == id } }
-            AiInstructionEditScreen(
-                existingInstruction = existingInstruction,
-                onBackToList = { currentSubScreen = SettingsSubScreen.AI_INSTRUCTIONS },
-                onBackToGame = onBack,
-                onSave = { instruction ->
-                    if (existingInstruction != null) {
-                        onUpdateAiInstruction(instruction)
-                    } else {
-                        onAddAiInstruction(instruction)
-                    }
-                    currentSubScreen = SettingsSubScreen.AI_INSTRUCTIONS
-                }
-            )
-        }
     }
 }
 
@@ -169,20 +142,17 @@ private fun SettingsMainScreen(
         uri?.let { onImportSettings(it) }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(16.dp)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    EvalScreen(
+        scrollable = true,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        topBar = {
+            EvalTitleBar(
+                title = "Settings",
+                onBackClick = onBack,
+                onEvalClick = onBack
+            )
+        }
     ) {
-        // Title bar
-        EvalTitleBar(
-            title = "Settings",
-            onBackClick = onBack,
-            onEvalClick = onBack
-        )
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -230,9 +200,9 @@ private fun SettingsMainScreen(
 
         // AI Instructions settings card
         SettingsNavigationCard(
-            title = "AI Instructions",
-            description = "Configure instructions for AI analysis",
-            onClick = { onNavigate(SettingsSubScreen.AI_INSTRUCTIONS) }
+            title = "AI setup",
+            description = "System prompts, prompts and AI instructions",
+            onClick = { onNavigate(SettingsSubScreen.AI_SETUP) }
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -268,7 +238,7 @@ private fun SettingsMainScreen(
  * Reusable navigation card for settings menu.
  */
 @Composable
-private fun SettingsNavigationCard(
+internal fun SettingsNavigationCard(
     title: String,
     description: String,
     onClick: () -> Unit
@@ -324,20 +294,20 @@ fun AiInstructionsListScreen(
 ) {
     var entryToDelete by remember { mutableStateOf<AiInstructionEntry?>(null) }
 
+    BackHandler(enabled = entryToDelete != null) { entryToDelete = null }
+
     // Delete confirmation (full screen, early return pattern)
     entryToDelete?.let { entry ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+        EvalScreen(
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            topBar = {
+                EvalTitleBar(
+                    title = "Delete Instruction",
+                    onBackClick = { entryToDelete = null },
+                    onEvalClick = onBackToGame
+                )
+            }
         ) {
-            EvalTitleBar(
-                title = "Delete Instruction",
-                onBackClick = { entryToDelete = null },
-                onEvalClick = onBackToGame
-            )
 
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -370,22 +340,20 @@ fun AiInstructionsListScreen(
         return
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(16.dp)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    EvalScreen(
+        scrollable = true,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        topBar = {
+            EvalTitleBar(
+                title = "AI instructions",
+                onBackClick = onBackToSettings,
+                onEvalClick = onBackToGame
+            )
+        }
     ) {
-        EvalTitleBar(
-            title = "AI Instructions",
-            onBackClick = onBackToSettings,
-            onEvalClick = onBackToGame
-        )
 
         Text(
-            text = "Choose a named instruction when requesting an AI report. Create and store prompts and system prompts in the AI app. Eval automatically sends the position and player context.",
+            text = "Save reusable AI instruction text here. Choose system prompts and prompts separately when calling AI. Type @ for context or < for AI options.",
             style = MaterialTheme.typography.bodySmall,
             color = AppColors.MediumGray
         )
@@ -427,7 +395,7 @@ fun AiInstructionsListScreen(
                             Text("\u2398", color = AppColors.ButtonGreen)
                         }
                         TextButton(onClick = { entryToDelete = entry }) {
-                            Text("X", color = AppColors.NegativeRed)
+                            Text("X", color = AppColors.NegativeRed, modifier = Modifier.semantics { contentDescription = "Delete ${entry.name}" })
                         }
                         Text(
                             text = ">",

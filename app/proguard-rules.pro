@@ -20,7 +20,9 @@
 -keep class com.eval.ui.MoveScore { *; }
 -keep class com.eval.ui.AnalysedGame { *; }
 -keep class com.eval.ui.AiPromptEntry { *; }
--keep class com.eval.ui.AiPromptCategory { *; }
+-keep class com.eval.ui.AiInstructionEntry { *; }
+-keep class com.eval.ui.AiReportSelection { *; }
+-keep class com.eval.ui.SettingsSnapshotV5 { *; }
 -keep class com.eval.ui.StockfishSettings { *; }
 -keep class com.eval.ui.BoardLayoutSettings { *; }
 -keep class com.eval.ui.GraphSettings { *; }

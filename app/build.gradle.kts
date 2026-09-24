@@ -24,6 +24,9 @@ android {
     namespace = "com.eval"
     compileSdk = 34
 
+    // Keep editable defaults at the repository root and package them as Android assets.
+    sourceSets.getByName("main").assets.srcDir(rootProject.file("assets"))
+
     signingConfigs {
         create("release") {
             val ksFile = keystoreProperties["KEYSTORE_FILE"]?.toString()
@@ -112,6 +115,15 @@ dependencies {
     // Navigation
     implementation(libs.navigation.compose)
 
+    // PDF text extraction on all supported Android versions. Page images use Android's renderer.
+    implementation(libs.pdfbox.android)
+
+    // Camera board scanning
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
+
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test:core:1.5.0")
@@ -119,3 +131,22 @@ dependencies {
 
     debugImplementation(libs.androidx.ui.tooling)
 }
+
+val validateBundledPrompts by tasks.registering {
+    val promptDirectories = listOf("assets/system_prompts", "assets/prompts")
+    promptDirectories.forEach { inputs.dir(rootProject.file(it)) }
+    doLast {
+        promptDirectories.forEach { directory ->
+            val promptFiles = rootProject.fileTree(directory) { include("*.json") }
+            require(!promptFiles.isEmpty) { "No bundled prompts found in $directory" }
+            promptFiles.forEach { file ->
+                val prompt = groovy.json.JsonSlurper().parse(file) as? Map<*, *>
+                require(prompt?.keys == setOf("title", "text") &&
+                    prompt.values.all { it is String && it.isNotBlank() }) {
+                    "${file.name} must have exactly two non-empty string fields: title and text"
+                }
+            }
+        }
+    }
+}
+tasks.named("preBuild").configure { dependsOn(validateBundledPrompts) }

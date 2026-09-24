@@ -1,0 +1,4 @@
+{
+  "title": "Review mistakes and turning points",
+  "text": "Please review this chess game and identify up to five instructive turning points for both sides. For each one, give the move number and played move, explain what changed, and suggest a better plan or candidate move with a short legal continuation where you can verify it. Include good decisions as well as mistakes. Distinguish a clear tactical error from a debatable strategic choice. Use engine evaluations only if they are supplied in the PGN, and do not invent accuracy percentages or centipawn losses. Finish with three lessons that follow from this game. If the PGN is incomplete, limit the review to the moves provided.\n\nGame in PGN:\n@PGN@"
+}

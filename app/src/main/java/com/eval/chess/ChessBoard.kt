@@ -782,7 +782,7 @@ class ChessBoard private constructor(skipReset: Boolean) {
         return if (color == PieceColor.WHITE) PieceColor.BLACK else PieceColor.WHITE
     }
 
-    private fun isKingInCheck(color: PieceColor): Boolean {
+    internal fun isKingInCheck(color: PieceColor): Boolean {
         var kingSquare: Square? = null
         for (rank in 0..7) {
             for (file in 0..7) {

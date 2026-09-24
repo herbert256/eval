@@ -82,19 +82,17 @@ fun ArrowSettingsScreen(
         return
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(16.dp)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    EvalScreen(
+        scrollable = true,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        topBar = {
+            EvalTitleBar(
+                title = "Arrow settings",
+                onBackClick = onBackToSettings,
+                onEvalClick = onBackToGame
+            )
+        }
     ) {
-        EvalTitleBar(
-            title = "Arrow settings",
-            onBackClick = onBackToSettings,
-            onEvalClick = onBackToGame
-        )
 
         Spacer(modifier = Modifier.height(8.dp))
 

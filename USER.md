@@ -23,7 +23,7 @@ Eval is an Android app that fetches your chess games from Lichess.org and analyz
 
 ### Loading Your First Game
 
-1. Tap the **menu icon** (three lines) in the top-left corner
+1. Tap **📂 Select a game** in the top menu
 2. Enter your **Lichess username**
 3. Set the number of games to retrieve
 4. Tap **Retrieve**
@@ -125,7 +125,7 @@ In Manual stage:
 1. The analysis panel below the board shows engine lines
 2. Tap any move in a variation to explore it
 3. The board updates and analysis continues from the new position
-4. Tap "Back to game" to return to the actual game moves
+4. Use Android Back to return to the actual game moves
 5. Tap any move in the main move list to jump back
 
 ## Game Sources
@@ -139,10 +139,31 @@ In Manual stage:
 - **Streamers** - Active Lichess streamers
 
 ### Local Sources
+
+FEN and 2D board-image results from URL, local-file, clipboard, camera and Android-share imports open **Board setup** when you choose **Review position**. The editor is prefilled with the found pieces and FEN details. Correct pieces on the board and choose **Start from this position** to open Manual mode. **Found position** restores the original result; image results also have **Rotate pieces** to correct upside-down recognition (unlike **Flip board**, which only changes the view). Recognition warnings stay visible, incomplete image positions can be repaired, and edits survive screen recreation. Android Back returns to the scan results. PGN results continue to use **Open game**.
+
+- **Board setup** - Manually build a position. Select a white or black piece and tap a square to place it; selecting a king relocates that king. Drag any existing piece to move it, even while a palette piece is selected. Drop outside any edge of the board to remove it. Use **Clear**, **Initial position**, **Current position** (when a game is open), or **Flip board**. Choose the side to move. Castling toggles appear below it when the matching king and rook occupy their home squares. **Last move** appears when a legal en passant capture is possible; select the known double pawn push, or leave it unknown. Expand **Position details** for move counters and **Copy FEN**. Castling requires the king and rook on their starting squares and is cleared when either is removed or moved away. Last move offers only legal double pawn pushes that allow a legal en passant capture. Invalid setups show an explanation and cannot start. **Start from this position** opens Manual mode and adds the FEN to recent positions. Android Back returns without changing the current game. Drafts survive screen recreation.
 - **PGN File** - Import PGN files from your device (supports ZIP archives with multiple games)
+- **Start from url** - Scan an HTTPS webpage, PGN download or chessboard image. Finds FEN text (including encoded Lichess analysis links), embedded PGN, linked PGN files, Lichess games/studies, and 2D board images. Choose a game or review/edit a position before starting. Images are recognized locally; confirm orientation, side to move, castling and en passant. Angled photos of physical boards are not supported. Scroll the embedded page and use **Scan page again** for dynamically loaded or off-screen boards. Scans are cancellable and bounded to 20 images, 12 game links and 100 results, with partial-download warnings.
+- **Start from a local file** - Choose a document or image from the Android file picker. Text, FEN, PGN, HTML, PDF, Word and other supported documents are scanned for chess positions and games; board images use on-device recognition. Review a position or choose **Open game** from the results. **Choose another file**, **Scan again** and **Stop** are available. Files are limited to 16 MB; the first 2 MB of text are searched.
+- **Start from clipboard history** - Choose from the last 10 distinct clipboard entries captured by Eval, newest first. Android exposes only the current clipboard item while Eval has focus: Eval captures it when you return to the app and listens for changes while open. It cannot read earlier entries from your keyboard's clipboard history or observe copies while another app is active. Text, FEN, PGN, HTML, URLs and readable image/file attachments use the same scanner as URL/local-file imports. Nothing is scanned or downloaded until you select an entry. Text is limited to 2 MB and copied files to 16 MB per entry. History and attachment copies stay in Eval's private storage across restarts; old entries and their files are removed when the list exceeds 10. Identical content moves to the top when copied again. Items marked sensitive by the source app are not saved. Use **Remove** or **Clear history** to delete saved entries; this does not change Android's clipboard. Review image positions before starting.
+- **Camera** - Point the camera at a 2D chess diagram in a book or on a screen, held straight so the whole board is visible. Frames are recognized on the device; once the same board reads on two consecutive frames, **Board setup** opens prefilled for review. Android Back returns to the camera. The option is hidden on devices without a camera; if access was denied, use **Allow camera** or **App settings**. Angled photos of physical boards are not supported.
+- **Share to Eval** - From another Android app, choose **Share → Eval**. URLs use the same retrieval scanner. Text, HTML, PGN files and single or multiple images are scanned for chess content; captions and attachments are both processed. Choose **Open game** or **Review position** before starting. Image recognition stays on the device. Shared files are limited to 16 MB each and 20 files per share. **Stop** cancels a scan; **Scan again** retries it. A new share replaces any scan in progress, and failed items do not discard other results.
 - **Opening Study** - Start from any ECO opening code (A00-E99)
 - **FEN Position** - Analyze any position by pasting a FEN string (keeps history of recent positions)
 - **Analysed Games** - Access previously analyzed games
+
+### Document formats and limits
+
+All four import routes (URL, local file, sharing and clipboard attachments) use the same document reader:
+
+- PDF: extracts text and renders pages to detect scanned or drawn chessboards.
+- Word DOCX/DOCM, OpenDocument ODT/ODS/ODP, Excel XLSX/XLSM and PowerPoint PPTX/PPTM: extracts text and embedded image files. Embedded macros are not executed. Chess-font/vector diagrams in Office documents should be exported to PDF.
+- RTF: extracts text and embedded PNG/JPEG pictures. EPUB: searches chapter text/HTML and images.
+- ZIP: searches contained TXT/FEN/PGN/HTML and image files. Nested archives and embedded Office/PDF attachments are skipped.
+- Plain text formats, including Markdown, CSV, TSV, JSON and XML, are searched for FEN/PGN.
+
+Files are limited to 16 MB, extracted text to 2 MB, PDF text to the first 100 pages, and document images/PDF board pages to the first 20. Archives are bounded to 512 entries, 32 MB expanded and 8 MB per part. Limits, corrupt files and unreadable parts are reported. Text in scanned images is not OCR-transcribed; detected chessboards use the existing image recognition and require review. Older binary DOC/XLS/PPT and password-protected files must be saved as unlocked modern Office files or PDF first.
 
 ### Live Games
 Select a live game from TV channels or streamers and enable auto-follow to watch in real-time with automatic move updates.
@@ -154,8 +175,9 @@ If the companion AI app (`com.ai`) is installed, you can generate AI-powered ana
 1. Load a game and reach Manual stage
 2. Tap the **share icon** to open Share / Export
 3. Tap **Generate AI Reports**
-4. Select an AI instruction entry
-5. The AI app opens with the position data
+4. Choose a System prompt, Prompt and AI instruction from the three dropdowns
+5. Tap **Next** and edit any of the three text boxes
+6. Tap **Submit** to prepare the requested data and open the AI app
 
 ### AI Prompt Categories
 
@@ -163,24 +185,50 @@ If the companion AI app (`com.ai`) is installed, you can generate AI-powered ana
 - **Chess Server Player** - Research a Lichess player profile
 - **Player** - General chess player profile research
 
-### Managing AI Instructions
+### AI setup
 
-Go to **Settings > AI Instructions** to manage named instruction entries.
-Use `<prompt>text</prompt>` for the literal report question and
-`<system>text</system>` for literal system instructions. Neither looks up a
-saved prompt. `<default>`, `<model>` and `<edit>` are no longer controls.
-Only data with a matching placeholder in the instruction text is sent.
-Stockfish searches run only when `@MOVES@` or `@ENGINE@` is used.
-Supported placeholders include:
-- `@FEN@` - Current position in FEN notation
-- `@BOARD@` - Interactive HTML chessboard
-- `@PLAYER@` - Player name
-- `@SERVER@` - Chess server name (e.g., "lichess.org")
-- `@DATE@` - Current date
+A fresh installation includes four system prompts: **Professional Coach**,
+**Friendly talkative chess coach**, **Grumpy old GM**, and **Youtuber**. It also includes
+seven prompts: **Analyse a FEN position**, **Annotate a chess game**, **Find tactical
+opportunities**, **Make a strategic plan**, **Explain the engine choices**, **Review
+mistakes and turning points**, and **Create a training plan**. The tactics and engine
+explanation prompts request Stockfish analysis; the other prompts use the position
+or game. Both catalogs are compact to reduce request tokens: system prompts use
+about 50 words each, and prompts use 4–35 words including their placeholders.
+Upgrading adds new bundled prompts once and replaces untouched older system prompts
+and prompts with their shorter versions. Custom prompts, edited or renamed defaults, deleted
+entries and remembered selections are preserved, including after settings import.
+
+Go to **Settings > AI setup** to manage three separate lists:
+
+- **System prompts**: create, view, edit and delete reusable guidance for the AI.
+- **Prompts**: create, view, edit and delete reusable questions.
+- **AI instructions**: create, view, edit, copy and delete reusable instruction text with `<xxx>` options. Prompt choices are made when calling AI.
+
+Both prompt editors offer a popup when you type `@`. The AI options field offers
+both `@` placeholder and `<` command popups. Choices include short descriptions;
+commands insert paired tags and placeholders insert complete tokens.
+
+When calling AI, choose all three parts on **Select AI parts**, then tap **Next**.
+Your last choices are remembered, including **None**, across app restarts. None
+lets you skip a saved part and enter text manually on the next screen. Deleting a
+selected entry clears that choice.
+
+**Edit AI request** has a text box for each part and a **Submit** button. These
+edits apply only to this request; saved templates stay unchanged. Back keeps edits
+unless you change a dropdown choice. Submit starts any needed Stockfish work and
+opens AI. The three catalogs and remembered choices are included in settings
+export/import. Older inline system and prompt text is preserved in the review fields.
+
+Only context requested by a placeholder in the final edited request is
+sent. Stockfish searches run only when `@MOVES@` or `@ENGINE@` is used.
+Placeholders also include `@FEN@`, `@COLOR@`, `@BOARD@`, `@PGN@`, `@PLAYER@`,
+`@SERVER@` and `@DATE@`. The AI app receives the literal prompt text; no prompt
+with a matching name in the AI app is selected.
 
 ### Stockfish lines for AI
 
-When the selected instruction uses `@ENGINE@`, Eval prepares the best
+When the submitted request uses `@ENGINE@`, Eval prepares the best
 Stockfish lines and shows timed
 progress and the same analysis card used in Manual mode, including scores,
 continuations, depth and nodes. The card updates with each complete set of
@@ -245,12 +293,12 @@ Per-stage configuration:
 - **Analyse**: Time per move (500ms-10s), threads, hash, NNUE
 - **Manual**: Search depth (16-64), threads (1-16), hash (32-512 MB), MultiPV (1-32), NNUE
 
-### AI Prompts
-Create and manage prompt templates for the AI app.
+### AI setup
+Manage System prompts, Prompts and AI instructions in their own screens.
 
 ### General
 
-- Full screen hides the Android status bar, like the AI app. Swipe down from the top to reveal it temporarily; Android navigation remains visible. The app keeps focused fields above the keyboard.
+- Every screen has a fixed icon row with the Eval logo (main screen), 📂 game selection, 🔄 reload when available, ⚙️ settings and ❓ help. Manual mode also shows the AI logo, which opens the three-part AI selection screen. Manual mode has no title row, so the game uses that space. Other screen titles have their own row below the menu and scroll out of view with the content. Only the icon row stays fixed; the title returns when scrolling back to the top. Use the Android Back gesture or button for previous screens and to leave variation exploration. In Full screen mode it starts at the very top of the display, with no empty strip above it. With Full screen off, the menu starts immediately below the Android status bar. Android navigation remains visible, and focused fields stay above the keyboard. Swipe down from the top to reveal the status bar temporarily.
 - Rows per page for pagination (5-50)
 - Move sounds on/off
 - Lichess username (for score perspective coloring)

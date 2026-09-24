@@ -97,6 +97,36 @@ internal class SettingsManager(
     fun deleteAiInstruction(id: String) {
         val updated = getUiState().aiInstructions.filter { it.id != id }
         updateAiInstructions(updated)
+        clearUnavailableAiChoices()
+    }
+
+    fun saveAiPrompt(entry: AiPromptEntry, system: Boolean) {
+        val state = getUiState()
+        val catalog = if (system) state.aiSystemPrompts else state.aiReportPrompts
+        val updated = if (catalog.any { it.id == entry.id }) catalog.map { if (it.id == entry.id) entry else it }
+            else catalog + entry
+        saveAiSetup(if (system) updated else state.aiSystemPrompts,
+            if (system) state.aiReportPrompts else updated, state.aiInstructions)
+    }
+
+    fun deleteAiPrompt(id: String, system: Boolean) {
+        val state = getUiState()
+        saveAiSetup(
+            if (system) state.aiSystemPrompts.filterNot { it.id == id } else state.aiSystemPrompts,
+            if (system) state.aiReportPrompts else state.aiReportPrompts.filterNot { it.id == id }, state.aiInstructions)
+        clearUnavailableAiChoices()
+    }
+
+    private fun clearUnavailableAiChoices() {
+        val state = getUiState()
+        val selection = settingsPrefs.loadAiReportSelection().available(state.aiSystemPrompts, state.aiReportPrompts, state.aiInstructions)
+        settingsPrefs.saveAiReportSelection(selection)
+        updateUiState { copy(aiReportSelection = selection) }
+    }
+
+    private fun saveAiSetup(systems: List<AiPromptEntry>, prompts: List<AiPromptEntry>, instructions: List<AiInstructionEntry>) {
+        settingsPrefs.saveAiSetup(systems, prompts, instructions)
+        updateUiState { copy(aiSystemPrompts = systems, aiReportPrompts = prompts, aiInstructions = instructions) }
     }
 
     fun exportSettings(context: Context) {
@@ -149,4 +179,3 @@ internal class SettingsManager(
         }
     }
 }
-

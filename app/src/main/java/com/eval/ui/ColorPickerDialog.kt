@@ -57,18 +57,16 @@ fun ColorPickerDialog(
         )
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    EvalScreen(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        topBar = {
+            EvalTitleBar(
+                title = title,
+                onBackClick = onDismiss,
+                onEvalClick = onDismiss
+            )
+        }
     ) {
-        EvalTitleBar(
-            title = title,
-            onBackClick = onDismiss,
-            onEvalClick = onDismiss
-        )
 
         // Color preview
         Box(

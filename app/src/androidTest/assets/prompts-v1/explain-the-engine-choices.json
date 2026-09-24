@@ -1,0 +1,4 @@
+{
+  "title": "Explain the engine choices",
+  "text": "Please turn the supplied engine analysis into an understandable explanation of this position. Compare up to three promising legal moves using the supplied move evaluations and best continuations. For each move, explain its purpose, the strongest reply and the main trade-off. Explain why a tempting alternative is less effective when the supplied analysis supports that conclusion. Preserve the stated score perspective and distinguish centipawn scores from mate scores. Do not claim that small evaluation differences prove one move is uniquely best, and do not invent missing lines or scores. Finish with one practical takeaway for a human player.\n\nPosition in FEN:\n@FEN@\n\nEvaluations of legal moves:\n@MOVES@\n\nEngine continuations:\n@ENGINE@"
+}

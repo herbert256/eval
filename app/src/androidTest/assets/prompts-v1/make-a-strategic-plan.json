@@ -1,0 +1,4 @@
+{
+  "title": "Make a strategic plan",
+  "text": "Please suggest a practical plan for the side to move in this position. Briefly assess king safety, pawn structure, piece activity and important squares. Identify the least active piece and explain how to improve it. Give two candidate plans, describe the pawn breaks or exchanges that would support each one, and explain the likely counterplay. Finish with a short checklist for choosing the next move. Base the advice on the actual pieces and squares in the FEN. Explain uncertainty where calculation would be needed, and do not invent an engine evaluation.\n\nPosition in FEN:\n@FEN@"
+}

@@ -77,7 +77,7 @@ object AiAppLauncher {
         return intent.resolveActivity(context.packageManager) != null
     }
 
-    /** Send only named instructions and context; the AI app owns both kinds of prompt. */
+    /** Send resolved instructions and context to the AI app. */
     fun launchAiReport(
         context: Context,
         entry: AiInstructionEntry,
@@ -128,6 +128,47 @@ object AiAppLauncher {
     private val wrapper = Regex("^\\s*<instructions>(.*?)</instructions>\\s*$",
         setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
     private val obsoleteFlags = Regex("</?(?:default|edit|type|select)>", RegexOption.IGNORE_CASE)
+
+    /** Move legacy inline prompt blocks into their own editable fields. Catalog choices take precedence. */
+    internal fun prepareDraft(systemPrompt: String?, prompt: String?, instructions: String): AiReportDraft {
+        val wrapped = wrapper.matchEntire(instructions)
+        val body = wrapped?.groupValues?.get(1) ?: instructions
+        val inline = mutableMapOf<String, String>()
+        val options = entryBlocks.replace(body) { match ->
+            val tag = match.groupValues[1].lowercase(Locale.US)
+            if (tag == "system" || tag == "prompt") {
+                inline[tag] = decodePromptText(match.groupValues[2])
+                ""
+            } else match.value
+        }.trim()
+        return AiReportDraft(systemPrompt ?: inline["system"].orEmpty(), prompt ?: inline["prompt"].orEmpty(),
+            if (wrapped != null && options.isNotEmpty()) "<instructions>$options</instructions>" else options)
+    }
+
+    private fun decodePromptText(text: String): String =
+        Regex("&(amp|lt|gt|quot|apos|#\\d+|#x[0-9a-fA-F]+);").replace(text) { match ->
+            when (val entity = match.groupValues[1]) {
+                "amp" -> "&"; "lt" -> "<"; "gt" -> ">"; "quot" -> "\""; "apos" -> "'"
+                else -> runCatching {
+                    val code = if (entity.startsWith("#x")) entity.drop(2).toInt(16) else entity.drop(1).toInt()
+                    String(Character.toChars(code))
+                }.getOrDefault(match.value)
+            }
+        }
+
+    /** Compose the final, edited request; never read saved templates during submission. */
+    internal fun composeInstruction(draft: AiReportDraft): AiInstructionEntry {
+        val selected = linkedMapOf("system" to draft.systemPrompt, "prompt" to draft.prompt).filterValues { it.isNotBlank() }
+        if (selected.isEmpty()) return AiInstructionEntry(instructions = draft.instructions)
+        val wrapped = wrapper.matchEntire(draft.instructions)
+        val body = wrapped?.groupValues?.get(1) ?: draft.instructions
+        val options = entryBlocks.replace(body) { match ->
+            if (match.groupValues[1].lowercase(Locale.US) in selected) "" else match.value
+        }.trim()
+        val resolved = (selected.map { (tag, text) -> "<$tag>${text.htmlEscape()}</$tag>" } + options)
+            .filter { it.isNotBlank() }.joinToString("\n")
+        return AiInstructionEntry(instructions = if (wrapped != null) "<instructions>$resolved</instructions>" else resolved)
+    }
 
     private data class InstructionParts(val template: String, val data: Map<String, String>, val wrapped: Boolean) {
         val usedNames: Set<String> get() = placeholders.findAll(template)

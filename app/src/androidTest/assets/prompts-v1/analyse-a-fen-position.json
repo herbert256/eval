@@ -1,0 +1,4 @@
+{
+  "title": "Analyse a FEN position",
+  "text": "Please analyse below chess position that is in FEN notation.\n\n@FEN@"
+}

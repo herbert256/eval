@@ -10,6 +10,7 @@ import com.eval.data.BroadcastInfo
 import com.eval.data.BroadcastRoundInfo
 import com.eval.data.ChessRepository
 import com.eval.data.ChessServer
+import com.eval.data.SharedChessInput
 import com.eval.data.LichessGame
 import com.eval.data.StreamerInfo
 import com.eval.data.TournamentInfo
@@ -36,7 +37,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val gson = Gson()
 
     // Helper classes for settings and game storage
-    private val settingsPrefs = SettingsPreferences(prefs)
+    private val bundledSystemPrompts = BundledAiPrompts.loadSystemPrompts(application.assets)
+    private val bundledReportPrompts = BundledAiPrompts.loadReportPrompts(application.assets)
+    private val settingsPrefs = SettingsPreferences(prefs).also {
+        it.seedAiSystemPrompts(bundledSystemPrompts)
+        it.seedAiReportPrompts(bundledReportPrompts)
+    }
     private val gameStorage = GameStorageManager(prefs, gson)
 
     // Move sound player for audio feedback
@@ -44,6 +50,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow(GameUiState())
     val uiState: StateFlow<GameUiState> = _uiState.asStateFlow()
+
+    private val _sharedImport = MutableStateFlow<SharedChessInput?>(null)
+    internal val sharedImport = _sharedImport.asStateFlow()
+
+    internal fun receiveSharedContent(input: SharedChessInput) {
+        gameLoader.invalidatePendingRetrieval()
+        analysisOrchestrator.stop()
+        liveGameManager.stopLiveFollow()
+        _sharedImport.value = input
+    }
+
+    internal fun dismissSharedContent() { _sharedImport.value = null }
 
     private var analysisResultCollector: Job? = null
     private var stockfishReadyCollector: Job? = null
@@ -225,6 +243,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 interfaceVisibility = interfaceVisibility,
                 generalSettings = generalSettings,
                 aiInstructions = aiInstructions,
+                aiSystemPrompts = settingsPrefs.loadAiSystemPrompts(),
+                aiReportPrompts = settingsPrefs.loadAiReportPrompts(),
                 lichessMaxGames = lichessMaxGames,
                 hasPreviousRetrieves = hasPreviousRetrieves,
                 hasAnalysedGames = hasAnalysedGames,
@@ -321,6 +341,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             interfaceVisibility = interfaceVisibility,
             generalSettings = generalSettings,
             aiInstructions = aiInstructions,
+            aiSystemPrompts = settingsPrefs.loadAiSystemPrompts(),
+            aiReportPrompts = settingsPrefs.loadAiReportPrompts(),
             lichessMaxGames = lichessMaxGames
         ) }
 
@@ -710,6 +732,7 @@ ${opening.moves} *
             isLoading = false,
             errorMessage = null,
             game = lichessGame,
+            gameLoadVersion = it.gameLoadVersion + 1,
             openingName = null,
             currentOpeningName = null,
             moves = emptyList(),
@@ -815,6 +838,10 @@ ${opening.moves} *
 
     fun deleteAiInstruction(id: String) = settingsManager.deleteAiInstruction(id)
 
+    fun saveAiPrompt(entry: AiPromptEntry, system: Boolean) = settingsManager.saveAiPrompt(entry, system)
+
+    fun deleteAiPrompt(id: String, system: Boolean) = settingsManager.deleteAiPrompt(id, system)
+
     // ===== Named AI instructions =====
 
     fun requestGameAiReport() {
@@ -830,21 +857,21 @@ ${opening.moves} *
             currentMoveIndex = moveIndex,
             lastMoveDetails = state.moveDetails.getOrNull(moveIndex)
         )
-        _uiState.update { it.copy(pendingAiReport = data) }
+        _uiState.update { it.copy(pendingAiReport = data, aiReportSelection = settingsPrefs.loadAiReportSelection()) }
     }
 
     fun requestPlayerAiReport(playerName: String, server: String = "") {
         dismissAiInstructionSelection()
         _uiState.update { it.copy(pendingAiReport = AiReportContext(
             title = "Player Analysis: $playerName", player = playerName, server = server
-        )) }
+        ), aiReportSelection = settingsPrefs.loadAiReportSelection()) }
     }
 
     fun dismissAiInstructionSelection() {
         aiReportJob?.cancel()
         aiReportJob = null
         aiEngineStop = null
-        _uiState.update { it.copy(pendingAiReport = null, aiMovesProgress = null,
+        _uiState.update { it.copy(pendingAiReport = null, aiReportDraft = null, aiReportEditing = false, aiMovesProgress = null,
             aiEngineProgress = null, aiEngineStopping = false, aiReportError = null) }
     }
 
@@ -853,15 +880,49 @@ ${opening.moves} *
         if (stop.complete(Unit)) _uiState.update { it.copy(aiEngineStopping = true) }
     }
 
-    fun launchSelectedAiInstruction(context: android.content.Context, entry: AiInstructionEntry) {
+    fun updateAiReportSelection(selection: AiReportSelection) {
+        val state = _uiState.value
+        if (state.pendingAiReport == null || aiReportJob?.isActive == true) return
+        val available = selection.available(state.aiSystemPrompts, state.aiReportPrompts, state.aiInstructions)
+        settingsPrefs.saveAiReportSelection(available)
+        _uiState.update { it.copy(aiReportSelection = available,
+            aiReportDraft = if (available == it.aiReportSelection) it.aiReportDraft else null, aiReportError = null) }
+    }
+
+    fun editAiReport() {
+        val state = _uiState.value
+        if (state.pendingAiReport == null || aiReportJob?.isActive == true) return
+        val choice = state.aiReportSelection
+        val draft = state.aiReportDraft ?: AiAppLauncher.prepareDraft(
+            state.aiSystemPrompts.find { it.id == choice.systemPromptId }?.text,
+            state.aiReportPrompts.find { it.id == choice.promptId }?.text,
+            state.aiInstructions.find { it.id == choice.instructionId }?.instructions.orEmpty()
+        )
+        _uiState.update { it.copy(aiReportDraft = draft, aiReportEditing = true, aiReportError = null) }
+    }
+
+    fun updateAiReportDraft(draft: AiReportDraft) {
+        if (aiReportJob?.isActive != true && _uiState.value.aiReportEditing) {
+            _uiState.update { it.copy(aiReportDraft = draft, aiReportError = null) }
+        }
+    }
+
+    fun backToAiReportSelection() {
+        if (aiReportJob?.isActive != true) _uiState.update { it.copy(aiReportEditing = false, aiReportError = null) }
+    }
+
+    fun submitAiReport(context: android.content.Context) {
         val data = _uiState.value.pendingAiReport ?: return
+        val draft = _uiState.value.aiReportDraft ?: return
+        if (!_uiState.value.aiReportEditing || listOf(draft.systemPrompt, draft.prompt, draft.instructions).all { it.isBlank() }) return
         if (aiReportJob?.isActive == true) return
         if (!AiAppLauncher.isAiAppInstalled(context)) {
             showAiAppNotInstalledDialog()
             return
         }
         val settings = _uiState.value.stockfishSettings
-        val usedNames = AiAppLauncher.usedContextNames(entry.instructions)
+        val resolved = AiAppLauncher.composeInstruction(draft)
+        val usedNames = AiAppLauncher.usedContextNames(resolved.instructions)
         val stop = CompletableDeferred<Unit>()
         _uiState.update { it.copy(aiMovesProgress = "Preparing AI request…",
             aiEngineProgress = null, aiEngineStopping = false, aiReportError = null) }
@@ -887,19 +948,19 @@ ${opening.moves} *
                 } else ""
                 ensureActive()
                 if (_uiState.value.pendingAiReport !== data) return@launch
-                if (AiAppLauncher.launchAiReport(context, entry, data.copy(moves = moves, engine = engine))) {
-                    _uiState.update { it.copy(pendingAiReport = null, aiMovesProgress = null,
+                if (AiAppLauncher.launchAiReport(context, resolved, data.copy(moves = moves, engine = engine))) {
+                    _uiState.update { it.copy(pendingAiReport = null, aiReportDraft = null, aiReportEditing = false, aiMovesProgress = null,
                         aiEngineProgress = null, aiEngineStopping = false) }
                 }
             } catch (e: TimeoutCancellationException) {
                 _uiState.update { if (it.pendingAiReport !== data) it else it.copy(
-                    aiReportError = "Stockfish timed out. Select the instruction to try again."
+                    aiReportError = "Stockfish timed out. Tap Submit to try again."
                 ) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 _uiState.update { if (it.pendingAiReport !== data) it else it.copy(
-                    aiReportError = "Could not prepare the Stockfish data. ${e.message.orEmpty()} Select the instruction to try again."
+                    aiReportError = "Could not prepare the AI request. ${e.message.orEmpty()} Tap Submit to try again."
                 ) }
             } finally {
                 if (aiEngineStop === stop) aiEngineStop = null
@@ -929,6 +990,8 @@ ${opening.moves} *
      */
     fun importSettings(context: android.content.Context, uri: android.net.Uri): Boolean {
         return settingsManager.importSettings(context, uri) {
+            settingsPrefs.seedAiSystemPrompts(bundledSystemPrompts)
+            settingsPrefs.seedAiReportPrompts(bundledReportPrompts)
             val settings = loadStockfishSettings()
             val boardSettings = loadBoardLayoutSettings()
             val graphSettings = loadGraphSettings()
@@ -942,7 +1005,9 @@ ${opening.moves} *
                     graphSettings = graphSettings,
                     interfaceVisibility = interfaceVisibility,
                     generalSettings = generalSettings,
-                    aiInstructions = aiInstructions
+                    aiInstructions = aiInstructions,
+                    aiSystemPrompts = settingsPrefs.loadAiSystemPrompts(),
+                    aiReportPrompts = settingsPrefs.loadAiReportPrompts()
                 )
             }
         }

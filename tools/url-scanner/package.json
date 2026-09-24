@@ -1,0 +1,7 @@
+{
+  "name": "eval-board-scanner",
+  "private": true,
+  "type": "module",
+  "scripts": { "build": "node build.mjs" },
+  "devDependencies": { "esbuild": "0.28.1", "onnxruntime-web": "1.26.0" }
+}

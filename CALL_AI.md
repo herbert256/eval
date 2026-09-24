@@ -212,19 +212,23 @@ Models, Agents, Flocks and Swarms can be combined; duplicate selections are merg
   `buildInstructions` and board HTML generation. It sends only `title` and
   `instructions`, restricted to package `com.ai`.
 - [`AiSettingsModels.kt`](app/src/main/java/com/eval/ui/AiSettingsModels.kt)
-  defines `AiInstructionEntry(id, name, instructions)` and
+  defines reusable `AiPromptEntry(id, name, text)`,
+  `AiInstructionEntry(id, name, instructions)`, independent `AiReportSelection` and
+  `AiReportDraft` records, and
   `AiReportContext(title, fen, color, server, player, pgn, board, moves, engine)`.
 - [`GameViewModel.kt`](app/src/main/java/com/eval/ui/GameViewModel.kt)
   captures the current position or selected player's context and stages the
-  instruction choice. [`GameScreen.kt`](app/src/main/java/com/eval/ui/GameScreen.kt)
-  shows that chooser before launching AI.
-- [`SettingsScreen.kt`](app/src/main/java/com/eval/ui/SettingsScreen.kt)
-  manages named entries under Settings → AI Instructions.
+  request. [`AiReportScreens.kt`](app/src/main/java/com/eval/ui/AiReportScreens.kt)
+  provides three remembered dropdown choices, Next, three editable text boxes,
+  and Submit for both game and player call sites.
+- [`AiSetupScreen.kt`](app/src/main/java/com/eval/ui/AiSetupScreen.kt)
+  manages System prompts, Prompts and AI instructions under Settings → AI setup.
+  Final edited request parts are composed into escaped literal `<system>` / `<prompt>`
+  blocks. Context detection and request preparation start only on Submit.
 - [`SettingsPreferences.kt`](app/src/main/java/com/eval/ui/SettingsPreferences.kt)
-  stores `ai_instructions_list`; typed settings schema v3 uses
-  `aiInstructions`. Migration retains old IDs, names and instructions and
-  converts a legacy email field to an `<email>` instruction. Old prompt and
-  system-prompt text is not part of active Eval instruction storage.
+  stores the three independent catalogs and last request choices in typed settings
+  schema v5. Imports still accept v2/v3/v4. Old links inside instructions are retired;
+  catalogs and instruction text are preserved. Deleting an entry clears its last choice.
 - [`AndroidManifest.xml`](app/src/main/AndroidManifest.xml) declares package
   visibility queries for `com.ai` and the custom action, used by
   `resolveActivity`/the installed-app check.
@@ -250,5 +254,6 @@ AiAppLauncher.launchAiReport(this, entry, position)
 ```
 
 The position values here are synthetic examples; production call sites use
-the live `GameViewModel` snapshot. Both position and player requests require
-the user to select a named instruction entry.
+the live `GameViewModel` snapshot. Both position and player requests use
+the three-part selection and review flow. Each dropdown allows None so the user
+can enter request text without first creating saved entries.

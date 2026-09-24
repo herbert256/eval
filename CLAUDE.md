@@ -179,7 +179,7 @@ AI reports use Android intents to the external `com.ai` app:
 
 **Lichess.org:** User games (NDJSON streaming), tournaments, broadcasts, TV channels, top rankings, streamers, live game following
 
-**Local:** PGN file upload (with ZIP support), ECO opening selection (A00-E99), FEN position entry (with history), previously analysed games
+**Local:** PGN file upload (with ZIP support), ECO opening selection (A00-E99), FEN position entry (with history), camera scan of 2D board diagrams (CameraX + on-device recognizer, opens Board setup for review), previously analysed games
 
 ## Settings Persistence
 

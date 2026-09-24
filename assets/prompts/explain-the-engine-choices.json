@@ -1,0 +1,4 @@
+{
+  "title": "Explain the engine choices",
+  "text": "Compare up to 3 legal moves using supplied scores/lines: purpose, best reply, trade-offs. Preserve score perspective and mate/centipawn units; do not overstate tiny differences. Give one takeaway.\n\nFEN: @FEN@\nMoves: @MOVES@\nLines: @ENGINE@"
+}

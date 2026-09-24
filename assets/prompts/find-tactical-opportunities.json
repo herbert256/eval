@@ -1,0 +1,4 @@
+{
+  "title": "Find tactical opportunities",
+  "text": "For the side to move, find tactics from engine lines: checks/captures/threats, motif, best defence, short legal continuation. Separate chances from forced wins; otherwise suggest an improving move.\n\n@FEN@\nLines: @ENGINE@"
+}

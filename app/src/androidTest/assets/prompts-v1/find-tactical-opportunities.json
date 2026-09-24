@@ -1,0 +1,4 @@
+{
+  "title": "Find tactical opportunities",
+  "text": "Please examine this position for tactical opportunities for the side to move. Start with the immediate threats, then consider checks, captures and forcing moves. Use the supplied engine continuations to check the most promising ideas. Explain the tactical motif, the strongest defensive reply and the resulting position in a short variation. If there is no clear tactic, say so and suggest a sensible improving move instead. Only show moves that are legal from the supplied position, and distinguish a practical chance from a forced win.\n\nPosition in FEN:\n@FEN@\n\nEngine continuations:\n@ENGINE@"
+}

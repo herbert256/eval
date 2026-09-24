@@ -33,7 +33,7 @@ internal object SettingsImportValidation {
         NumericRule("graphSettings.barGraphScale", "graph_bar_scale", 50.0, 300.0),
         NumericRule("lichessMaxGames", "lichess_max_games", 1.0, 25.0)
     )
-    private val shape = Gson().toJsonTree(SettingsSnapshotV3()).asJsonObject
+    private val shape = Gson().toJsonTree(SettingsSnapshotV5()).asJsonObject
 
     fun typed(root: JsonObject) {
         validateShape(root, shape)
@@ -45,12 +45,30 @@ internal object SettingsImportValidation {
                 require(entries.isJsonArray)
                 entries.asJsonArray.forEach { entry ->
                     require(entry.isJsonObject)
-                    for (field in listOf("id", "name", "instructions", "email")) {
+                    for (field in listOf("id", "name", "instructions", "email", "systemPromptId", "promptId")) {
                         entry.asJsonObject.get(field)?.let { requireString(it) }
                     }
                 }
             }
         }
+        val catalogIds = listOf("aiSystemPrompts", "aiReportPrompts").associateWith { key ->
+            val ids = mutableSetOf<String>()
+            root.get(key)?.asJsonArray?.forEach { entry ->
+                require(entry.isJsonObject)
+                for (field in listOf("id", "name", "text")) requireString(entry.asJsonObject.get(field))
+                val id = entry.asJsonObject.get("id").asString
+                require(id.isNotBlank() && ids.add(id))
+            }
+            ids
+        }
+        root.get("aiInstructions")?.asJsonArray?.forEach { entry ->
+            for ((field, catalog) in listOf("systemPromptId" to "aiSystemPrompts", "promptId" to "aiReportPrompts")) {
+                val id = entry.asJsonObject.get(field)?.asString.orEmpty()
+                require(id.isEmpty() || id in catalogIds.getValue(catalog))
+            }
+        }
+        root.get("seededAiSystemPromptIds")?.asJsonArray?.forEach { requireString(it) }
+        root.get("seededAiReportPromptIds")?.asJsonArray?.forEach { requireString(it) }
         root.get("fenHistory")?.asJsonArray?.forEach { requireString(it) }
         for (rule in numericRules) {
             var value: JsonElement? = root
@@ -117,10 +135,14 @@ internal object SettingsImportValidation {
             history.asJsonArray.forEach { requireString(it) }
         }
         if (key == "ai_instructions_list" || key == "ai_prompts_list") {
-            typed(JsonObject().apply {
-                add(if (key == "ai_prompts_list") "aiPrompts" else "aiInstructions",
-                    com.google.gson.JsonParser().parse(value.asString))
-            })
+            val entries = com.google.gson.JsonParser().parse(value.asString)
+            require(entries.isJsonArray)
+            entries.asJsonArray.forEach { entry ->
+                require(entry.isJsonObject)
+                for (field in listOf("id", "name", "instructions", "email", "systemPromptId", "promptId")) {
+                    entry.asJsonObject.get(field)?.let { requireString(it) }
+                }
+            }
         }
     }
 
@@ -128,7 +150,8 @@ internal object SettingsImportValidation {
 
     private val legacyTypes = buildMap {
         fun fields(type: String, vararg keys: String) = keys.forEach { put(it, type) }
-        fields("String", "ai_instructions_list", "ai_prompts_list", "fen_history",
+        fields("StringSet", "seeded_ai_system_prompt_ids", "seeded_ai_report_prompt_ids")
+        fields("String", "last_ai_system_prompt_id", "last_ai_prompt_id", "last_ai_instruction_id", "ai_system_prompts", "ai_report_prompts", "ai_instructions_list", "ai_prompts_list", "fen_history",
             "last_server_name", "last_server_user", "lichess_username", "manual_arrow_mode")
         fields("Boolean", "ai_app_dont_ask_again", "analyse_nnue", "analyse_vis_board", "analyse_vis_gameinfo",
             "analyse_vis_movelist", "analyse_vis_pgn", "analyse_vis_resultbar", "analyse_vis_scorebarsgraph",

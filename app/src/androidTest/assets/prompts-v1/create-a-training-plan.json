@@ -1,0 +1,4 @@
+{
+  "title": "Create a training plan",
+  "text": "Please use this chess game to create a focused one-week training plan. Choose two or three skills worth practising and support each choice with specific move numbers or positions from the game. Treat these as observations from one game, not established habits or a rating estimate. Give a 15-minute task for each day, mixing calculation, replaying critical positions and reviewing the ideas learned. Include three self-test questions drawn from the game, followed by a separate answer section. Keep the exercises tied to the supplied moves and explain how to check progress. If the game contains too little evidence for a particular weakness, say so.\n\nGame in PGN:\n@PGN@"
+}

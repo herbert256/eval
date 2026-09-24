@@ -40,20 +40,10 @@ fun GameSelectionScreen(
     // Handle back navigation
     BackHandler { onDismiss() }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AppColors.BlueGrayAccent)  // Lighter blue background
-            .padding(16.dp)
+    EvalScreen(
+        backgroundColor = AppColors.BlueGrayAccent,
+        topBar = { EvalTitleBar(title = "$username @ $serverName", onBackClick = onDismiss, onEvalClick = onDismiss) }
     ) {
-        // Header with user and server
-        Text(
-            text = "$username @ $serverName",
-            fontWeight = FontWeight.Bold,
-            fontSize = 20.sp,
-            color = Color.White,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
 
         Box(
             modifier = Modifier
@@ -167,20 +157,10 @@ fun PreviousRetrievesScreen(
     // Handle back navigation
     BackHandler { onDismiss() }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AppColors.BlueGrayAccent)  // Lighter blue background
-            .padding(16.dp)
+    EvalScreen(
+        backgroundColor = AppColors.BlueGrayAccent,
+        topBar = { EvalTitleBar(title = "Previous game retrieves", onBackClick = onDismiss, onEvalClick = onDismiss) }
     ) {
-        // Header
-        Text(
-            text = "Previous game retrieves",
-            fontWeight = FontWeight.Bold,
-            fontSize = 20.sp,
-            color = Color.White,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
 
         Box(
             modifier = Modifier
@@ -286,20 +266,10 @@ fun SelectedRetrieveGamesScreen(
     // Handle back navigation
     BackHandler { onDismiss() }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AppColors.BlueGrayAccent)  // Lighter blue background
-            .padding(16.dp)
+    EvalScreen(
+        backgroundColor = AppColors.BlueGrayAccent,
+        topBar = { EvalTitleBar(title = "${entry.accountName} @ $serverName", onBackClick = onDismiss, onEvalClick = onDismiss) }
     ) {
-        // Header with account and server
-        Text(
-            text = "${entry.accountName} @ $serverName",
-            fontWeight = FontWeight.Bold,
-            fontSize = 20.sp,
-            color = Color.White,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
 
         BoxWithConstraints(
             modifier = Modifier
@@ -444,19 +414,10 @@ fun AnalysedGamesSelectionScreen(
 
     val dateFormat = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault())
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AppColors.BlueGrayAccent)
-            .padding(16.dp)
+    EvalScreen(
+        backgroundColor = AppColors.BlueGrayAccent,
+        topBar = { EvalTitleBar(title = "Previous Analysed Games", onBackClick = onDismiss, onEvalClick = onDismiss) }
     ) {
-        Text(
-            text = "Previous Analysed Games",
-            fontWeight = FontWeight.Bold,
-            fontSize = 20.sp,
-            color = Color.White,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
 
         BoxWithConstraints(
             modifier = Modifier

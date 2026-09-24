@@ -51,11 +51,9 @@ fun PlayerInfoScreen(
     // Handle back navigation
     BackHandler { onDismiss() }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AppColors.DarkBlueBackground)  // Dark blue background
-            .padding(16.dp)
+    EvalScreen(
+        backgroundColor = AppColors.DarkBlueBackground,
+        topBar = { EvalTitleBar(title = "Player Info", onBackClick = onDismiss, onEvalClick = onDismiss) }
     ) {
         // Header with username and title
         Row(

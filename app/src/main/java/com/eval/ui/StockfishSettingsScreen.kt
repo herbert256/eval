@@ -204,18 +204,16 @@ fun StockfishSettingsScreen(
         return options[newIndex]
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    EvalScreen(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        topBar = {
+            EvalTitleBar(
+                title = "Stockfish",
+                onBackClick = onBackToSettings,
+                onEvalClick = onBackToGame
+            )
+        }
     ) {
-        EvalTitleBar(
-            title = "Stockfish",
-            onBackClick = onBackToSettings,
-            onEvalClick = onBackToGame
-        )
 
         Column(
             modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),

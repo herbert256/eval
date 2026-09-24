@@ -330,6 +330,8 @@ data class RetrievedGamesEntry(
 )
 
 data class GameUiState(
+    // Changes only when a game/position is opened, including re-opening the same game.
+    val gameLoadVersion: Long = 0L,
     val stockfishInstalled: Boolean = true,  // Assume true until checked
     val aiAppInstalled: Boolean = true,  // Assume true until checked
     val aiAppWarningDismissed: Boolean = false,  // User dismissed AI app warning at startup
@@ -395,10 +397,15 @@ data class GameUiState(
     val showRetrieveScreen: Boolean = false,
     // Named instructions for the external AI app
     val aiInstructions: List<AiInstructionEntry> = emptyList(),
+    val aiSystemPrompts: List<AiPromptEntry> = emptyList(),
+    val aiReportPrompts: List<AiPromptEntry> = emptyList(),
     // Share position dialog
     val showSharePositionDialog: Boolean = false,
     // Context captured when the user requests an AI report
     val pendingAiReport: AiReportContext? = null,
+    val aiReportSelection: AiReportSelection = AiReportSelection(),
+    val aiReportDraft: AiReportDraft? = null,
+    val aiReportEditing: Boolean = false,
     val aiMovesProgress: String? = null,
     val aiEngineProgress: AiEngineProgress? = null,
     val aiEngineStopping: Boolean = false,

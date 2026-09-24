@@ -79,7 +79,7 @@ class AiMovesSettingsScreenTest {
             waitFor { visible().any { it.text?.toString() == "Seconds per move" } }
             scrollTo("0.25 s")
             waitFor { visible().any { it.text?.toString() == "Moves list for AI" } }
-            assertTrue("Title bar remains visible when scrolling to the fourth card", visible().any { it.text?.toString() == "Stockfish" })
+            assertTrue("Icon menu remains visible when scrolling to the fourth card", visible().any { it.viewIdResourceName == "eval_top_bar" })
             val value = visible().first { it.text?.toString() == "0.25 s" }
             val bounds = Rect().also { value.getBoundsInScreen(it) }
             val increment = visible().filter { it.text?.toString() == "+" }.minBy {
@@ -101,21 +101,21 @@ class AiMovesSettingsScreenTest {
             scenario.onActivity { activity ->
                 activity.setContent {
                     EvalTheme {
-                        AiInstructionSelectionScreen(
-                            listOf(AiInstructionEntry(name = "Test instruction")), {}, { cancelled = true },
+                        AiReportProgressScreen(
+                            { cancelled = true },
                             progress = "Evaluating moves: 3 of 20"
                         )
                     }
                 }
             }
             waitFor { visible().any { it.text?.toString() == "Evaluating moves: 3 of 20" } }
-            assertFalse(generateSequence(visible().first { it.text?.toString() == "Test instruction" }) { it.parent }.all { it.isEnabled })
+            assertFalse(visible().any { it.text?.toString() == "Submit" || it.text?.toString() == "Next" })
             assertTrue(click(visible().first { it.text?.toString() == "Cancel" }))
             waitFor { cancelled }
         }
     }
 
-    @Test fun fifth_card_changes_line_count_independently_and_keeps_title_visible() {
+    @Test fun fifth_card_changes_line_count_independently_and_keeps_menu_visible() {
         var saved = StockfishSettings()
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.onActivity { activity ->
@@ -126,7 +126,7 @@ class AiMovesSettingsScreenTest {
             waitFor { visible().any { it.text?.toString() == "Number of lines" } }
             scrollTo("Seconds per position")
             assertTrue(visible().any { it.text?.toString() == "Engine moves for AI" })
-            assertTrue(visible().any { it.text?.toString() == "Stockfish" })
+            assertTrue(visible().any { it.viewIdResourceName == "eval_top_bar" })
             val value = visible().first { it.text?.toString() == "3" }
             val bounds = Rect().also(value::getBoundsInScreen)
             val increment = visible().filter { it.text?.toString() == "+" }.minBy {

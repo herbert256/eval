@@ -4,15 +4,21 @@ import android.content.SharedPreferences
 import com.google.gson.JsonParser
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import java.security.MessageDigest
 
-data class SettingsSnapshotV3(
-    val schemaVersion: Int = 3,
+data class SettingsSnapshotV5(
+    val schemaVersion: Int = 5,
     val stockfishSettings: StockfishSettings = StockfishSettings(),
     val boardLayoutSettings: BoardLayoutSettings = BoardLayoutSettings(),
     val graphSettings: GraphSettings = GraphSettings(),
     val interfaceVisibilitySettings: InterfaceVisibilitySettings = InterfaceVisibilitySettings(),
     val generalSettings: GeneralSettings = GeneralSettings(),
     val aiInstructions: List<AiInstructionEntry> = emptyList(),
+    val aiSystemPrompts: List<AiPromptEntry> = emptyList(),
+    val seededAiSystemPromptIds: Set<String> = emptySet(),
+    val aiReportPrompts: List<AiPromptEntry> = emptyList(),
+    val lastAiReportSelection: AiReportSelection = AiReportSelection(),
+    val seededAiReportPromptIds: Set<String> = emptySet(),
     val lichessUsername: String = "DrNykterstein",
     val lichessMaxGames: Int = 10,
     val aiAppDontAskAgain: Boolean = false,
@@ -339,7 +345,15 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
      * Returns empty list if none configured.
      */
     fun loadAiInstructions(): List<AiInstructionEntry> {
-        if (prefs.contains(KEY_AI_INSTRUCTIONS_LIST)) return loadJsonList(KEY_AI_INSTRUCTIONS_LIST)
+        if (prefs.contains(KEY_AI_INSTRUCTIONS_LIST)) return try {
+            val json = prefs.getString(KEY_AI_INSTRUCTIONS_LIST, "[]") ?: "[]"
+            decodeAiInstructions(json).also { entries ->
+                // Retire the old links while preserving each instruction's ID, name and text.
+                if (JsonParser().parse(json).asJsonArray.any {
+                    it.asJsonObject.has("systemPromptId") || it.asJsonObject.has("promptId")
+                }) saveAiInstructions(entries)
+            }
+        } catch (_: Exception) { emptyList() }
         val legacy = prefs.getString(KEY_LEGACY_AI_PROMPTS_LIST, null) ?: return emptyList()
         return try {
             decodeAiInstructions(legacy).also { saveAiInstructions(it) }
@@ -354,6 +368,84 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
     fun saveAiInstructions(instructions: List<AiInstructionEntry>) {
         val json = gson.toJson(instructions)
         prefs.edit().putString(KEY_AI_INSTRUCTIONS_LIST, json).remove(KEY_LEGACY_AI_PROMPTS_LIST).apply()
+    }
+
+    fun loadAiReportSelection(): AiReportSelection = AiReportSelection(
+        systemPromptId = prefs.getString(KEY_LAST_AI_SYSTEM_PROMPT, "").orEmpty(),
+        promptId = prefs.getString(KEY_LAST_AI_PROMPT, "").orEmpty(),
+        instructionId = prefs.getString(KEY_LAST_AI_INSTRUCTION, "").orEmpty()
+    ).available(loadAiSystemPrompts(), loadAiReportPrompts(), loadAiInstructions())
+
+    fun saveAiReportSelection(selection: AiReportSelection) {
+        putAiReportSelection(prefs.edit(), selection).apply()
+    }
+
+    private fun putAiReportSelection(editor: SharedPreferences.Editor, selection: AiReportSelection) = editor
+        .putString(KEY_LAST_AI_SYSTEM_PROMPT, selection.systemPromptId)
+        .putString(KEY_LAST_AI_PROMPT, selection.promptId)
+        .putString(KEY_LAST_AI_INSTRUCTION, selection.instructionId)
+
+    fun loadAiSystemPrompts(): List<AiPromptEntry> = loadJsonList(KEY_AI_SYSTEM_PROMPTS)
+    fun loadAiReportPrompts(): List<AiPromptEntry> = loadJsonList(KEY_AI_REPORT_PROMPTS)
+
+    /** Seed defaults and refresh known untouched versions; custom edits and deletions win. */
+    fun seedAiSystemPrompts(defaults: List<AiPromptEntry>) =
+        seedAiPrompts(defaults, KEY_AI_SYSTEM_PROMPTS, KEY_SEEDED_AI_SYSTEM_PROMPTS,
+            BundledAiPrompts.previousSystemPromptTextHashes)
+
+    fun seedAiReportPrompts(defaults: List<AiPromptEntry>) =
+        seedAiPrompts(defaults, KEY_AI_REPORT_PROMPTS, KEY_SEEDED_AI_REPORT_PROMPTS,
+            BundledAiPrompts.previousReportPromptTextHashes)
+
+    private fun seedAiPrompts(
+        defaults: List<AiPromptEntry>, catalogKey: String, seededKey: String,
+        previousTextHashes: Map<String, Set<String>> = emptyMap()
+    ) {
+        val seeded = prefs.getStringSet(seededKey, emptySet()).orEmpty()
+        val pending = defaults.filterNot { it.id in seeded }
+        if (pending.isEmpty() && previousTextHashes.isEmpty()) return
+        // Do not replace unreadable saved data with defaults.
+        val entries = try {
+            val json = prefs.getString(catalogKey, "[]") ?: "[]"
+            JsonParser().parse(json).asJsonArray.map { element ->
+                val obj = element.asJsonObject
+                for (key in listOf("id", "name", "text")) {
+                    require(obj.get(key).isJsonPrimitive && obj.get(key).asJsonPrimitive.isString)
+                }
+                AiPromptEntry(obj.get("id").asString, obj.get("name").asString, obj.get("text").asString)
+            }.toMutableList()
+        } catch (_: Exception) { return }
+        val defaultsById = defaults.associateBy { it.id }
+        var updated = false
+        entries.indices.forEach { index ->
+            val saved = entries[index]
+            val replacement = defaultsById[saved.id] ?: return@forEach
+            val knownHashes = previousTextHashes[saved.id] ?: return@forEach
+            if (saved.name != replacement.name || saved.text == replacement.text) return@forEach
+            val hash = MessageDigest.getInstance("SHA-256").digest(saved.text.toByteArray(Charsets.UTF_8))
+                .joinToString("") { "%02x".format(it) }
+            if (hash in knownHashes) {
+                entries[index] = replacement
+                updated = true
+            }
+        }
+        if (pending.isEmpty() && !updated) return
+        pending.forEach { prompt ->
+            if (entries.none { it.id == prompt.id || it.name.equals(prompt.name, ignoreCase = true) }) entries += prompt
+        }
+        prefs.edit()
+            .putString(catalogKey, gson.toJson(entries))
+            .putStringSet(seededKey, seeded + pending.map { it.id })
+            .apply()
+    }
+
+    /** Save the three independent catalogs together. */
+    fun saveAiSetup(systemPrompts: List<AiPromptEntry>, prompts: List<AiPromptEntry>, instructions: List<AiInstructionEntry>) {
+        prefs.edit()
+            .putString(KEY_AI_SYSTEM_PROMPTS, gson.toJson(systemPrompts))
+            .putString(KEY_AI_REPORT_PROMPTS, gson.toJson(prompts))
+            .putString(KEY_AI_INSTRUCTIONS_LIST, gson.toJson(instructions))
+            .remove(KEY_LEGACY_AI_PROMPTS_LIST).apply()
     }
 
     /** Read both the instruction schema and old prompt entries, retaining only control data. */
@@ -403,16 +495,21 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
     // ============================================================================
 
     /**
-     * Export settings in typed schema v3 for safe round-trip and migration.
+     * Export settings in typed schema v5 for safe round-trip and migration.
      */
     fun exportAllSettings(): String {
-        val snapshot = SettingsSnapshotV3(
+        val snapshot = SettingsSnapshotV5(
             stockfishSettings = loadStockfishSettings(),
             boardLayoutSettings = loadBoardLayoutSettings(),
             graphSettings = loadGraphSettings(),
             interfaceVisibilitySettings = loadInterfaceVisibilitySettings(),
             generalSettings = loadGeneralSettings(),
             aiInstructions = loadAiInstructions(),
+            aiSystemPrompts = loadAiSystemPrompts(),
+            seededAiSystemPromptIds = prefs.getStringSet(KEY_SEEDED_AI_SYSTEM_PROMPTS, emptySet()).orEmpty().toSet(),
+            aiReportPrompts = loadAiReportPrompts(),
+            lastAiReportSelection = loadAiReportSelection(),
+            seededAiReportPromptIds = prefs.getStringSet(KEY_SEEDED_AI_REPORT_PROMPTS, emptySet()).orEmpty().toSet(),
             lichessUsername = savedLichessUsername,
             lichessMaxGames = lichessMaxGames,
             aiAppDontAskAgain = getAiAppDontAskAgain(),
@@ -425,7 +522,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
     }
 
     /**
-     * Import settings from typed schema v3 (also accepts v2), with legacy map migration fallback.
+     * Import settings from typed schema v5 (also accepts v2/v3/v4), with legacy map migration fallback.
      */
     fun importAllSettings(json: String): Boolean {
         return try {
@@ -434,8 +531,8 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
                 SettingsImportValidation.typed(root)
                 // Gson supplies default constructor values for an empty object;
                 // require an explicit supported version before treating it as a snapshot.
-                require(root.get("schemaVersion").asInt in 2..3)
-                val snapshot = gson.fromJson(root, SettingsSnapshotV3::class.java)
+                require(root.get("schemaVersion").asInt in 2..5)
+                val snapshot = gson.fromJson(root, SettingsSnapshotV5::class.java)
                 val entries = root.get("aiInstructions") ?: root.get("aiPrompts")
                 importFromTypedSnapshot(snapshot.copy(
                     aiInstructions = entries?.takeUnless { it.isJsonNull }
@@ -459,7 +556,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         prefs.all.keys.filterNot(::isGameStorageKey).forEach { editor.remove(it) }
     }
 
-    private fun importFromTypedSnapshot(snapshot: SettingsSnapshotV3): Boolean {
+    private fun importFromTypedSnapshot(snapshot: SettingsSnapshotV5): Boolean {
         val editor = replacingSettingsEditor()
 
         editor.putString(KEY_LICHESS_USERNAME, snapshot.lichessUsername)
@@ -468,6 +565,12 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         editor.putBoolean(KEY_MOVE_SOUNDS_ENABLED, snapshot.generalSettings.moveSoundsEnabled)
         editor.putBoolean(KEY_FULL_SCREEN, snapshot.generalSettings.fullScreen)
         editor.putString(KEY_AI_INSTRUCTIONS_LIST, gson.toJson(snapshot.aiInstructions))
+        editor.putString(KEY_AI_SYSTEM_PROMPTS, gson.toJson(snapshot.aiSystemPrompts))
+        editor.putStringSet(KEY_SEEDED_AI_SYSTEM_PROMPTS, snapshot.seededAiSystemPromptIds)
+        editor.putString(KEY_AI_REPORT_PROMPTS, gson.toJson(snapshot.aiReportPrompts))
+        putAiReportSelection(editor, snapshot.lastAiReportSelection.available(
+            snapshot.aiSystemPrompts, snapshot.aiReportPrompts, snapshot.aiInstructions))
+        editor.putStringSet(KEY_SEEDED_AI_REPORT_PROMPTS, snapshot.seededAiReportPromptIds)
         editor.putBoolean(KEY_AI_APP_DONT_ASK_AGAIN, snapshot.aiAppDontAskAgain)
         editor.putLong(KEY_FIRST_GAME_RETRIEVED_VERSION, snapshot.firstGameRetrievedVersion)
         editor.putString(KEY_LAST_SERVER_USER, snapshot.lastServerUser)
@@ -493,6 +596,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             require(importMap.isNotEmpty())
             val editor = replacingSettingsEditor()
             var imported = 0
+            val aiSetup = com.google.gson.JsonObject()
             for ((key, typed) in importMap) {
                 // Old exports could include game blobs. Importing settings must
                 // neither remove nor overwrite the device's game collection.
@@ -501,6 +605,14 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
                 val valueType = entry.get("_type").asString
                 val rawValue = requireNotNull(entry.get("_value"))
                 SettingsImportValidation.legacy(key, valueType, rawValue)
+                val aiField = when (key) {
+                    KEY_AI_INSTRUCTIONS_LIST -> "aiInstructions"
+                    KEY_LEGACY_AI_PROMPTS_LIST -> "aiPrompts"
+                    KEY_AI_SYSTEM_PROMPTS -> "aiSystemPrompts"
+                    KEY_AI_REPORT_PROMPTS -> "aiReportPrompts"
+                    else -> null
+                }
+                if (aiField != null) aiSetup.add(aiField, JsonParser().parse(rawValue.asString))
                 when (valueType) {
                     "Boolean" -> editor.putBoolean(key, rawValue.asBoolean)
                     "Int" -> editor.putInt(key, rawValue.asInt)
@@ -515,6 +627,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
                 imported++
             }
             require(imported > 0)
+            SettingsImportValidation.typed(aiSetup)
             editor.apply()
             true
         } catch (e: Exception) {
@@ -736,6 +849,13 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         private const val KEY_FULL_SCREEN = "full_screen"
 
         // AI instructions list (CRUD)
+        private const val KEY_LAST_AI_SYSTEM_PROMPT = "last_ai_system_prompt_id"
+        private const val KEY_LAST_AI_PROMPT = "last_ai_prompt_id"
+        private const val KEY_LAST_AI_INSTRUCTION = "last_ai_instruction_id"
+        private const val KEY_AI_SYSTEM_PROMPTS = "ai_system_prompts"
+        private const val KEY_SEEDED_AI_SYSTEM_PROMPTS = "seeded_ai_system_prompt_ids"
+        private const val KEY_AI_REPORT_PROMPTS = "ai_report_prompts"
+        private const val KEY_SEEDED_AI_REPORT_PROMPTS = "seeded_ai_report_prompt_ids"
         private const val KEY_AI_INSTRUCTIONS_LIST = "ai_instructions_list"
         private const val KEY_LEGACY_AI_PROMPTS_LIST = "ai_prompts_list"
 

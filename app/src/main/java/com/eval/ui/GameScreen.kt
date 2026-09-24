@@ -34,10 +34,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun GameScreenContent(
     modifier: Modifier = Modifier,
-    viewModel: GameViewModel = viewModel(),
-    onNavigateToSettings: () -> Unit = {},
-    onNavigateToHelp: () -> Unit = {},
-    onNavigateToRetrieve: () -> Unit = {}
+    viewModel: GameViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
@@ -130,14 +127,14 @@ fun GameScreenContent(
     }
 
     if (uiState.pendingAiReport != null) {
-        AiInstructionSelectionScreen(
-            progress = uiState.aiMovesProgress,
-            engineProgress = uiState.aiEngineProgress,
-            stopping = uiState.aiEngineStopping,
-            onStopAndContinue = { viewModel.stopAiEngineAndContinue() },
-            error = uiState.aiReportError,
-            instructions = uiState.aiInstructions,
-            onSelectInstruction = { viewModel.launchSelectedAiInstruction(context, it) },
+        AiReportFlowScreen(
+            state = uiState,
+            onSelectionChange = viewModel::updateAiReportSelection,
+            onNext = viewModel::editAiReport,
+            onDraftChange = viewModel::updateAiReportDraft,
+            onSubmit = { viewModel.submitAiReport(context) },
+            onBackToSelection = viewModel::backToAiReportSelection,
+            onStopAndContinue = viewModel::stopAiEngineAndContinue,
             onDismiss = { viewModel.dismissAiInstructionSelection() }
         )
         return
@@ -183,54 +180,33 @@ fun GameScreenContent(
         return
     }
 
+    androidx.activity.compose.BackHandler(enabled = uiState.game != null) {
+        if (uiState.isExploringLine) viewModel.backToOriginalGame() else viewModel.clearGame()
+    }
+
     // Retain the game composition while sharing. Rebuilding the entire board,
     // PV rows and move list behind Android's chooser can block focus delivery.
     Box(modifier = modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(backgroundColor)
-                .padding(horizontal = 12.dp)
-                .verticalScroll(rememberScrollState())
-                .then(if (uiState.showSharePositionDialog) Modifier.clearAndSetSemantics {} else Modifier)
-        ) {
-            // Title bar - always shown
-            EvalTitleBar(
+        EvalScreen(
+            modifier = if (uiState.showSharePositionDialog) Modifier.clearAndSetSemantics {} else Modifier,
+            horizontalPadding = 12.dp,
+            backgroundColor = backgroundColor,
+            scrollable = uiState.game != null,
+            topBar = {
+                EvalTitleBar(
+                    title = when {
+                        uiState.game == null -> "Eval"
+                        uiState.isExploringLine -> "Explore variation"
+                        uiState.currentStage == AnalysisStage.PREVIEW -> "Preview"
+                        uiState.currentStage == AnalysisStage.ANALYSE -> "Analyse"
+                        else -> null
+                    },
                     onEvalClick = { viewModel.clearGame() },
-                    leftContent = {
-                        // Menu icon - navigate to retrieve
-                        TitleBarIcon(
-                            icon = "≡",
-                            onClick = {
-                                if (uiState.game != null) {
-                                    viewModel.clearGame()
-                                }
-                                onNavigateToRetrieve()
-                            },
-                            fontSize = 34,
-                            offsetY = -8
-                        )
-                        // Reload last game from server
-                        if (uiState.game != null || uiState.hasLastServerUser) {
-                            TitleBarIcon(
-                                icon = "↻",
-                                onClick = { viewModel.reloadLastGame() },
-                                fontSize = 34,
-                                offsetY = -8
-                            )
-                        }
-                        // Settings icon
-                        TitleBarIcon(
-                            icon = "⚙",
-                            onClick = { onNavigateToSettings() }
-                        )
-                        // Help icon
-                        TitleBarIcon(
-                            icon = "?",
-                            onClick = { onNavigateToHelp() }
-                        )
-                    }
+                    onAiClick = if (uiState.game != null && uiState.currentStage == AnalysisStage.MANUAL)
+                        ({ viewModel.requestGameAiReport() }) else null
                 )
+            }
+        ) {
 
             // Stage indicator - only show during Preview and Analyse stages
             if (uiState.game != null && uiState.currentStage != AnalysisStage.MANUAL) {
@@ -243,7 +219,6 @@ fun GameScreenContent(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .offset(y = (-8).dp)
                             .padding(vertical = 4.dp)
                             .background(stageColor.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
                             .padding(12.dp),
@@ -266,7 +241,6 @@ fun GameScreenContent(
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .offset(y = (-8).dp)
                             .padding(vertical = 4.dp)
                     ) {
                         Text(
@@ -306,26 +280,12 @@ fun GameScreenContent(
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Use the top left icon  ",
-                                fontSize = 18.sp,
-                                color = AppColors.LightGray
-                            )
-                            Text(
-                                text = "≡",
-                                fontSize = 34.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = "  to select a game",
-                                fontSize = 18.sp,
-                                color = AppColors.LightGray
-                            )
-                        }
+                        Text(
+                            text = "Tap 📂 in the menu to select a game",
+                            fontSize = 18.sp,
+                            color = AppColors.LightGray,
+                            textAlign = TextAlign.Center
+                        )
                     }
                 }
 
@@ -408,85 +368,90 @@ fun StockfishNotInstalledScreen(
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AppColors.CardBackground),
-        contentAlignment = Alignment.Center
+    EvalScreen(
+        backgroundColor = AppColors.CardBackground,
+        topBar = { EvalTitleBar(title = "Stockfish", onBackClick = onExit, onEvalClick = onExit) }
     ) {
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.errorContainer
-            ),
+        Box(
             modifier = Modifier
-                .padding(24.dp)
-                .fillMaxWidth(0.9f)
+                .fillMaxSize()
+                .background(AppColors.CardBackground),
+            contentAlignment = Alignment.Center
         ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                ),
+                modifier = Modifier
+                    .padding(24.dp)
+                    .fillMaxWidth(0.9f)
             ) {
-                Text(
-                    text = "Stockfish Not Installed",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                    textAlign = TextAlign.Center
-                )
-
-                Text(
-                    text = "This app requires the Stockfish chess engine to analyze games.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                    textAlign = TextAlign.Center
-                )
-
-                // Clickable link to Play Store
-                val annotatedText = buildAnnotatedString {
-                    append("Please install ")
-                    pushStringAnnotation(tag = "URL", annotation = playStoreUrl)
-                    withStyle(style = SpanStyle(
-                        color = AppColors.AccentBlue,
-                        textDecoration = TextDecoration.Underline
-                    )) {
-                        append("Stockfish Chess Engine")
-                    }
-                    pop()
-                    append(" from the Google Play Store.")
-                }
-
-                ClickableText(
-                    text = annotatedText,
-                    style = MaterialTheme.typography.bodyMedium.copy(
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(
+                        text = "Stockfish Not Installed",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onErrorContainer,
                         textAlign = TextAlign.Center
-                    ),
-                    onClick = { offset ->
-                        annotatedText.getStringAnnotations(tag = "URL", start = offset, end = offset)
-                            .firstOrNull()?.let {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(it.item))
-                                context.startActivity(intent)
-                            }
-                    }
-                )
-
-                Text(
-                    text = "The app will start automatically once Stockfish is installed.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f),
-                    textAlign = TextAlign.Center
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Button(
-                    onClick = onExit,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error
                     )
-                ) {
-                    Text("Exit")
+
+                    Text(
+                        text = "This app requires the Stockfish chess engine to analyze games.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        textAlign = TextAlign.Center
+                    )
+
+                    // Clickable link to Play Store
+                    val annotatedText = buildAnnotatedString {
+                        append("Please install ")
+                        pushStringAnnotation(tag = "URL", annotation = playStoreUrl)
+                        withStyle(style = SpanStyle(
+                            color = AppColors.AccentBlue,
+                            textDecoration = TextDecoration.Underline
+                        )) {
+                            append("Stockfish Chess Engine")
+                        }
+                        pop()
+                        append(" from the Google Play Store.")
+                    }
+
+                    ClickableText(
+                        text = annotatedText,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            textAlign = TextAlign.Center
+                        ),
+                        onClick = { offset ->
+                            annotatedText.getStringAnnotations(tag = "URL", start = offset, end = offset)
+                                .firstOrNull()?.let {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(it.item))
+                                    context.startActivity(intent)
+                                }
+                        }
+                    )
+
+                    Text(
+                        text = "The app will start automatically once Stockfish is installed.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f),
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Button(
+                        onClick = onExit,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Text("Exit")
+                    }
                 }
             }
         }
@@ -502,18 +467,16 @@ fun AiAppNotInstalledDialog(
     onInstallClick: () -> Unit,
     onDontAskAgain: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+    EvalScreen(
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        topBar = {
+            EvalTitleBar(
+                title = "AI App",
+                onBackClick = onDismiss,
+                onEvalClick = onDismiss
+            )
+        }
     ) {
-        EvalTitleBar(
-            title = "AI App",
-            onBackClick = onDismiss,
-            onEvalClick = onDismiss
-        )
 
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -593,149 +556,104 @@ fun AiAppNotInstalledScreen(
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AppColors.CardBackground),
-        contentAlignment = Alignment.Center
+    EvalScreen(
+        backgroundColor = AppColors.CardBackground,
+        topBar = { EvalTitleBar(title = "AI App", onBackClick = onContinue, onEvalClick = onContinue) }
     ) {
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
-            ),
+        Box(
             modifier = Modifier
-                .padding(24.dp)
-                .fillMaxWidth(0.9f)
+                .fillMaxSize()
+                .background(AppColors.CardBackground),
+            contentAlignment = Alignment.Center
         ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                ),
+                modifier = Modifier
+                    .padding(24.dp)
+                    .fillMaxWidth(0.9f)
             ) {
-                Text(
-                    text = "AI App Not Installed",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
-
-                Text(
-                    text = "The AI app enables AI-powered game and player analysis features.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
-
-                // Clickable link to Play Store
-                val annotatedText = buildAnnotatedString {
-                    append("Install ")
-                    pushStringAnnotation(tag = "URL", annotation = playStoreUrl)
-                    withStyle(style = SpanStyle(
-                        color = AppColors.AccentBlue,
-                        textDecoration = TextDecoration.Underline
-                    )) {
-                        append("AI App")
-                    }
-                    pop()
-                    append(" from the Google Play Store for full features.")
-                }
-
-                ClickableText(
-                    text = annotatedText,
-                    style = MaterialTheme.typography.bodyMedium.copy(
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(
+                        text = "AI App Not Installed",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
-                    ),
-                    onClick = { offset ->
-                        annotatedText.getStringAnnotations(tag = "URL", start = offset, end = offset)
-                            .firstOrNull()?.let {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(it.item))
-                                context.startActivity(intent)
-                            }
-                    }
-                )
-
-                Text(
-                    text = "The screen will update automatically once the AI app is installed.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                    textAlign = TextAlign.Center
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Button(
-                    onClick = onContinue,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary
                     )
-                ) {
-                    Text("Continue Without AI")
+
+                    Text(
+                        text = "The AI app enables AI-powered game and player analysis features.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+
+                    // Clickable link to Play Store
+                    val annotatedText = buildAnnotatedString {
+                        append("Install ")
+                        pushStringAnnotation(tag = "URL", annotation = playStoreUrl)
+                        withStyle(style = SpanStyle(
+                            color = AppColors.AccentBlue,
+                            textDecoration = TextDecoration.Underline
+                        )) {
+                            append("AI App")
+                        }
+                        pop()
+                        append(" from the Google Play Store for full features.")
+                    }
+
+                    ClickableText(
+                        text = annotatedText,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        ),
+                        onClick = { offset ->
+                            annotatedText.getStringAnnotations(tag = "URL", start = offset, end = offset)
+                                .firstOrNull()?.let {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(it.item))
+                                    context.startActivity(intent)
+                                }
+                        }
+                    )
+
+                    Text(
+                        text = "The screen will update automatically once the AI app is installed.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Button(
+                        onClick = onContinue,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Text("Continue Without AI")
+                    }
                 }
             }
         }
     }
 }
 
-/**
- * Eval logo displayed on the main screen when no game is loaded.
- * Features a stylized chess-themed design with light green background.
- */
+/** The same vector wordmark is used on the home screen and in the menu. */
 @Composable
 fun EvalLogo() {
-    Card(
-        modifier = Modifier
-            .padding(horizontal = 48.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = AppColors.LogoBackground
-        ),
-        shape = RoundedCornerShape(24.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(48.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // Top chess pieces - black pieces
-            Text(
-                text = "\u265A \u265B \u265C",
-                fontSize = 40.sp,
-                color = AppColors.DarkBackground,
-                letterSpacing = 8.sp
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Main title
-            Text(
-                text = "Eval",
-                fontSize = 72.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                letterSpacing = 4.sp
-            )
-
-            // Subtitle
-            Text(
-                text = "Chess Game Analyser",
-                fontSize = 16.sp,
-                color = AppColors.LightGray,
-                letterSpacing = 2.sp
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Bottom chess pieces - white pieces
-            Text(
-                text = "\u2657 \u2658 \u2659",
-                fontSize = 40.sp,
-                color = Color.White,
-                letterSpacing = 8.sp
-            )
-        }
-    }
+    Image(
+        painter = androidx.compose.ui.res.painterResource(com.eval.R.drawable.eval_brand_glyph),
+        contentDescription = "Eval — chess analysis",
+        modifier = Modifier.width(240.dp).height(182.dp)
+    )
 }
 
 /**
@@ -762,18 +680,16 @@ fun SharePositionScreen(
     onViewOnSite: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    EvalScreen(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        topBar = {
+            EvalTitleBar(
+                title = "Share / Export",
+                onBackClick = onDismiss,
+                onEvalClick = onDismiss
+            )
+        }
     ) {
-        EvalTitleBar(
-            title = "Share / Export",
-            onBackClick = onDismiss,
-            onEvalClick = onDismiss
-        )
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -866,11 +782,9 @@ fun SharePositionScreen(
     }
 }
 
-/** Select a named instruction for every AI report, including player reports. */
+/** Preparation starts only after the three request parts have been reviewed and submitted. */
 @Composable
-fun AiInstructionSelectionScreen(
-    instructions: List<AiInstructionEntry>,
-    onSelectInstruction: (AiInstructionEntry) -> Unit,
+fun AiReportProgressScreen(
     onDismiss: () -> Unit,
     progress: String? = null,
     error: String? = null,
@@ -879,12 +793,13 @@ fun AiInstructionSelectionScreen(
     onStopAndContinue: () -> Unit = {}
 ) {
     androidx.activity.compose.BackHandler(onBack = onDismiss)
-    Column(
-        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    EvalScreen(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        topBar = {
+            EvalTitleBar(if (engineProgress != null) "Stockfish lines for AI" else "Preparing AI request",
+                onBackClick = onDismiss, onEvalClick = onDismiss)
+        }
     ) {
-        EvalTitleBar(if (engineProgress != null) "Stockfish lines for AI" else "Select AI Instruction",
-            onBackClick = onDismiss, onEvalClick = onDismiss)
         if (engineProgress != null) {
             if (engineProgress.searching) {
                 LinearProgressIndicator(progress = { engineProgress.fraction }, modifier = Modifier.fillMaxWidth())
@@ -919,21 +834,6 @@ fun AiInstructionSelectionScreen(
                 TextButton(onClick = onDismiss) { Text("Cancel") }
             }
             if (error != null) Text(error, color = MaterialTheme.colorScheme.error)
-            Column(
-                modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                if (instructions.isEmpty()) {
-                    Text("No instructions configured. Go to Settings > AI Instructions to add one.", color = AppColors.SubtleText)
-                }
-                instructions.sortedBy { it.name.lowercase() }.forEach { entry ->
-                    Button(
-                        onClick = { onSelectInstruction(entry) }, modifier = Modifier.fillMaxWidth(),
-                        enabled = progress == null,
-                        colors = ButtonDefaults.buttonColors(containerColor = AppColors.ButtonGreen)
-                    ) { Text(entry.name) }
-                }
-            }
         }
     }
 }
@@ -946,18 +846,16 @@ fun GifExportScreen(
     progress: Float,
     onCancel: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+    EvalScreen(
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        topBar = {
+            EvalTitleBar(
+                title = "Exporting GIF",
+                onBackClick = onCancel,
+                onEvalClick = onCancel
+            )
+        }
     ) {
-        EvalTitleBar(
-            title = "Exporting GIF",
-            onBackClick = onCancel,
-            onEvalClick = onCancel
-        )
 
         Spacer(modifier = Modifier.weight(1f))
 

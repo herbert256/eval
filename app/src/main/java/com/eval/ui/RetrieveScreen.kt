@@ -1,5 +1,6 @@
 package com.eval.ui
 
+import android.content.pm.PackageManager
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -15,6 +16,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -41,7 +43,12 @@ private enum class RetrieveSubScreen {
     STREAMERS,
     PGN_FILE,
     OPENING_SELECTION,
-    FEN_INPUT
+    FEN_INPUT,
+    BOARD_SETUP,
+    URL_INPUT,
+    LOCAL_FILE,
+    CLIPBOARD_HISTORY,
+    CAMERA
 }
 
 /**
@@ -55,9 +62,9 @@ fun RetrieveScreen(
     onNavigateToGame: () -> Unit = {}
 ) {
     val context = LocalContext.current
-    var currentScreen by remember { mutableStateOf(RetrieveSubScreen.MAIN) }
+    var currentScreen by rememberSaveable { mutableStateOf(RetrieveSubScreen.MAIN) }
     // Track which screen we came from when showing player info
-    var previousScreen by remember { mutableStateOf(RetrieveSubScreen.MAIN) }
+    var previousScreen by rememberSaveable { mutableStateOf(RetrieveSubScreen.MAIN) }
 
     // Navigate to PGN file screen when PGN events are loaded
     LaunchedEffect(uiState.showPgnEventSelection) {
@@ -66,14 +73,13 @@ fun RetrieveScreen(
         }
     }
 
-    // Track the game we've already navigated for to avoid re-triggering on back navigation
-    var navigatedGameId by remember { mutableStateOf<String?>(null) }
-
-    // Navigate to game screen when a NEW game is loaded (keeps RetrieveScreen in back stack)
-    LaunchedEffect(uiState.game?.id) {
-        val currentGameId = uiState.game?.id
-        if (currentGameId != null && currentGameId != navigatedGameId) {
-            navigatedGameId = currentGameId
+    // Opening the picker keeps the current game. Navigate only when a game
+    // is actually opened, including choosing the same game again. Live updates
+    // and opening a list of PGN candidates must leave the picker on screen.
+    var navigatedGameVersion by rememberSaveable { mutableStateOf(uiState.gameLoadVersion) }
+    LaunchedEffect(uiState.gameLoadVersion) {
+        if (uiState.game != null && uiState.gameLoadVersion != navigatedGameVersion) {
+            navigatedGameVersion = uiState.gameLoadVersion
             onNavigateToGame()
         }
     }
@@ -120,15 +126,15 @@ fun RetrieveScreen(
     }
 
     if (uiState.pendingAiReport != null) {
-        AiInstructionSelectionScreen(
-            progress = uiState.aiMovesProgress,
-            engineProgress = uiState.aiEngineProgress,
-            stopping = uiState.aiEngineStopping,
-            onStopAndContinue = { viewModel.stopAiEngineAndContinue() },
-            error = uiState.aiReportError,
-            instructions = uiState.aiInstructions,
-            onSelectInstruction = { viewModel.launchSelectedAiInstruction(context, it) },
-            onDismiss = { viewModel.dismissAiInstructionSelection() }
+        AiReportFlowScreen(
+            state = uiState,
+            onSelectionChange = viewModel::updateAiReportSelection,
+            onNext = viewModel::editAiReport,
+            onDraftChange = viewModel::updateAiReportDraft,
+            onSubmit = { viewModel.submitAiReport(context) },
+            onBackToSelection = viewModel::backToAiReportSelection,
+            onStopAndContinue = viewModel::stopAiEngineAndContinue,
+            onDismiss = viewModel::dismissAiInstructionSelection
         )
         return
     }
@@ -182,7 +188,9 @@ fun RetrieveScreen(
                 }
             }
             RetrieveSubScreen.OPENING_SELECTION -> currentScreen = RetrieveSubScreen.MAIN
-            RetrieveSubScreen.FEN_INPUT -> currentScreen = RetrieveSubScreen.MAIN
+            RetrieveSubScreen.FEN_INPUT, RetrieveSubScreen.BOARD_SETUP -> currentScreen = RetrieveSubScreen.MAIN
+            RetrieveSubScreen.URL_INPUT, RetrieveSubScreen.LOCAL_FILE,
+            RetrieveSubScreen.CLIPBOARD_HISTORY, RetrieveSubScreen.CAMERA -> currentScreen = RetrieveSubScreen.MAIN
         }
     }
 
@@ -201,7 +209,49 @@ fun RetrieveScreen(
                 viewModel.loadEcoOpenings()
                 currentScreen = RetrieveSubScreen.OPENING_SELECTION
             },
-            onFenClick = { currentScreen = RetrieveSubScreen.FEN_INPUT }
+            onFenClick = { currentScreen = RetrieveSubScreen.FEN_INPUT },
+            onBoardSetupClick = { currentScreen = RetrieveSubScreen.BOARD_SETUP },
+            onUrlClick = { currentScreen = RetrieveSubScreen.URL_INPUT },
+            onLocalFileClick = { currentScreen = RetrieveSubScreen.LOCAL_FILE },
+            onClipboardHistoryClick = { currentScreen = RetrieveSubScreen.CLIPBOARD_HISTORY },
+            onCameraClick = { currentScreen = RetrieveSubScreen.CAMERA }
+        )
+        RetrieveSubScreen.CAMERA -> CameraBoardScreen(
+            onStartFen = { fen -> viewModel.startFromFen(fen) },
+            onBack = { currentScreen = RetrieveSubScreen.MAIN }
+        )
+        RetrieveSubScreen.BOARD_SETUP -> BoardSetupScreen(
+            currentFen = uiState.currentBoard.getFen().takeIf { uiState.game != null },
+            initiallyFlipped = uiState.flippedBoard,
+            layout = uiState.boardLayoutSettings,
+            onStart = { fen ->
+                viewModel.startFromFen(fen).also { started ->
+                    if (started) {
+                        SettingsPreferences(context.getSharedPreferences(SettingsPreferences.PREFS_NAME, android.content.Context.MODE_PRIVATE))
+                            .saveFenToHistory(fen)
+                    }
+                }
+            },
+            onBack = { currentScreen = RetrieveSubScreen.MAIN }
+        )
+        RetrieveSubScreen.CLIPBOARD_HISTORY -> ClipboardHistoryScreen(
+            onStartFen = { fen -> viewModel.startFromFen(fen) },
+            onStartPgn = { pgn ->
+                viewModel.loadGamesFromPgnContent(pgn) { multiple ->
+                    if (multiple) currentScreen = RetrieveSubScreen.PGN_FILE
+                }
+            },
+            onBack = { currentScreen = RetrieveSubScreen.MAIN }
+        )
+        RetrieveSubScreen.URL_INPUT, RetrieveSubScreen.LOCAL_FILE -> UrlGameScreen(
+            localFile = currentScreen == RetrieveSubScreen.LOCAL_FILE,
+            onStartFen = { fen -> viewModel.startFromFen(fen) },
+            onStartPgn = { pgn ->
+                viewModel.loadGamesFromPgnContent(pgn) { multiple ->
+                    if (multiple) currentScreen = RetrieveSubScreen.PGN_FILE
+                }
+            },
+            onBack = { currentScreen = RetrieveSubScreen.MAIN }
         )
         RetrieveSubScreen.LICHESS -> LichessRetrieveScreen(
             viewModel = viewModel,
@@ -326,9 +376,15 @@ private fun RetrieveMainScreen(
     onLichessClick: () -> Unit,
     onPgnFileLoaded: (hasMultipleEvents: Boolean) -> Unit,
     onOpeningClick: () -> Unit,
-    onFenClick: () -> Unit = {}
+    onFenClick: () -> Unit = {},
+    onBoardSetupClick: () -> Unit = {},
+    onUrlClick: () -> Unit = {},
+    onLocalFileClick: () -> Unit = {},
+    onClipboardHistoryClick: () -> Unit = {},
+    onCameraClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val hasCamera = remember(context) { context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY) }
 
     // File picker launcher for PGN files (supports ZIP files containing PGN)
     val pgnFileLauncher = rememberLauncherForActivityResult(
@@ -368,18 +424,16 @@ private fun RetrieveMainScreen(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AppColors.DarkBlueBackground)
-            .padding(16.dp)
+    EvalScreen(
+        backgroundColor = AppColors.DarkBlueBackground,
+        topBar = {
+            EvalTitleBar(
+                title = "Select a game",
+                onBackClick = onBack,
+                onEvalClick = onBack
+            )
+        }
     ) {
-        // Header
-        EvalTitleBar(
-            title = "Select a game",
-            onBackClick = onBack,
-            onEvalClick = onBack
-        )
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -501,6 +555,48 @@ private fun RetrieveMainScreen(
                 Text("Start from FEN position")
             }
 
+            Button(
+                onClick = onBoardSetupClick,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = AppColors.BlueGrayAccent)
+            ) {
+                Text("Board setup")
+            }
+
+            Button(
+                onClick = onUrlClick,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = AppColors.BlueGrayAccent)
+            ) {
+                Text("Start from url")
+            }
+
+            Button(
+                onClick = onLocalFileClick,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = AppColors.BlueGrayAccent)
+            ) {
+                Text("Start from a local file")
+            }
+
+            Button(
+                onClick = onClipboardHistoryClick,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = AppColors.BlueGrayAccent)
+            ) {
+                Text("Start from clipboard history")
+            }
+
+            if (hasCamera) {
+                Button(
+                    onClick = onCameraClick,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.BlueGrayAccent)
+                ) {
+                    Text("Camera")
+                }
+            }
+
             // Loading indicator
             if (uiState.isLoading) {
                 Box(
@@ -543,18 +639,16 @@ private fun LichessRetrieveScreen(
     // Handle back navigation
     BackHandler { onBack() }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AppColors.DarkBlueBackground)
-            .padding(16.dp)
+    EvalScreen(
+        backgroundColor = AppColors.DarkBlueBackground,
+        topBar = {
+            EvalTitleBar(
+                title = "lichess.org",
+                onBackClick = onBack,
+                onEvalClick = onBack
+            )
+        }
     ) {
-        // Header
-        EvalTitleBar(
-            title = "lichess.org",
-            onBackClick = onBack,
-            onEvalClick = onBack
-        )
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -731,18 +825,16 @@ private fun TopRankingsScreen(
     // Handle back navigation
     BackHandler { onBack() }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AppColors.DarkBlueBackground)
-            .padding(16.dp)
+    EvalScreen(
+        backgroundColor = AppColors.DarkBlueBackground,
+        topBar = {
+            EvalTitleBar(
+                title = "Top Rankings",
+                onBackClick = onBack,
+                onEvalClick = onBack
+            )
+        }
     ) {
-        // Header
-        EvalTitleBar(
-            title = "Top Rankings",
-            onBackClick = onBack,
-            onEvalClick = onBack
-        )
 
         Text(
             text = serverName,
@@ -937,24 +1029,22 @@ private fun TournamentsScreen(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AppColors.DarkBlueBackground)
-            .padding(16.dp)
+    EvalScreen(
+        backgroundColor = AppColors.DarkBlueBackground,
+        topBar = {
+            EvalTitleBar(
+                title = if (uiState.selectedTournament != null) "Tournament Games" else "Tournaments",
+                onBackClick = {
+                    if (uiState.selectedTournament != null) {
+                        viewModel.backToTournamentList()
+                    } else {
+                        onBack()
+                    }
+                },
+                onEvalClick = onBack
+            )
+        }
     ) {
-        // Header
-        EvalTitleBar(
-            title = if (uiState.selectedTournament != null) "Tournament Games" else "Tournaments",
-            onBackClick = {
-                if (uiState.selectedTournament != null) {
-                    viewModel.backToTournamentList()
-                } else {
-                    onBack()
-                }
-            },
-            onEvalClick = onBack
-        )
 
         if (uiState.selectedTournament != null) {
             Text(
@@ -1155,28 +1245,26 @@ private fun BroadcastsScreen(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AppColors.DarkBlueBackground)
-            .padding(16.dp)
+    EvalScreen(
+        backgroundColor = AppColors.DarkBlueBackground,
+        topBar = {
+            EvalTitleBar(
+                title = when {
+                    showingGames -> "Games"
+                    showingRounds -> "Rounds"
+                    else -> "Broadcasts"
+                },
+                onBackClick = {
+                    if (uiState.selectedBroadcast != null) {
+                        viewModel.backToBroadcastList()
+                    } else {
+                        onBack()
+                    }
+                },
+                onEvalClick = onBack
+            )
+        }
     ) {
-        // Header
-        EvalTitleBar(
-            title = when {
-                showingGames -> "Games"
-                showingRounds -> "Rounds"
-                else -> "Broadcasts"
-            },
-            onBackClick = {
-                if (uiState.selectedBroadcast != null) {
-                    viewModel.backToBroadcastList()
-                } else {
-                    onBack()
-                }
-            },
-            onEvalClick = onBack
-        )
 
         // Subtitle showing current broadcast/round
         when {
@@ -1425,24 +1513,22 @@ private fun PgnFileScreen(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AppColors.DarkBlueBackground)
-            .padding(16.dp)
+    EvalScreen(
+        backgroundColor = AppColors.DarkBlueBackground,
+        topBar = {
+            EvalTitleBar(
+                title = if (showingGames) "Games" else "Events",
+                onBackClick = {
+                    if (showingGames && hasMultipleEvents) {
+                        viewModel.backToPgnEventList()
+                    } else {
+                        onBack()
+                    }
+                },
+                onEvalClick = onBack
+            )
+        }
     ) {
-        // Header
-        EvalTitleBar(
-            title = if (showingGames) "Games" else "Events",
-            onBackClick = {
-                if (showingGames && hasMultipleEvents) {
-                    viewModel.backToPgnEventList()
-                } else {
-                    onBack()
-                }
-            },
-            onEvalClick = onBack
-        )
 
         // Subtitle
         if (showingGames) {
@@ -1601,18 +1687,16 @@ private fun LichessTvScreen(
 
     BackHandler { onBack() }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AppColors.DarkBlueBackground)
-            .padding(16.dp)
+    EvalScreen(
+        backgroundColor = AppColors.DarkBlueBackground,
+        topBar = {
+            EvalTitleBar(
+                title = "Lichess TV",
+                onBackClick = onBack,
+                onEvalClick = onBack
+            )
+        }
     ) {
-        // Header
-        EvalTitleBar(
-            title = "Lichess TV",
-            onBackClick = onBack,
-            onEvalClick = onBack
-        )
 
         Text(
             text = "Current top games",
@@ -1733,18 +1817,16 @@ private fun StreamersScreen(
 
     BackHandler { onBack() }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AppColors.DarkBlueBackground)
-            .padding(16.dp)
+    EvalScreen(
+        backgroundColor = AppColors.DarkBlueBackground,
+        topBar = {
+            EvalTitleBar(
+                title = "Streamers",
+                onBackClick = onBack,
+                onEvalClick = onBack
+            )
+        }
     ) {
-        // Header
-        EvalTitleBar(
-            title = "Streamers",
-            onBackClick = onBack,
-            onEvalClick = onBack
-        )
 
         Text(
             text = "lichess.org streamers",
@@ -1893,18 +1975,16 @@ private fun OpeningSelectionScreen(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AppColors.DarkBlueBackground)
-            .padding(16.dp)
+    EvalScreen(
+        backgroundColor = AppColors.DarkBlueBackground,
+        topBar = {
+            EvalTitleBar(
+                title = "Start with opening",
+                onBackClick = onBack,
+                onEvalClick = onBack
+            )
+        }
     ) {
-        // Header
-        EvalTitleBar(
-            title = "Start with opening",
-            onBackClick = onBack,
-            onEvalClick = onBack
-        )
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -2007,18 +2087,16 @@ fun FenInputScreen(
     onStart: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    EvalScreen(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        topBar = {
+            EvalTitleBar(
+                title = "Enter FEN Position",
+                onBackClick = onDismiss,
+                onEvalClick = onDismiss
+            )
+        }
     ) {
-        EvalTitleBar(
-            title = "Enter FEN Position",
-            onBackClick = onDismiss,
-            onEvalClick = onDismiss
-        )
 
         Spacer(modifier = Modifier.height(8.dp))
 

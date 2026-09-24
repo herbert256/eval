@@ -1,73 +1,94 @@
 # Eval → AI report handoff
 
-Eval stores named instruction entries (`id`, `name`, `instructions`). Both position and player reports require the user to choose an entry. Prompts and system prompts are created and stored in the AI app.
+## AI setup
 
-In **Edit AI interface** (or **New AI interface**), type `<` to choose a command
-or `@` to choose a context placeholder. Each popup lists names and short
-descriptions. A command inserts matching opening and closing tags; the cursor
-starts between them for commands that need a value. Flags need no value and
-leave the cursor after the tag pair. A placeholder inserts its complete token.
-Cancel keeps the typed character so custom tags and literal text can still be
-entered manually. The AI app also accepts the editor's paired flag tags.
+**Settings → AI setup** has independent CRUD screens for **System prompts**, **Prompts**
+and **AI instructions**. Prompt records contain `id`, `name` and `text`. Instruction
+records contain only `id`, `name` and `instructions`. Instructions can also be copied.
 
-Eval sends `com.ai.ACTION_NEW_REPORT`, restricted to package `com.ai`, with `title` and `instructions` extras. There are no `prompt` or `system` extras.
+Both prompt editors offer `@` completion. The instruction editor also offers `<`
+completion. Popups describe each choice, insert full placeholders or paired tags,
+and restore focus. Cancelling leaves the typed character available for custom text.
 
-Eval leaves placeholders in the selected instruction text unchanged and sends the eight standard context tags below, even when a value is unavailable. Repeated placeholders share one data field. When the interface uses a date placeholder, Eval also sends one `date` tag with the actual current local date. Existing top-level declarations of these supplied fields are deduplicated.
+## Sending a report
 
-```xml
-<fen>r4rk1/1b2bppp/ppq1p3/2ppB2n/5P2/1P1BP3/P1PPQ1PP/R4RK1 w - - 0 15</fen>
-<color>White</color>
-<server></server>
-<player>White</player>
-<pgn>[FEN "r4rk1/1b2bppp/ppq1p3/2ppB2n/5P2/1P1BP3/P1PPQ1PP/R4RK1 w - - 0 15"]
+Position and player reports use the same two screens:
 
-*</pgn>
-<board>Generated board HTML and JavaScript</board>
-<moves>All legal moves, each with its Stockfish evaluation</moves>
-<engine>The best N Stockfish continuations with scores and search depth</engine>
-```
+1. **Select AI parts** offers three dropdowns for System prompts, Prompts and AI
+   instructions, each including **None**. Each choice is remembered immediately by
+   stable ID, including None, and restored on later requests and app restarts.
+2. **Next** opens **Edit AI request** with three editable text boxes. `@` completion
+   is available in all three; `<` completion is also available in AI instructions.
+   Edits apply only to this request. Back retains edits until a selection changes.
+   **Submit** prepares the requested context and opens AI. Empty catalogs can be
+   skipped and text entered manually; a completely empty request cannot be submitted.
 
-- `fen`: the current position, including an explored variation.
-- `color`: `White` or `Black`, read from that FEN.
-- `server`: `lichess.org` when known. Local FEN positions have no server.
-- `player`: for position reports, the side-to-move player's name; for profile reports, the selected player.
-- `pgn`: the available full game PGN. The separate FEN is authoritative for the current position.
-- `engine`: the best N Stockfish lines, ranked for the side to move, each with its continuation in SAN and UCI, White-perspective evaluation, and search depth.
-- `moves`: every legal move at the captured FEN, including all promotions, with SAN, UCI, Stockfish evaluation and search depth. Scores use White's perspective: positive favors White; negative favors Black; +M/-M marks mate for White/Black.
-- `board`: generated chessboard HTML/JavaScript. It belongs in report presentation, not model request bodies.
+Selecting parts and pressing Next performs no Stockfish work or external handoff.
+Submit captures the final edited text and detects context from that text, so adding
+or removing `@MOVES@` or `@ENGINE@` in review changes which searches run. Cancelling
+preparation discards the request; retry after an error retains the edited text.
 
-A player-only report has empty FEN, color, PGN, board, moves and engine tags. It does not inherit the last opened game.
+Legacy inline `<system>` and `<prompt>` blocks are placed in the corresponding
+review fields, unless a catalog choice overrides them. Their entities are decoded
+once for editing. Report markup and other instructions remain intact. Final prompt
+text is XML-escaped into literal `<system>` and `<prompt>` blocks.
 
-Plain values use XML escaping (`&amp;`, `&lt;`, `&gt;`, `&quot;`, `&#39;`). The receiver decodes those values once. Board markup is raw inside its enclosing tag. All eight context tags and `<open>`/`<close>` bodies must be removed before interpreting control tags, so markup and PGN are never interpreted as commands.
+Eval sends `com.ai.ACTION_NEW_REPORT` to package `com.ai`, with `title` and
+`instructions` extras. AI decodes prompt bodies once and expands placeholders.
+Only referenced context is included; repeated placeholders share one field.
+`@MOVES@` requests evaluations of legal moves; `@ENGINE@` requests the best
+Stockfish continuations. Their independent settings are under **Settings →
+Stockfish**. Other placeholders are `@FEN@`, `@COLOR@`, `@SERVER@`, `@PLAYER@`,
+`@PGN@`, `@BOARD@` and `@DATE@`.
 
-Instructions may use `@FEN@`, `@COLOR@`, `@SERVER@`, `@PLAYER@`, `@PGN@`, `@MOVES@`, `@ENGINE@`, `@BOARD@` and `@DATE@`. For example:
+A player request uses the selected player and available server, with empty position
+context. The board contains HTML/JavaScript and can be used in `<open>@BOARD@</open>`
+or `<close>@BOARD@</close>` for report presentation. Plain context is XML-escaped;
+board markup remains raw. Context values are literal and are not recursively expanded.
 
-```xml
-<type>Classic</type><select><next>View</next>
-<open>@BOARD@</open>
-```
+The complete receiver contract, controls and examples are in [CALL_AI.md](../CALL_AI.md).
 
-The AI receiver resolves placeholders in the selected prompt, system prompt and opening/closing report content. Eval never expands those templates. Standard context remains available to templates saved only in AI. A prompt or system template explicitly using the board placeholder receives its supplied value; merely sending board data does not include it in model requests. See the shared custom-intent contract for selection and substitution details.
+## Persistence and migration
 
-Optional references can select AI-owned templates by stable ID or unique name:
+Settings schema v5 exports `aiSystemPrompts`, `aiReportPrompts`, `aiInstructions`
+and `lastAiReportSelection`. The remembered choice contains `systemPromptId`,
+`promptId` and `instructionId`; these IDs are independent of saved instruction text.
+Deleting a chosen entry clears only that choice. Stale IDs are treated as None.
 
-```xml
-<prompt>Chess position analysis</prompt>
-<system>Chess coach</system>
-<type>Classic</type><select>
-<open>@BOARD@</open>
-```
+The importer accepts v2, v3, v4 and legacy preference-map exports. Instruction IDs,
+names and text are preserved. Old v4 links inside instructions are retired; their
+system prompts and prompts remain in their own catalogs. The older v2 migration
+still converts an email field into `<email>`. Invalid catalog entries or malformed
+choice data are rejected before settings replacement. Saved games and retrieval
+history remain untouched. Seed history and last choices survive export/import.
 
-Saved templates are resolved by ID or unique name. Unresolved `<system>` or `<prompt>` references are used as literal system-prompt text, with placeholder substitution performed by AI. Older callers that supply a prompt extra remain supported by the AI app.
+## Bundled system prompts and prompts
 
-## Existing Eval settings
+Editable defaults live at the repository root in `assets/system_prompts` for system
+prompts and `assets/prompts` for prompts, one JSON file per prompt with exactly
+`title` and `text` string fields. Gradle validates and packages both directories as
+Android assets; the prompt text is not duplicated in Kotlin.
+Keep filenames stable because they determine each default's ID.
 
-Settings schema v3 uses `aiInstructions` and the preference key `ai_instructions_list`. The upgrade retains old entry IDs, names and instruction text; a legacy email field becomes an `<email>` instruction. Old prompt, system-prompt and category fields are not retained in active Eval storage. Schema v2 exports and legacy preference-map exports can still be imported. New exports contain only instruction entries.
+The bundled prompts and their context are:
 
-## Moves list for AI
+| Prompt | Context |
+| --- | --- |
+| Analyse a FEN position | `@FEN@` |
+| Annotate a chess game | `@PGN@` |
+| Find tactical opportunities | `@FEN@`, `@ENGINE@` |
+| Make a strategic plan | `@FEN@` |
+| Explain the engine choices | `@FEN@`, `@MOVES@`, `@ENGINE@` |
+| Review mistakes and turning points | `@PGN@` |
+| Create a training plan | `@PGN@` |
 
-The fourth card in Settings → Stockfish controls the moves list independently of board analysis: seconds per move, threads, hash memory and NNUE. Defaults are 0.25 seconds per move, one thread, 32 MB and NNUE on. Before every position handoff, Eval evaluates each legal root move with these settings and shows cancellable progress. The complete list is always supplied, including when only an AI-saved template uses it. If any search fails, the user can retry; no partial list is sent. Terminal positions send “No legal moves in this position.” Player-only requests send an empty moves field.
+Placeholders are kept in the saved text and resolved from the selected report
+context when the final edited request uses that placeholder. Submitting the tactics
+or engine explanation prompt requests the corresponding Stockfish preparation.
 
-## Engine moves for AI
-
-The fifth card in Settings → Stockfish controls the engine lines independently: number of lines (1–32), seconds per position (0.25–60, shared across the lines), threads, hash memory and NNUE. Defaults are three lines, two seconds, one thread, 32 MB and NNUE on. Eval sends the latest complete MultiPV iteration at one depth. If fewer legal moves exist than requested, it sends the available lines. Both engine data sets use the captured FEN, with cancellable preparation. Player-only requests supply an empty engine field; terminal positions supply “No legal moves in this position.” The engine field is always included, so AI-owned prompts and system prompts can use @ENGINE@ without repeating the placeholder in Eval.
+On startup, Eval adds previously unseeded defaults to fresh or existing settings.
+Existing IDs and same-name prompts win, so local edits and remembered choices
+are preserved. The seed history prevents deleted defaults from returning and is
+included in settings export/import. New asset files are added once on an upgrade;
+editing an existing JSON file changes its text for fresh installations without
+replacing an existing user's saved text.

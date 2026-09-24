@@ -825,23 +825,12 @@ fun GameContent(
                 }
             }
 
-            // Right part: Back to game button (when exploring) or flip board icon
+            // Right part: live controls and flip board. Android Back exits variations.
             Row(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (uiState.isExploringLine) {
-                    // Back to game button - same style as navigation buttons
-                    Button(
-                        onClick = { viewModel.backToOriginalGame() },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.surface
-                        ),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
-                    ) {
-                        Text("Back to game", fontSize = 18.sp)
-                    }
-                } else {
+                if (!uiState.isExploringLine) {
                     // LIVE badge and auto-follow toggle for live games
                     if (uiState.isLiveGame) {
                         Box(

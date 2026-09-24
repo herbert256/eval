@@ -5,4 +5,5 @@
     <cache-path name="shared_traces" path="shared_traces/" />
     <cache-path name="settings_export" path="settings_export/" />
     <files-path name="ai_history" path="ai-history/" />
+    <files-path name="clipboard_history" path="clipboard-history/attachments/" />
 </paths>

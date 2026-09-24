@@ -26,7 +26,7 @@ class AiInstructionMigrationTest {
         } finally { prefs.edit().clear().commit() }
     }
 
-    @Test fun imports_v2_and_round_trips_instruction_only_v3() {
+    @Test fun imports_v2_and_round_trips_in_v5() {
         val prefs = ApplicationProvider.getApplicationContext<Context>().getSharedPreferences("instructions_import_test", Context.MODE_PRIVATE)
         prefs.edit().clear().commit()
         try {
@@ -37,7 +37,7 @@ class AiInstructionMigrationTest {
             val exported = settings.exportAllSettings()
             assertFalse(exported.contains("old model text"))
             assertFalse(exported.contains("old system text"))
-            assertTrue(exported.contains("\"schemaVersion\":3"))
+            assertTrue(exported.contains("\"schemaVersion\":5"))
             settings.saveAiInstructions(emptyList())
             assertTrue(settings.importAllSettings(exported))
             assertEquals(expected, settings.loadAiInstructions())

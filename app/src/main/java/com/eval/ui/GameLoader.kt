@@ -352,6 +352,7 @@ internal class GameLoader(
             copy(
                 isLoading = false,
                 game = game,
+                gameLoadVersion = gameLoadVersion + 1,
                 gameSelectionServer = server ?: if (gameSiteUrl(game.pgn.orEmpty()) != null) ChessServer.LICHESS else ChessServer.LOCAL,
                 errorMessage = importError(parsedMoves.map { it.san }, validMoves),
                 openingName = openingName,
@@ -474,6 +475,7 @@ internal class GameLoader(
         updateUiState {
             copy(
                 game = lichessGame,
+                gameLoadVersion = gameLoadVersion + 1,
                 gameSelectionServer = if (gameSiteUrl(analysedGame.pgn) != null) ChessServer.LICHESS else ChessServer.LOCAL,
                 moves = validMoves,
                 moveDetails = moveDetails,

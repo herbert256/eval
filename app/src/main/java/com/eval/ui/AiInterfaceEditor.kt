@@ -1,6 +1,5 @@
 package com.eval.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -20,7 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 
-/** Create or edit the commands and context sent to the AI app. */
+/** Edit a reusable instruction independently of the system prompt and prompt. */
 @Composable
 fun AiInstructionEditScreen(
     existingInstruction: AiInstructionEntry?,
@@ -32,11 +31,65 @@ fun AiInstructionEditScreen(
     var instructions by rememberSaveable(existingInstruction?.id, stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(existingInstruction?.instructions ?: ""))
     }
+    EvalScreen(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        topBar = { EvalTitleBar(if (existingInstruction != null) "Edit AI instruction" else "New AI instruction",
+            onBackClick = onBackToList, onEvalClick = onBackToGame) }
+    ) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") },
+                modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Name" }, singleLine = true)
+            Text("Type < for AI options, or @ for position, player and date placeholders.",
+                style = MaterialTheme.typography.bodySmall, color = AppColors.SubtleText)
+            AiCompletionTextField(instructions, { instructions = it }, "AI instructions", allowCommands = true)
+        }
+        Button(onClick = {
+            onSave(AiInstructionEntry(id = existingInstruction?.id ?: java.util.UUID.randomUUID().toString(),
+                name = name.trim(), instructions = instructions.text))
+        }, enabled = name.isNotBlank(), modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = AppColors.ButtonGreen)) { Text("Save") }
+    }
+}
+
+@Composable
+internal fun AiPromptSelection(label: String, selectedId: String, entries: List<AiPromptEntry>, onSelect: (String) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    val selected = entries.find { it.id == selectedId }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onBackground)
+        Box {
+            OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()
+                .semantics { contentDescription = "Select $label" }) {
+                Text(selected?.name ?: "None", modifier = Modifier.weight(1f))
+                Text("▾")
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                DropdownMenuItem(text = { Text("None") }, onClick = { onSelect(""); expanded = false })
+                entries.sortedBy { it.name.lowercase() }.forEach { entry ->
+                    DropdownMenuItem(text = { Text(entry.name) }, onClick = { onSelect(entry.id); expanded = false })
+                }
+            }
+        }
+        if (selected != null) Text(selected.text, maxLines = 3, style = MaterialTheme.typography.bodySmall, color = AppColors.SubtleText)
+        else if (entries.isEmpty()) Text("Add entries in Settings > AI setup > $label.",
+            style = MaterialTheme.typography.bodySmall, color = AppColors.SubtleText)
+    }
+}
+
+/** Shared editor: prompt bodies offer @; the options editor also offers <. */
+@Composable
+internal fun AiCompletionTextField(
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
+    label: String,
+    allowCommands: Boolean,
+    minHeight: androidx.compose.ui.unit.Dp = 240.dp,
+    maxLines: Int = Int.MAX_VALUE
+) {
     var completion by remember { mutableStateOf<AiInterfaceCompletion?>(null) }
     var restoreEditorFocus by remember { mutableStateOf(false) }
     val editorFocus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
-
     LaunchedEffect(restoreEditorFocus, completion) {
         if (restoreEditorFocus && completion == null) {
             editorFocus.requestFocus()
@@ -44,74 +97,23 @@ fun AiInstructionEditScreen(
             restoreEditorFocus = false
         }
     }
-
-    Column(
-        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
-            .imePadding().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        EvalTitleBar(
-            title = if (existingInstruction != null) "Edit AI interface" else "New AI interface",
-            onBackClick = onBackToList,
-            onEvalClick = onBackToGame
-        )
-        Column(
-            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text("Name", style = MaterialTheme.typography.titleSmall)
-            OutlinedTextField(
-                value = name, onValueChange = { name = it },
-                modifier = Modifier.fillMaxWidth(), singleLine = true,
-                placeholder = { Text("e.g. Position report") }
-            )
-            Text("AI interface", style = MaterialTheme.typography.titleSmall)
-            Text(
-                "Commands control how the AI app creates and presents a report. " +
-                    "Context placeholders insert details from the current position, player or date. " +
-                    "Type < for a popup of commands, or @ for a popup of placeholders.",
-                style = MaterialTheme.typography.bodySmall, color = AppColors.MediumGray
-            )
-            OutlinedTextField(
-                value = instructions,
-                onValueChange = { updated ->
-                    if (updated.text != instructions.text) {
-                        completion = aiInterfaceCompletion(instructions, updated)
-                        if (completion != null) keyboard?.hide()
-                    }
-                    instructions = updated
-                },
-                modifier = Modifier.fillMaxWidth().heightIn(min = 240.dp)
-                    .focusRequester(editorFocus)
-                    .semantics { contentDescription = "AI interface instructions" },
-                textStyle = MaterialTheme.typography.bodySmall
-            )
-        }
-        Button(
-            onClick = {
-                onSave(AiInstructionEntry(
-                    id = existingInstruction?.id ?: java.util.UUID.randomUUID().toString(),
-                    name = name.trim(), instructions = instructions.text
-                ))
-            },
-            enabled = name.isNotBlank(), modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(containerColor = AppColors.ButtonGreen)
-        ) { Text("Save") }
-    }
-
-    completion?.let { pending ->
-        AiInterfaceChoicePopup(
-            kind = pending.kind,
-            onSelect = { choice ->
-                instructions = insertAiInterfaceChoice(instructions, pending, choice)
-                completion = null
-                restoreEditorFocus = true
-            },
-            onDismiss = {
-                completion = null
-                restoreEditorFocus = true
+    OutlinedTextField(value = value, onValueChange = { updated ->
+        if (updated.text != value.text) {
+            completion = aiInterfaceCompletion(value, updated)?.takeIf {
+                allowCommands || it.kind == AiInterfaceChoiceKind.PLACEHOLDER
             }
-        )
+            if (completion != null) keyboard?.hide()
+        }
+        onValueChange(updated)
+    }, label = { Text(label) }, modifier = Modifier.fillMaxWidth().heightIn(min = minHeight)
+        .focusRequester(editorFocus).semantics { contentDescription = label },
+        textStyle = MaterialTheme.typography.bodySmall, maxLines = maxLines)
+    completion?.let { pending ->
+        AiInterfaceChoicePopup(kind = pending.kind, onSelect = { choice ->
+            onValueChange(insertAiInterfaceChoice(value, pending, choice))
+            completion = null
+            restoreEditorFocus = true
+        }, onDismiss = { completion = null; restoreEditorFocus = true })
     }
 }
 

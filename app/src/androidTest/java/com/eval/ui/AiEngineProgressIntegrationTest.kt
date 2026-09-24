@@ -70,8 +70,11 @@ class AiEngineProgressIntegrationTest {
         }
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             lateinit var vm: GameViewModel
+            scenario.onActivity { activity -> vm = ViewModelProvider(activity)[GameViewModel::class.java] }
+            // The real game entry point is in Manual mode, after its engine is ready.
+            // Avoid starting a second cold engine during the activity's own UCI handshake.
+            if (needsEngine) waitUntil(45000) { vm.uiState.value.stockfishReady }
             scenario.onActivity { activity ->
-                vm = ViewModelProvider(activity)[GameViewModel::class.java]
                 vm.dismissAiInstructionSelection()
                 // Only change this fixture's runtime state; preserve the user's saved settings and game.
                 val field = GameViewModel::class.java.getDeclaredField("_uiState").apply { isAccessible = true }
@@ -85,14 +88,15 @@ class AiEngineProgressIntegrationTest {
                 activity.setContent {
                     val ui by vm.uiState.collectAsState()
                     EvalTheme {
-                        AiInstructionSelectionScreen(emptyList(), {}, vm::dismissAiInstructionSelection,
+                        AiReportProgressScreen(vm::dismissAiInstructionSelection,
                             progress = ui.aiMovesProgress, error = ui.aiReportError,
                             engineProgress = ui.aiEngineProgress, stopping = ui.aiEngineStopping,
                             onStopAndContinue = vm::stopAiEngineAndContinue)
                     }
                 }
-                vm.launchSelectedAiInstruction(receiver, AiInstructionEntry(instructions =
-                    if (needsEngine) "<prompt>Explain @ENGINE@</prompt>" else "<prompt>Literal question</prompt>"))
+                vm.editAiReport()
+                vm.updateAiReportDraft(AiReportDraft(prompt = if (needsEngine) "Explain @ENGINE@" else "Literal question"))
+                vm.submitAiReport(receiver)
             }
             if (!needsEngine) {
                 waitUntil(5000) { vm.uiState.value.pendingAiReport == null }
@@ -103,7 +107,10 @@ class AiEngineProgressIntegrationTest {
                 return@use
             }
             // Cold app startup also restores the current game and initializes its engine.
-            waitUntil(45000) { vm.uiState.value.aiEngineProgress?.let { it.result != null && it.elapsedMs >= 500 } == true }
+            waitUntil(45000) { vm.uiState.value.aiReportError != null || vm.uiState.value.pendingAiReport == null ||
+                vm.uiState.value.aiEngineProgress?.let { it.result != null && it.elapsedMs >= 500 } == true }
+            assertNull(vm.uiState.value.aiReportError, vm.uiState.value.aiReportError)
+            assertNotNull("Request ended before a complete live result; sent=${sent.size}", vm.uiState.value.aiEngineProgress?.result)
             assertTrue(vm.uiState.value.aiEngineProgress!!.fraction > 0f)
             waitUntil(5000) {
                 val texts = nodes(instrumentation.uiAutomation.rootInActiveWindow).mapNotNull { it.text?.toString() }
