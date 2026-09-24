@@ -27,6 +27,8 @@ adb shell am start -n com.eval/.MainActivity && \
 cp app/build/outputs/apk/debug/app-debug.apk /Users/herbert/cloud/eval.apk
 ```
 
+**Cloud upload rule:** At the end of every prompt that changes the app, once the latest debug build succeeds and has been tested, copy it to `/Users/herbert/cloud/eval.apk` (the "Deploy to cloud" command). Never upload a build that failed to compile or failed testing; report that instead. Say in the final reply that the cloud APK was updated.
+
 ## Project Overview
 
 Eval is an Android chess analysis app. It fetches games from Lichess.org, parses PGN, and provides three-stage Stockfish analysis with an interactive board. AI reports are delegated to an external companion app (`com.ai`).
