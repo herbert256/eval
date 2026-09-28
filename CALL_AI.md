@@ -219,7 +219,7 @@ Models, Agents, Flocks and Swarms can be combined; duplicate selections are merg
 - [`GameViewModel.kt`](app/src/main/java/com/eval/ui/GameViewModel.kt)
   captures the current position or selected player's context and stages the
   request. [`AiReportScreens.kt`](app/src/main/java/com/eval/ui/AiReportScreens.kt)
-  provides three remembered dropdown choices, Next, three editable text boxes,
+  provides three remembered option lists (radio buttons), Next, three editable text boxes,
   and Submit for both game and player call sites.
 - [`AiSetupScreen.kt`](app/src/main/java/com/eval/ui/AiSetupScreen.kt)
   manages System prompts, Prompts and AI instructions under Settings → AI setup.
@@ -255,5 +255,5 @@ AiAppLauncher.launchAiReport(this, entry, position)
 
 The position values here are synthetic examples; production call sites use
 the live `GameViewModel` snapshot. Both position and player requests use
-the three-part selection and review flow. Each dropdown allows None so the user
+the three-part selection and review flow. Each option list allows None so the user
 can enter request text without first creating saved entries.

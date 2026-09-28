@@ -4,20 +4,20 @@ Complete guide for using the Eval chess analysis app.
 
 ## What is Eval?
 
-Eval is an Android app that fetches your chess games from Lichess.org and analyzes them using the Stockfish 17.1 chess engine. It automatically identifies your mistakes, blunders, and brilliant moves, and lets you explore any position with real-time engine analysis.
+Eval is an Android app that fetches your chess games from Lichess.org and analyzes them using the Stockfish chess engine app installed on your device. It automatically identifies your mistakes, blunders, and brilliant moves, and lets you explore any position with real-time engine analysis.
 
 ## Requirements
 
 - **Android 8.0** (Oreo) or higher
-- **Stockfish 17.1 Chess Engine** app from Google Play Store (required)
-- **AI App** (`com.ai`) from Google Play Store (optional, for AI-powered reports)
+- **Stockfish Chess Engine** app (package `com.stockfish141`) from Google Play Store (required)
+- **AI App** (`com.ai`) from its project page, https://github.com/herbert256/ai (optional, for AI-powered reports)
 - Internet connection for fetching games
 
 ## Getting Started
 
 ### First Launch
 
-1. Install "Stockfish 17.1 Chess Engine" from the Google Play Store
+1. Install the "Stockfish Chess Engine" app from the Google Play Store
 2. Install and launch Eval
 3. If Stockfish is not detected, the app shows installation instructions and checks automatically every 2 seconds
 
@@ -144,11 +144,11 @@ FEN and 2D board-image results from URL, local-file, clipboard, camera and Andro
 
 - **Board setup** - Manually build a position. Select a white or black piece and tap a square to place it; selecting a king relocates that king. Drag any existing piece to move it, even while a palette piece is selected. Drop outside any edge of the board to remove it. Use **Clear**, **Initial position**, **Current position** (when a game is open), or **Flip board**. Choose the side to move. Castling toggles appear below it when the matching king and rook occupy their home squares. **Last move** appears when a legal en passant capture is possible; select the known double pawn push, or leave it unknown. Expand **Position details** for move counters and **Copy FEN**. Castling requires the king and rook on their starting squares and is cleared when either is removed or moved away. Last move offers only legal double pawn pushes that allow a legal en passant capture. Invalid setups show an explanation and cannot start. **Start from this position** opens Manual mode and adds the FEN to recent positions. Android Back returns without changing the current game. Drafts survive screen recreation.
 - **PGN File** - Import PGN files from your device (supports ZIP archives with multiple games)
-- **Start from url** - Scan an HTTPS webpage, PGN download or chessboard image. Finds FEN text (including encoded Lichess analysis links), embedded PGN, linked PGN files, Lichess games/studies, and 2D board images. Choose a game or review/edit a position before starting. Images are recognized locally; confirm orientation, side to move, castling and en passant. Angled photos of physical boards are not supported. Scroll the embedded page and use **Scan page again** for dynamically loaded or off-screen boards. Scans are cancellable and bounded to 20 images, 12 game links and 100 results, with partial-download warnings.
+- **Start from url** - Scan an HTTPS webpage, PGN download or chessboard image. Finds FEN text (including encoded Lichess analysis links), embedded PGN, linked PGN files, Lichess games/studies, and 2D board images. Choose a game or review/edit a position before starting. Images are recognized locally; confirm orientation, side to move, castling and en passant. Angled photos of physical boards are not supported. Scroll the embedded page and use **Scan page again** for dynamically loaded or off-screen boards. Scans are cancellable and bounded to 20 images, 12 game links and 100 results, with partial-download warnings. Links to chess sites and `.pgn` files are followed automatically; other links are listed under **Other links** with a **Scan link** button.
 - **Start from a local file** - Choose a document or image from the Android file picker. Text, FEN, PGN, HTML, PDF, Word and other supported documents are scanned for chess positions and games; board images use on-device recognition. Review a position or choose **Open game** from the results. **Choose another file**, **Scan again** and **Stop** are available. Files are limited to 16 MB; the first 2 MB of text are searched.
-- **Start from clipboard history** - Choose from the last 10 distinct clipboard entries captured by Eval, newest first. Android exposes only the current clipboard item while Eval has focus: Eval captures it when you return to the app and listens for changes while open. It cannot read earlier entries from your keyboard's clipboard history or observe copies while another app is active. Text, FEN, PGN, HTML, URLs and readable image/file attachments use the same scanner as URL/local-file imports. Nothing is scanned or downloaded until you select an entry. Text is limited to 2 MB and copied files to 16 MB per entry. History and attachment copies stay in Eval's private storage across restarts; old entries and their files are removed when the list exceeds 10. Identical content moves to the top when copied again. Items marked sensitive by the source app are not saved. Use **Remove** or **Clear history** to delete saved entries; this does not change Android's clipboard. Review image positions before starting.
-- **Camera** - Point the camera at a 2D chess diagram in a book or on a screen, held straight so the whole board is visible. Frames are recognized on the device; once the same board reads on two consecutive frames, **Board setup** opens prefilled for review. Android Back returns to the camera. The option is hidden on devices without a camera; if access was denied, use **Allow camera** or **App settings**. Angled photos of physical boards are not supported.
-- **Share to Eval** - From another Android app, choose **Share → Eval**. URLs use the same retrieval scanner. Text, HTML, PGN files and single or multiple images are scanned for chess content; captions and attachments are both processed. Choose **Open game** or **Review position** before starting. Image recognition stays on the device. Shared files are limited to 16 MB each and 20 files per share. **Stop** cancels a scan; **Scan again** retries it. A new share replaces any scan in progress, and failed items do not discard other results.
+- **Start from clipboard history** - Choose from the last 10 distinct clipboard entries captured by Eval, newest first. Only chess content is saved: a FEN or PGN, a link to a chess site or a `.pgn` file, an image, or a chess document or file; anything else you copy is not stored. Android exposes only the current clipboard item while Eval has focus: Eval captures it when you return to the app and listens for changes while open. It cannot read earlier entries from your keyboard's clipboard history or observe copies while another app is active. Text, FEN, PGN, HTML, URLs and readable image/file attachments use the same scanner as URL/local-file imports. Nothing is scanned or downloaded until you select an entry. Text is limited to 2 MB and copied files to 16 MB per entry. History and attachment copies stay in Eval's private storage across restarts; old entries and their files are removed when the list exceeds 10. Identical content moves to the top when copied again. Items marked sensitive by the source app are not saved. Use **Remove** or **Clear history** to delete saved entries; this does not change Android's clipboard. Review image positions before starting.
+- **Start from camera** - Opens your camera app. Take a photo of a 2D chess diagram in a book or on a screen, holding the phone straight above it so the whole board fills most of the photo. The photo is scanned on the device with the same board recognizer as local image files (photo orientation is applied); choose **Review position** to open **Board setup** prefilled for review. **Take another photo**, **Scan again** and **Stop** are available. Eval needs no camera permission; only the latest photo is kept in Eval's cache and it is deleted when you leave the screen. The option is hidden on devices without a camera. Angled photos of physical boards are not supported.
+- **Share to Eval** - From another Android app, choose **Share → Eval**. Eval first shows what was shared; nothing is read or downloaded until you tap **Scan**, and the current game keeps its analysis. URLs use the same retrieval scanner. Text, HTML, PGN files and single or multiple images are scanned for chess content; captions and attachments are both processed. Choose **Open game** or **Review position** before starting. Image recognition stays on the device. Shared files are limited to 16 MB each and 20 files per share. **Stop** cancels a scan; **Scan again** retries it. A new share replaces any scan in progress, and failed items do not discard other results.
 - **Opening Study** - Start from any ECO opening code (A00-E99)
 - **FEN Position** - Analyze any position by pasting a FEN string (keeps history of recent positions)
 - **Analysed Games** - Access previously analyzed games
@@ -163,10 +163,10 @@ All four import routes (URL, local file, sharing and clipboard attachments) use 
 - ZIP: searches contained TXT/FEN/PGN/HTML and image files. Nested archives and embedded Office/PDF attachments are skipped.
 - Plain text formats, including Markdown, CSV, TSV, JSON and XML, are searched for FEN/PGN.
 
-Files are limited to 16 MB, extracted text to 2 MB, PDF text to the first 100 pages, and document images/PDF board pages to the first 20. Archives are bounded to 512 entries, 32 MB expanded and 8 MB per part. Limits, corrupt files and unreadable parts are reported. Text in scanned images is not OCR-transcribed; detected chessboards use the existing image recognition and require review. Older binary DOC/XLS/PPT and password-protected files must be saved as unlocked modern Office files or PDF first.
+Files are limited to 16 MB, extracted text to 2 MB, PDF text to the first 100 pages, and document images/PDF board pages to the first 20. Archives are bounded to 512 entries, 32 MB expanded and 8 MB per part; a larger part is skipped and the rest is still read. Text is read as UTF-8, or as Windows-1252 when it is not valid UTF-8. Limits, corrupt files and unreadable parts are reported. Text in scanned images is not OCR-transcribed; detected chessboards use the existing image recognition and require review. Older binary DOC/XLS/PPT and password-protected files must be saved as unlocked modern Office files or PDF first.
 
-### Live Games
-Select a live game from TV channels or streamers and enable auto-follow to watch in real-time with automatic move updates.
+### Lichess TV
+Select a TV channel to load the game Lichess is currently featuring, as far as it has been played, and analyse it. Reload the game later to include newer moves.
 
 ## AI Analysis (Optional)
 
@@ -175,7 +175,7 @@ If the companion AI app (`com.ai`) is installed, you can generate AI-powered ana
 1. Load a game and reach Manual stage
 2. Tap the **share icon** to open Share / Export
 3. Tap **Generate AI Reports**
-4. Choose a System prompt, Prompt and AI instruction from the three dropdowns
+4. Choose a System prompt, Prompt and AI instruction from the three option lists
 5. Tap **Next** and edit any of the three text boxes
 6. Tap **Submit** to prepare the requested data and open the AI app
 
@@ -216,8 +216,8 @@ selected entry clears that choice.
 
 **Edit AI request** has a text box for each part and a **Submit** button. These
 edits apply only to this request; saved templates stay unchanged. Back keeps edits
-unless you change a dropdown choice. Submit starts any needed Stockfish work and
-opens AI. The three catalogs and remembered choices are included in settings
+unless you change a choice. Submit starts any needed Stockfish work (Manual analysis pauses meanwhile) and
+opens AI once Eval is on screen. If the installed AI app is signed by a different developer than before, nothing is sent until you tap Submit again to confirm. The three catalogs and remembered choices are included in settings
 export/import. Older inline system and prompt text is preserved in the review fields.
 
 Only context requested by a placeholder in the final edited request is
@@ -289,9 +289,11 @@ Control which UI elements are visible during each analysis stage:
 
 ### Stockfish Engine
 Per-stage configuration:
-- **Preview**: Time per move (10ms-500ms), threads, hash, NNUE
-- **Analyse**: Time per move (500ms-10s), threads, hash, NNUE
-- **Manual**: Search depth (16-64), threads (1-16), hash (32-512 MB), MultiPV (1-32), NNUE
+- **Preview**: Time per move (10ms-500ms), threads, hash
+- **Analyse**: Time per move (500ms-10s), threads, hash
+- **Manual**: Search depth (16-64), threads, hash (32-256 MB), MultiPV (1-32)
+
+Threads are offered up to 4 (or fewer on phones with fewer cores) and hash up to 256 MB, the most the engine uses. Current Stockfish versions always use their neural network, so the **Use NNUE** switches only appear with an engine that still has that option.
 
 ### AI setup
 Manage System prompts, Prompts and AI instructions in their own screens.
@@ -299,26 +301,32 @@ Manage System prompts, Prompts and AI instructions in their own screens.
 ### General
 
 - Every screen has a fixed icon row with the Eval logo (main screen), 📂 game selection, 🔄 reload when available, ⚙️ settings and ❓ help. Manual mode also shows the AI logo, which opens the three-part AI selection screen. Manual mode has no title row, so the game uses that space. Other screen titles have their own row below the menu and scroll out of view with the content. Only the icon row stays fixed; the title returns when scrolling back to the top. Use the Android Back gesture or button for previous screens and to leave variation exploration. In Full screen mode it starts at the very top of the display, with no empty strip above it. With Full screen off, the menu starts immediately below the Android status bar. Android navigation remains visible, and focused fields stay above the keyboard. Swipe down from the top to reveal the status bar temporarily.
-- Rows per page for pagination (5-50)
 - Move sounds on/off
 - Lichess username (for score perspective coloring)
+- Lichess access token (optional, for opening statistics; kept on the device and not exported)
 
 ### Settings Export/Import
-All settings can be exported as JSON and imported on another device or after reinstalling.
+All settings can be exported as JSON and imported on another device or after reinstalling. Saved games, the Lichess token and clipboard history are not part of the export.
 
 ## Tips
 
-- **Score perspective**: Evaluation scores are always shown from the active player's perspective. A positive score means the player to move is winning.
+- **Score perspective**: Evaluation scores are always shown from White's perspective: positive means White is better, negative means Black is better. Engine lines are ranked for the side to move.
 - **Background color**: The game screen background changes color based on the result: green if you won, red if you lost, blue for a draw.
 - **Quick reload**: Tap the reload icon to re-fetch the latest game from the last username you searched.
 - **Opening identification**: The app automatically identifies the opening (ECO code and name) as you navigate through moves.
-- **Opening explorer**: In Manual stage, the opening explorer shows statistics from the Lichess database for the current position.
+- **Opening explorer**: In Manual stage, the opening explorer shows statistics from the Lichess database for the current position. Lichess requires a personal access token for these statistics; add one in Settings > General.
 - **Clock time graph**: Enable the time graph in Manual stage to visualize how much time each player used per move.
+- **Promotion**: When you drag a pawn to the last rank in Manual stage, choose queen, rook, bishop or knight in the row below the board.
+- **Standard chess only**: Chess960 and other Lichess variants are refused with a message, because their rules differ.
+- **Battery**: Analysis pauses while Eval is not on screen and continues when you return.
 
 ## Troubleshooting
 
 **"Stockfish not installed"**
-Install "Stockfish 17.1 Chess Engine" from Google Play Store (package: `com.stockfish141`). The app checks automatically.
+Install the "Stockfish Chess Engine" app from Google Play Store (package: `com.stockfish141`). The app checks automatically.
+
+**"Stockfish app changed"**
+The installed Stockfish app is signed by a different developer than the one Eval used before. Because Eval runs its engine with Eval's own permissions, it asks first. Continue only if you installed that version yourself; otherwise reinstall the original app.
 
 **Games not loading**
 - Verify the username is spelled correctly
@@ -328,12 +336,11 @@ Install "Stockfish 17.1 Chess Engine" from Google Play Store (package: `com.stoc
 **Analysis seems slow**
 - Reduce threads and hash in Stockfish settings
 - Lower the analysis time per move
-- Disable NNUE for faster (but less accurate) analysis
 
 **GIF export fails**
 - Ensure sufficient storage space on device
 - Try with a shorter game
 
 **AI reports not working**
-- Install the companion AI app (`com.ai`) from Google Play Store
-- Check that prompts are configured in Settings > AI Prompts
+- Install the companion AI app (`com.ai`) from https://github.com/herbert256/ai
+- Check your prompts and instructions in Settings > AI setup

@@ -14,8 +14,8 @@ and restore focus. Cancelling leaves the typed character available for custom te
 
 Position and player reports use the same two screens:
 
-1. **Select AI parts** offers three dropdowns for System prompts, Prompts and AI
-   instructions, each including **None**. Each choice is remembered immediately by
+1. **Select AI parts** offers three inline option lists (radio buttons) for System
+   prompts, Prompts and AI instructions, each including **None**. Each choice is remembered immediately by
    stable ID, including None, and restored on later requests and app restarts.
 2. **Next** opens **Edit AI request** with three editable text boxes. `@` completion
    is available in all three; `<` completion is also available in AI instructions.
@@ -34,7 +34,12 @@ once for editing. Report markup and other instructions remain intact. Final prom
 text is XML-escaped into literal `<system>` and `<prompt>` blocks.
 
 Eval sends `com.ai.ACTION_NEW_REPORT` to package `com.ai`, with `title` and
-`instructions` extras. AI decodes prompt bodies once and expands placeholders.
+`instructions` extras. The request is sent while Eval is in the foreground, and only
+to the `com.ai` signer Eval saw first; after a signer change the user must press
+Submit a second time to trust the new one. Manual analysis pauses while `@MOVES@`
+or `@ENGINE@` is prepared, and both use the moves that led to the position so
+Stockfish can recognise repetitions. Stopping before the first complete set of
+engine lines sends nothing. AI decodes prompt bodies once and expands placeholders.
 Only referenced context is included; repeated placeholders share one field.
 `@MOVES@` requests evaluations of legal moves; `@ENGINE@` requests the best
 Stockfish continuations. Their independent settings are under **Settings →
