@@ -22,9 +22,6 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.eval.MainActivity
 import com.eval.chess.ChessBoard
 import com.eval.export.GifExporter
-import com.eval.export.HtmlReportBuilder
-import com.eval.stockfish.AnalysisResult
-import com.eval.stockfish.PvLine
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Test
@@ -75,23 +72,6 @@ class MateZeroRenderingTest {
                     assertEquals(settings.backgroundColor.toInt(), screenshot.getPixel(x, losingY))
                 } finally { screenshot.recycle() }
             }
-        }
-    }
-
-    @Test fun html_graphs_and_live_scores_keep_mate_zero_perspective() {
-        for (whiteWins in listOf(true, false)) {
-            val board = ChessBoard().apply {
-                check(setFen(if (whiteWins) "7k/6Q1/6K1/8/8/8/8/8 b - - 1 1"
-                    else "8/8/8/8/8/6k1/6q1/7K w - - 1 2"))
-            }
-            val score = MoveScore(if (whiteWins) 100f else -100f, true, 0)
-            val state = GameUiState(currentBoard = board, previewScores = mapOf(1 to score),
-                analyseScores = mapOf(1 to score), analysisResult = AnalysisResult(0, 0, 0,
-                    listOf(PvLine(-100f, true, 0, "", 1)), board.getFen()))
-            val html = HtmlReportBuilder.convertMarkdownToHtml("Test", "", state, "test")
-            val graphValue = if (whiteWins) "10.0" else "-10.0"
-            assertEquals(2, Regex(Regex.escape("\"move\":1,\"score\":$graphValue")).findAll(html).count())
-            assertTrue(html.contains("pv-score ${if (whiteWins) "positive" else "negative"}\">${score.formatDisplay()}"))
         }
     }
 

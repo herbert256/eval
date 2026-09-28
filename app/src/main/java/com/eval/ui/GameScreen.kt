@@ -656,13 +656,6 @@ fun EvalLogo() {
     )
 }
 
-/**
- * Converts markdown text to a styled HTML document with chessboard and game data.
- * Delegates to HtmlReportBuilder in the export package.
- */
-internal fun convertMarkdownToHtml(serviceName: String, markdown: String, uiState: GameUiState, appVersion: String): String =
-    com.eval.export.HtmlReportBuilder.convertMarkdownToHtml(serviceName, markdown, uiState, appVersion)
-
 
 
 /**
