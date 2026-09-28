@@ -62,6 +62,56 @@ class ChessWebExtractorTest {
             try { ChessWebExtractor.normalizeUrl(url); fail(url) } catch (_: IllegalArgumentException) { }
         }
         assertEquals("Qh7+", ChessWebExtractor.decode("Qh7+"))
-        assertEquals(fen, ChessWebExtractor.flipPlacement(ChessWebExtractor.flipPlacement(fen)))
+    }
+
+    @Test fun placement_only_fen_uses_black_when_white_to_move_is_illegal() {
+        // Black is in check from the rook, so only Black can be to move.
+        val placement = "4k3/8/8/8/8/8/8/4RK2"
+        val result = ChessWebExtractor.extract("Diagram: $placement", "test").single()
+        assertEquals("$placement b - - 0 1", result.content)
+        assertTrue(result.needsReview)
+        assertEquals("4k3/8/8/8/8/8/8/5K2 w - - 0 1", ChessWebExtractor.extract("4k3/8/8/8/8/8/8/5K2", "test").single().content)
+    }
+
+    @Test fun follows_only_chess_sites_and_pgn_files_automatically() {
+        for (url in listOf("https://lichess.org/abcd1234", "https://www.chess.com/game/live/1", "https://en.chessbase.com/post/x",
+            "https://www.chessgames.com/perl/chessgame?gid=1", "https://theweekinchess.com/zips/twic1500g.zip",
+            "https://example.com/games/round1.PGN", "https://example.com/dl/file.pgn?x=1")) {
+            assertTrue(url, ChessWebExtractor.autoFollow(url))
+        }
+        for (url in listOf("https://example.com/reset?token=1", "https://lichess.org.evil.test/abcd1234", "https://evil-chess.com/x",
+            "http://lichess.org/abcd1234", "https://user@lichess.org/x", "https://example.com/pgn", "not a url")) {
+            assertFalse(url, ChessWebExtractor.autoFollow(url))
+        }
+    }
+
+    // The former regex, kept as the reference for the linear scanner.
+    private val legacyMoveRun = Regex("""\d+\.(?:\.\.)?\s*(?:(?:\d+\.(?:\.\.)?|[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](?:=[QRBN])?[+#]?[!?]*|O-O(?:-O)?[+#]?|0-0(?:-0)?[+#]?|1/2-1/2|1-0|0-1|\*|\$\d+|\{[^}]*\}|\([^)]*\))\s*)+""")
+
+    @Test fun move_run_scanner_matches_the_former_regex() {
+        val samples = mutableListOf(
+            "The opening is 1. e4 e5 2. Nf3 Nc6 followed by development.",
+            "1. d4 d5 2. c4 {Queen's Gambit} 2... e6 (2... dxc4 3. e3) 3. Nc3 Nf6 4. Bg5 Be7 1-0",
+            "12. O-O-O! Qxa2+ 13. Kb1 $14 0-1 and 14.Rd8#", "1... Kd7 *", "1.e4 1/2-1/2", "1. exd8=Q+ Kxd8 1. {unclosed",
+            "2023. Year 1. a4 2. h5 99.", "1111. 2. Nf3 {a} {b", "1.. e4 1... e5 1.... e6", "Price 1. 5$ and 2. ( open")
+        val tokens = listOf("1.", "2...", "10.", "e4", "exd5", "Nf3", "Qh7+", "e8=Q", "O-O", "O-O-O", "0-0", "{c}", "{", "}", "(",
+            ")", " ", "\n", "1-0", "0-1", "1/2-1/2", "*", "$1", "$", "x", "!?", "12", ".", "..", "a", "8", "+", "K", "\t")
+        val random = java.util.Random(7)
+        repeat(3000) { samples += (1..random.nextInt(30)).joinToString("") { tokens[random.nextInt(tokens.size)] } }
+        for (text in samples) {
+            assertEquals(text, legacyMoveRun.findAll(text).map { it.value }.toList(), ChessWebExtractor.moveRuns(text).toList())
+        }
+    }
+
+    @Test fun crafted_prose_is_scanned_in_linear_time() {
+        for (unit in listOf("1. {", "1. (", "1", "1. e4 {", "1. e4 ($1 ")) {
+            // A leading move sends extract() to the prose scanner.
+            val text = "Game 1. e4 e5 " + unit.repeat(2_000_000 / unit.length)
+            val started = System.nanoTime()
+            ChessWebExtractor.moveRuns(text).count()
+            ChessWebExtractor.extract(text, "test")
+            val millis = (System.nanoTime() - started) / 1_000_000
+            assertTrue("$unit: $millis ms", millis < 1_000)
+        }
     }
 }

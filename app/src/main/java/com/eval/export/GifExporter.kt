@@ -32,10 +32,15 @@ object GifExporter {
     private const val SQUARE_SIZE = BOARD_SIZE / 8
     private const val EVAL_BAR_WIDTH = 20
     private const val TOTAL_WIDTH = BOARD_SIZE + EVAL_BAR_WIDTH
+    private const val ANNOTATION_HEIGHT = 30
+
+    // A shared GIF must stay readable while the receiving app copies it, so
+    // each export only prunes earlier exports older than this.
+    private const val STALE_EXPORT_AGE_MS = 10 * 60 * 1000L
 
     // Colors
-    private const val WHITE_SQUARE = 0xFFF0D9B5.toInt()
-    private const val BLACK_SQUARE = 0xFFB58863.toInt()
+    private const val DEFAULT_LIGHT_SQUARE = 0xFFF0D9B5.toInt()
+    private const val DEFAULT_DARK_SQUARE = 0xFFB58863.toInt()
     private const val WHITE_PIECE = 0xFFFFFFFF.toInt()
     private const val BLACK_PIECE = 0xFF000000.toInt()
     private const val EVAL_WHITE = 0xFFFFFFFF.toInt()
@@ -142,6 +147,7 @@ object GifExporter {
     ): File {
         val directory = File(context.cacheDir, "gif_exports")
         check(directory.isDirectory || directory.mkdirs()) { "Cannot create GIF export folder" }
+        deleteStaleExports(directory)
         val file = File.createTempFile("${filePrefix}_", ".gif", directory)
         onFileCreated(file)
         val encoder = AnimatedGifEncoder()
@@ -183,6 +189,18 @@ object GifExporter {
     }
 
     /**
+     * Delete earlier exports (and partial files left by a killed process). Runs
+     * under [exportMutex], so no export is being written; recent files are kept
+     * because a share of them may still be in progress.
+     */
+    private fun deleteStaleExports(directory: File) {
+        val cutoff = System.currentTimeMillis() - STALE_EXPORT_AGE_MS
+        directory.listFiles()?.forEach { file ->
+            if (file.isFile && file.lastModified() < cutoff) file.delete()
+        }
+    }
+
+    /**
      * Export a game as an animated GIF.
      *
      * @param context Android context
@@ -190,6 +208,8 @@ object GifExporter {
      * @param scores Map of move index to evaluation score
      * @param frameDelay Delay between frames in milliseconds
      * @param callback Progress callback
+     * @param lightSquareColor ARGB colour of the light squares
+     * @param darkSquareColor ARGB colour of the dark squares
      * @return File containing the exported GIF
      */
     suspend fun exportAsGif(
@@ -197,9 +217,11 @@ object GifExporter {
         boards: List<ChessBoard>,
         scores: Map<Int, MoveScore> = emptyMap(),
         frameDelay: Int = 800,
-        callback: ProgressCallback? = null
+        callback: ProgressCallback? = null,
+        lightSquareColor: Int = DEFAULT_LIGHT_SQUARE,
+        darkSquareColor: Int = DEFAULT_DARK_SQUARE
     ): File = encodeGif(context, boards.size, "game", frameDelay, { index ->
-        renderFrame(boards[index], scores[index])
+        renderFrame(boards[index], scores[index], null, lightSquareColor, darkSquareColor)
     }, callback)
 
     /**
@@ -251,14 +273,22 @@ object GifExporter {
 
     /**
      * Render a chess position to a bitmap, with optional annotation text at the top.
+     * Every frame of one GIF must pass the same null-ness of [annotationText], since
+     * the encoder takes its size from the first frame.
      *
      * @param board Chess board state to render
      * @param score Evaluation score for the eval bar (null shows 50%)
-     * @param annotationText Optional move annotation text shown above the board
+     * @param annotationText Move annotation text shown above the board, or null for no bar
      * @return Bitmap of the rendered frame
      */
-    private fun renderFrame(board: ChessBoard, score: MoveScore?, annotationText: String? = null): Bitmap {
-        val annotationHeight = if (annotationText != null) 30 else 0
+    private fun renderFrame(
+        board: ChessBoard,
+        score: MoveScore?,
+        annotationText: String?,
+        lightSquareColor: Int,
+        darkSquareColor: Int
+    ): Bitmap {
+        val annotationHeight = if (annotationText != null) ANNOTATION_HEIGHT else 0
         val totalHeight = BOARD_SIZE + annotationHeight
 
         val bitmap = Bitmap.createBitmap(TOTAL_WIDTH, totalHeight, Bitmap.Config.ARGB_8888)
@@ -272,7 +302,7 @@ object GifExporter {
         // Translate canvas down for board content
         canvas.save()
         canvas.translate(0f, annotationHeight.toFloat())
-        drawBoardContent(canvas, board, SQUARE_SIZE, WHITE_SQUARE, BLACK_SQUARE)
+        drawBoardContent(canvas, board, SQUARE_SIZE, lightSquareColor, darkSquareColor)
         drawEvalBar(canvas, score)
         canvas.restore()
 
@@ -347,7 +377,8 @@ object GifExporter {
     }
 
     /**
-     * Export with move annotations overlay.
+     * Export with move annotations overlay. Every frame, including the starting
+     * position ("Start"), reserves the annotation bar so all frames share one size.
      */
     suspend fun exportAsGifWithAnnotations(
         context: Context,
@@ -355,14 +386,20 @@ object GifExporter {
         moves: List<String>, // SAN notation
         scores: Map<Int, MoveScore> = emptyMap(),
         frameDelay: Int = 800,
-        callback: ProgressCallback? = null
+        callback: ProgressCallback? = null,
+        lightSquareColor: Int = DEFAULT_LIGHT_SQUARE,
+        darkSquareColor: Int = DEFAULT_DARK_SQUARE
     ): File = encodeGif(context, boards.size, "game_annotated", frameDelay, { index ->
-        val moveText = if (index > 0 && index <= moves.size) {
-            val before = boards[index - 1]
-            val moveNum = before.getFen().substringAfterLast(' ')
-            val isWhite = before.getTurn() == PieceColor.WHITE
-            if (isWhite) "$moveNum. ${moves[index - 1]}" else "$moveNum... ${moves[index - 1]}"
-        } else null
-        renderFrame(boards[index], scores[index], moveText)
+        val moveText = when {
+            index == 0 -> "Start"
+            index <= moves.size -> {
+                val before = boards[index - 1]
+                val moveNum = before.getFen().substringAfterLast(' ')
+                val isWhite = before.getTurn() == PieceColor.WHITE
+                if (isWhite) "$moveNum. ${moves[index - 1]}" else "$moveNum... ${moves[index - 1]}"
+            }
+            else -> ""
+        }
+        renderFrame(boards[index], scores[index], moveText, lightSquareColor, darkSquareColor)
     }, callback)
 }

@@ -21,6 +21,7 @@ import kotlinx.coroutines.withTimeout
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
+import kotlinx.coroutines.withTimeoutOrNull
 
 @RunWith(AndroidJUnit4::class)
 class OpeningExplorerRegressionTest {
@@ -40,7 +41,8 @@ class OpeningExplorerRegressionTest {
             currentBoard = history[1], currentMoveIndex = 0,
             moves = listOf("e4", "e5", "Nf3", "Nc6", "Bb5"),
             interfaceVisibility = InterfaceVisibilitySettings(
-                manualStage = ManualStageVisibility(showOpeningExplorer = true))
+                manualStage = ManualStageVisibility(showOpeningExplorer = true)),
+            hasLichessToken = true
         ))
         val requests = Channel<Pending>(Channel.UNLIMITED)
         private val allRequests = java.util.concurrent.ConcurrentLinkedQueue<Pending>()
@@ -69,6 +71,18 @@ class OpeningExplorerRegressionTest {
 
     private suspend fun awaitCondition(condition: () -> Boolean) = withTimeout(3000) {
         while (!condition()) delay(10)
+    }
+
+    @Test fun without_a_lichess_token_no_request_is_made_and_the_reason_is_shown() = runBlocking {
+        val h = Harness()
+        try {
+            h.request().complete("With token")
+            withContext(Dispatchers.Main) { h.state.update { it.copy(hasLichessToken = false) } }
+            h.move(1)
+            awaitCondition { h.state.value.openingExplorerError != null }
+            assertFalse(h.state.value.openingExplorerLoading)
+            assertNull(withTimeoutOrNull(700) { h.requests.receive() })
+        } finally { h.close() }
     }
 
     @Test fun an_opening_request_runs_without_waiting_for_engine_analysis() = runBlocking {

@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.eval.chess.ChessBoard
 import com.eval.chess.Square
+import com.eval.data.AppSignerTrust
 import com.eval.data.BroadcastInfo
 import com.eval.data.BroadcastRoundInfo
 import com.eval.data.ChessRepository
@@ -20,6 +21,7 @@ import com.eval.stockfish.StockfishEngine
 import org.json.JSONObject
 import com.eval.audio.MoveSoundPlayer
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
@@ -29,6 +31,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.withContext
 
 class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = ChessRepository()
@@ -43,7 +46,17 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         it.seedAiSystemPrompts(bundledSystemPrompts)
         it.seedAiReportPrompts(bundledReportPrompts)
     }
-    private val gameStorage = GameStorageManager(prefs, gson)
+    private val gameStorage = GameStorageManager.create(application, gson)
+    private val signerTrust = AppSignerTrust.create(application)
+    // Secrets live apart from the settings file, so exports never contain them and imports keep them.
+    private val secretPrefs = application.getSharedPreferences("eval_secrets", Context.MODE_PRIVATE)
+
+    val lichessToken: String get() = secretPrefs.getString("lichess_api_token", null).orEmpty()
+
+    fun saveLichessToken(token: String) {
+        secretPrefs.edit().putString("lichess_api_token", token.trim()).apply()
+        _uiState.update { it.copy(hasLichessToken = token.isNotBlank()) }
+    }
 
     // Move sound player for audio feedback
     private val moveSoundPlayer = MoveSoundPlayer(application)
@@ -54,10 +67,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val _sharedImport = MutableStateFlow<SharedChessInput?>(null)
     internal val sharedImport = _sharedImport.asStateFlow()
 
+    // Only record the share here. The import itself (startFromFen / loadGame) stops analysis and
+    // pending retrievals when the user commits it; dismissing the share leaves the game untouched.
     internal fun receiveSharedContent(input: SharedChessInput) {
-        gameLoader.invalidatePendingRetrieval()
-        analysisOrchestrator.stop()
-        liveGameManager.stopLiveFollow()
         _sharedImport.value = input
     }
 
@@ -67,20 +79,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private var stockfishReadyCollector: Job? = null
     private var aiReportJob: Job? = null
     private var aiEngineStop: CompletableDeferred<Unit>? = null
+    // Set after warning that the AI app's signer changed; the next Submit confirms and trusts it.
+    private var aiSignerChangeConfirmed = false
+
+    /** A prepared AI request, sent by the foreground UI with its Activity (see [completeAiLaunch]). */
+    internal class PreparedAiLaunch(val source: AiReportContext, val entry: AiInstructionEntry, val context: AiReportContext)
+    private val _pendingAiLaunch = MutableStateFlow<PreparedAiLaunch?>(null)
+    internal val pendingAiLaunch = _pendingAiLaunch.asStateFlow()
 
     private val mainTimeline = GameTimeline()
     private val exploringTimeline = GameTimeline()
     private val boardHistory = mainTimeline.snapshotList
     private val exploringLineHistory = exploringTimeline.snapshotList
-
-    // Track settings when dialog opens to detect changes
-    private var settingsOnDialogOpen: SettingsSnapshot? = null
-
-    private data class SettingsSnapshot(
-        val previewStageSettings: PreviewStageSettings,
-        val analyseStageSettings: AnalyseStageSettings,
-        val manualStageSettings: ManualStageSettings
-    )
 
     // Helper classes for better organization
     private val analysisOrchestrator: AnalysisOrchestrator
@@ -135,7 +145,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             storeManualGameToList = { game ->
                 gameStorage.storeManualGameToList(game)
                 _uiState.update { it.copy(hasAnalysedGames = true) }
-            }
+            },
+            getExploringLineHistory = { exploringLineHistory }
         )
 
         gameLoader = GameLoader(
@@ -150,7 +161,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             analysisOrchestrator = analysisOrchestrator,
             analyzeRestoredPosition = { fen -> analyzeRestoredPosition(fen) },
             getAppVersionCode = { getAppVersionCode() },
-            stopLiveFollow = { stopLiveFollow() }
+            stopLiveFollow = { stopLiveFollow() },
+            onGameCommitted = { dismissAiInstructionSelection() }
         )
 
         boardNavigationManager = BoardNavigationManager(
@@ -201,8 +213,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             scope = viewModelScope,
             getBoardHistory = { synchronized(boardHistory) { boardHistory.toList() } },
             getExploringLineHistory = { synchronized(exploringLineHistory) { exploringLineHistory.toList() } },
-            load = repository::getOpeningExplorer
+            load = { fen -> repository.getOpeningExplorer(fen, lichessToken) }
         ).observe()
+        _uiState.update { it.copy(hasLichessToken = lichessToken.isNotBlank()) }
 
         // Check if Stockfish is installed first
         val stockfishInstalled = stockfish.isStockfishInstalled()
@@ -210,7 +223,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val aiAppInstalled = AiAppLauncher.isAiAppInstalled(application)
         _uiState.update { it.copy(
             stockfishInstalled = stockfishInstalled,
-            aiAppInstalled = aiAppInstalled
+            aiAppInstalled = aiAppInstalled,
+            aiAppWarningDismissed = settingsPrefs.isAiAppStartupWarningDismissed()
         ) }
 
         // Observe identity even when the engine is installed after Eval starts.
@@ -220,74 +234,106 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        if (stockfishInstalled) {
-            // Missing preferences already use defaults. Never erase settings or
-            // saved games just because no server game was retrieved this version.
-            val settings = loadStockfishSettings()
-            val boardSettings = loadBoardLayoutSettings()
-            val graphSettings = loadGraphSettings()
-            val interfaceVisibility = loadInterfaceVisibilitySettings()
-            val generalSettings = loadGeneralSettings()
+        // Missing preferences already use defaults. Never erase settings or
+        // saved games just because no server game was retrieved this version.
+        loadPersistedState()
+        startEngineCollectors()
+        viewModelScope.launch(Dispatchers.IO) { settingsPrefs.removeRetiredData(application.filesDir) }
 
-            val aiInstructions = loadAiInstructions()
-            val lichessMaxGames = settingsPrefs.lichessMaxGames
-            val retrievesList = gameStorage.loadRetrievesList()
-            val hasPreviousRetrieves = retrievesList.isNotEmpty()
-            val hasAnalysedGames = gameStorage.hasManualGames()
-            val hasLastServerUser = settingsPrefs.lastServerUser != null && settingsPrefs.lastServerName == "lichess.org"
+        if (stockfishInstalled) startEngineIfTrusted()
+    }
 
-            _uiState.update { it.copy(
-                stockfishSettings = settings,
-                boardLayoutSettings = boardSettings,
-                graphSettings = graphSettings,
-                interfaceVisibility = interfaceVisibility,
-                generalSettings = generalSettings,
-                aiInstructions = aiInstructions,
-                aiSystemPrompts = settingsPrefs.loadAiSystemPrompts(),
-                aiReportPrompts = settingsPrefs.loadAiReportPrompts(),
-                lichessMaxGames = lichessMaxGames,
-                hasPreviousRetrieves = hasPreviousRetrieves,
-                hasAnalysedGames = hasAnalysedGames,
-                hasLastServerUser = hasLastServerUser,
-                previousRetrievesList = retrievesList
-            ) }
+    /** Settings and storage-derived flags; independent of whether the engine is installed yet. */
+    private fun loadPersistedState() {
+        val retrievesList = gameStorage.loadRetrievesList()
+        _uiState.update { it.copy(
+            stockfishSettings = loadStockfishSettings(),
+            boardLayoutSettings = loadBoardLayoutSettings(),
+            graphSettings = loadGraphSettings(),
+            interfaceVisibility = loadInterfaceVisibilitySettings(),
+            generalSettings = loadGeneralSettings(),
+            aiInstructions = loadAiInstructions(),
+            aiSystemPrompts = settingsPrefs.loadAiSystemPrompts(),
+            aiReportPrompts = settingsPrefs.loadAiReportPrompts(),
+            lichessMaxGames = settingsPrefs.lichessMaxGames,
+            hasPreviousRetrieves = retrievesList.isNotEmpty(),
+            hasAnalysedGames = gameStorage.hasManualGames(),
+            hasLastServerUser = settingsPrefs.lastServerUser != null && settingsPrefs.lastServerName == "lichess.org",
+            previousRetrievesList = retrievesList
+        ) }
+    }
 
-            gameLoader.loadStartupGame {
-                val ready = stockfish.initialize()
-                if (ready) {
-                    analysisOrchestrator.configureForManualStage()
-                }
-                // stockfishReady is owned by the isReady collector below; no need
-                // to set it explicitly here (was racing with the collector on init).
-                ready
-            }
-
-            analysisResultCollector = viewModelScope.launch {
-                stockfish.analysisResult.collect { result ->
-                    if (_uiState.value.currentStage != AnalysisStage.MANUAL) {
-                        if (result != null) {
-                            val expectedFen = analysisOrchestrator.currentAnalysisFen
-                            if (expectedFen != null && result.fen == expectedFen && expectedFen == _uiState.value.currentBoard.getFen()) {
-                                _uiState.update { it.copy(
-                                    analysisResult = result,
-                                    analysisResultFen = expectedFen
-                                ) }
-                            }
-                        } else {
+    private fun startEngineCollectors() {
+        analysisResultCollector = viewModelScope.launch {
+            stockfish.analysisResult.collect { result ->
+                if (_uiState.value.currentStage != AnalysisStage.MANUAL) {
+                    if (result != null) {
+                        val expectedFen = analysisOrchestrator.currentAnalysisFen
+                        if (expectedFen != null && result.fen == expectedFen && expectedFen == _uiState.value.currentBoard.getFen()) {
                             _uiState.update { it.copy(
-                                analysisResult = null,
-                                analysisResultFen = null
+                                analysisResult = result,
+                                analysisResultFen = expectedFen
                             ) }
                         }
+                    } else {
+                        _uiState.update { it.copy(
+                            analysisResult = null,
+                            analysisResultFen = null
+                        ) }
                     }
                 }
             }
+        }
 
-            stockfishReadyCollector = viewModelScope.launch {
-                stockfish.isReady.collect { ready ->
-                    _uiState.update { it.copy(stockfishReady = ready) }
-                }
+        // The engine refuses to start a re-signed Stockfish on every start/restart path; ask the user.
+        viewModelScope.launch {
+            stockfish.signerChanged.collect { changed ->
+                if (changed) _uiState.update { it.copy(untrustedAppPackage = AppSignerTrust.STOCKFISH_PACKAGE) }
             }
+        }
+
+        stockfishReadyCollector = viewModelScope.launch {
+            stockfish.isReady.collect { ready ->
+                _uiState.update { it.copy(
+                    stockfishReady = ready,
+                    engineSupportsNnueOption = if (ready) stockfish.supportsOption("Use NNUE") else it.engineSupportsNnueOption
+                ) }
+            }
+        }
+    }
+
+    /**
+     * Start the engine and restore the startup game, unless the Stockfish package is now signed
+     * by someone else than before; then the user decides first (see [trustChangedApp]).
+     */
+    private fun startEngineIfTrusted() {
+        if (signerTrust.check(AppSignerTrust.STOCKFISH_PACKAGE) == AppSignerTrust.Status.CHANGED) {
+            _uiState.update { it.copy(untrustedAppPackage = AppSignerTrust.STOCKFISH_PACKAGE) }
+            return
+        }
+        gameLoader.loadStartupGame {
+            val ready = stockfish.initialize()
+            if (ready) {
+                analysisOrchestrator.configureForManualStage()
+            }
+            // stockfishReady is owned by the isReady collector; no need
+            // to set it explicitly here (was racing with the collector on init).
+            ready
+        }
+    }
+
+    /** The user confirmed that a package with a changed signer may be used. */
+    fun trustChangedApp() {
+        val packageName = _uiState.value.untrustedAppPackage ?: return
+        signerTrust.trustCurrent(packageName)
+        _uiState.update { it.copy(untrustedAppPackage = null) }
+        if (packageName != AppSignerTrust.STOCKFISH_PACKAGE) return
+        when {
+            // Found at startup: nothing was loaded yet.
+            _uiState.value.game == null -> startEngineIfTrusted()
+            // Found by a later restart: resume analysis of what is on screen.
+            _uiState.value.currentStage == AnalysisStage.MANUAL -> analysisOrchestrator.restartAnalysisForExploringLine()
+            else -> analysisOrchestrator.enterManualStageAtCurrentPosition()
         }
     }
 
@@ -300,6 +346,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun dismissAiAppWarning() {
+        settingsPrefs.setAiAppStartupWarningDismissed(true)
         _uiState.update { it.copy(aiAppWarningDismissed = true) }
     }
 
@@ -325,36 +372,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (!installed) return
 
         _uiState.update { it.copy(stockfishInstalled = true) }
-
-        val settings = loadStockfishSettings()
-        val boardSettings = loadBoardLayoutSettings()
-        val graphSettings = loadGraphSettings()
-        val interfaceVisibility = loadInterfaceVisibilitySettings()
-        val generalSettings = loadGeneralSettings()
-        val aiInstructions = loadAiInstructions()
-        val lichessMaxGames = settingsPrefs.lichessMaxGames
-
-        _uiState.update { it.copy(
-            stockfishSettings = settings,
-            boardLayoutSettings = boardSettings,
-            graphSettings = graphSettings,
-            interfaceVisibility = interfaceVisibility,
-            generalSettings = generalSettings,
-            aiInstructions = aiInstructions,
-            aiSystemPrompts = settingsPrefs.loadAiSystemPrompts(),
-            aiReportPrompts = settingsPrefs.loadAiReportPrompts(),
-            lichessMaxGames = lichessMaxGames
-        ) }
-
-        viewModelScope.launch {
-            val ready = stockfish.initialize()
-            if (ready) {
-                analysisOrchestrator.configureForManualStage()
-            }
-            _uiState.update { it.copy(stockfishReady = ready) }
-        }
-
-        // Collectors are already set up in init block, no need to duplicate
+        loadPersistedState()
+        startEngineIfTrusted()
     }
 
     // ===== GAME LOADING DELEGATION =====
@@ -374,12 +393,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     // Previously analysed games
     fun showAnalysedGames() {
-        val list = gameStorage.loadManualGamesList()
-        _uiState.update { it.copy(
-            analysedGamesList = list,
-            showAnalysedGamesSelection = true,
-            gameSelectionPage = 0
-        ) }
+        viewModelScope.launch {
+            val list = withContext(Dispatchers.IO) { gameStorage.loadManualGamesList() }
+            _uiState.update { it.copy(
+                analysedGamesList = list,
+                showAnalysedGamesSelection = true,
+                gameSelectionPage = 0
+            ) }
+        }
     }
 
     fun dismissAnalysedGamesSelection() {
@@ -400,11 +421,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     // PGN file loading
     fun loadGamesFromPgnContent(pgnContent: String, onMultipleEvents: ((Boolean) -> Unit)? = null) =
         gameLoader.loadGamesFromPgnContent(pgnContent, onMultipleEvents)
+    fun loadPgnFile(uri: android.net.Uri, onMultipleEvents: ((Boolean) -> Unit)? = null) =
+        gameLoader.loadPgnFile({ com.eval.data.ChessDocumentReader.readPgnFile(getApplication(), uri) }, onMultipleEvents)
     fun selectPgnEvent(event: String) = gameLoader.selectPgnEvent(event)
     fun backToPgnEventList() = gameLoader.backToPgnEventList()
     fun dismissPgnEventSelection() = gameLoader.dismissPgnEventSelection()
     fun selectPgnGameFromEvent(game: LichessGame) = gameLoader.selectPgnGameFromEvent(game)
-    fun selectPgnGame(game: LichessGame) = gameLoader.selectPgnGame(game)
 
     // ===== NAVIGATION DELEGATION =====
     fun goToStart() = boardNavigationManager.goToStart()
@@ -416,8 +438,24 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun backToOriginalGame() = boardNavigationManager.backToOriginalGame()
     fun flipBoard() = boardNavigationManager.flipBoard()
     fun makeManualMove(from: Square, to: Square) = boardNavigationManager.makeManualMove(from, to)
+    fun choosePromotion(piece: com.eval.chess.PieceType) = boardNavigationManager.choosePromotion(piece)
+    fun cancelPromotion() = boardNavigationManager.cancelPromotion()
 
     fun restartAnalysisAtMove(moveIndex: Int) = analysisOrchestrator.restartAnalysisAtMove(moveIndex)
+
+    // Engine work pauses while Eval is not visible and resumes when it returns.
+    private var inForeground = true
+
+    fun onAppBackgrounded() {
+        inForeground = false
+        analysisOrchestrator.onAppBackgrounded()
+    }
+
+    fun onAppForegrounded() {
+        inForeground = true
+        analysisOrchestrator.onAppForegrounded()
+        checkAiAppInstalled()  // The AI app may have been installed or removed meanwhile.
+    }
 
     fun setAnalysisEnabled(enabled: Boolean) {
         _uiState.update { it.copy(analysisEnabled = enabled) }
@@ -462,6 +500,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun showPlayerInfo(username: String, server: ChessServer) = contentSourceManager.showPlayerInfoWithServer(username, server)
     fun nextPlayerGamesPage(pageSize: Int) = contentSourceManager.nextPlayerGamesPage(pageSize)
     fun previousPlayerGamesPage() = contentSourceManager.previousPlayerGamesPage()
+    fun setPlayerGamesPage(page: Int) = contentSourceManager.setPlayerGamesPage(page)
     fun selectGameFromPlayerInfo(game: LichessGame) = contentSourceManager.selectGameFromPlayerInfo(game)
     fun dismissPlayerInfo() = contentSourceManager.dismissPlayerInfo()
 
@@ -494,8 +533,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     fun hideSharePositionDialog() = exportShareManager.hideSharePositionDialog()
 
-    fun getCurrentFen(): String = exportShareManager.getCurrentFen()
-
     /** Extract the Site URL from the current game's PGN headers, if it's a lichess.org URL. */
     fun getGameSiteUrl(): String? {
         val pgn = _uiState.value.game?.pgn ?: return null
@@ -525,77 +562,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     fun cancelGifExport() = exportShareManager.cancelGifExport()
 
+    /** Share sheets prepared in the background, launched by the foreground UI. */
+    internal val shareRequests: kotlinx.coroutines.flow.Flow<android.content.Intent> get() = exportShareManager.shareRequests
+
     // ===== SETTINGS =====
-    fun showSettingsDialog() {
-        settingsOnDialogOpen = SettingsSnapshot(
-            previewStageSettings = _uiState.value.stockfishSettings.previewStage,
-            analyseStageSettings = _uiState.value.stockfishSettings.analyseStage,
-            manualStageSettings = _uiState.value.stockfishSettings.manualStage
-        )
-        _uiState.update { it.copy(showSettingsDialog = true) }
-    }
-
-    fun hideSettingsDialog() {
-        _uiState.update { it.copy(showSettingsDialog = false) }
-
-        val originalSettings = settingsOnDialogOpen
-        val currentPreviewStageSettings = _uiState.value.stockfishSettings.previewStage
-        val currentAnalyseStageSettings = _uiState.value.stockfishSettings.analyseStage
-        val currentManualStageSettings = _uiState.value.stockfishSettings.manualStage
-
-        val previewStageSettingsChanged = originalSettings?.previewStageSettings != currentPreviewStageSettings
-        val analyseStageSettingsChanged = originalSettings?.analyseStageSettings != currentAnalyseStageSettings
-        val manualStageSettingsChanged = originalSettings?.manualStageSettings != currentManualStageSettings
-
-        settingsOnDialogOpen = null
-
-        if (_uiState.value.game == null) return
-        if (!previewStageSettingsChanged && !analyseStageSettingsChanged && !manualStageSettingsChanged) return
-
-        viewModelScope.launch {
-            analysisOrchestrator.stop()
-
-            _uiState.update { it.copy(stockfishReady = false) }
-
-            val ready = stockfish.restart()
-
-            if (ready) {
-                kotlinx.coroutines.delay(200)
-                val confirmedReady = stockfish.isReady.value
-                _uiState.update { it.copy(stockfishReady = confirmedReady) }
-
-                if (!confirmedReady) return@launch
-            } else {
-                _uiState.update { it.copy(stockfishReady = false) }
-                return@launch
-            }
-
-            if (previewStageSettingsChanged || analyseStageSettingsChanged) {
-                _uiState.update { it.copy(
-                    currentStage = AnalysisStage.PREVIEW,
-                    previewScores = emptyMap(),
-                    analyseScores = emptyMap()
-                ) }
-                analysisOrchestrator.startAnalysis()
-            } else if (manualStageSettingsChanged) {
-                if (_uiState.value.currentStage == AnalysisStage.MANUAL) {
-                    analysisOrchestrator.configureForManualStage()
-                    analysisOrchestrator.restartAnalysisForExploringLine()
-                } else {
-                    analysisOrchestrator.enterManualStageAtCurrentPosition()
-                }
-            }
-        }
-    }
-
-    fun showHelpScreen() {
-        _uiState.update { it.copy(showHelpScreen = true) }
-    }
-
-    fun hideHelpScreen() {
-        _uiState.update { it.copy(showHelpScreen = false) }
-    }
-
     fun showRetrieveScreen() {
         _uiState.update { it.copy(showRetrieveScreen = true) }
     }
@@ -613,26 +583,29 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 val context = getApplication<Application>()
-                val jsonString = context.assets.open("eco_codes.json").bufferedReader().use { it.readText() }
-                val jsonObject = JSONObject(jsonString)
+                // 428 KB of JSON: parse off the main thread.
+                val openings = withContext(Dispatchers.Default) {
+                    val jsonString = context.assets.open("eco_codes.json").bufferedReader().use { it.readText() }
+                    val jsonObject = JSONObject(jsonString)
 
-                val openings = mutableListOf<EcoOpening>()
-                val keys = jsonObject.keys()
-                while (keys.hasNext()) {
-                    val fen = keys.next()
-                    val entry = jsonObject.getJSONObject(fen)
-                    openings.add(
-                        EcoOpening(
-                            fen = fen,
-                            eco = entry.getString("eco"),
-                            name = entry.getString("name"),
-                            moves = entry.getString("moves")
+                    val list = mutableListOf<EcoOpening>()
+                    val keys = jsonObject.keys()
+                    while (keys.hasNext()) {
+                        val fen = keys.next()
+                        val entry = jsonObject.getJSONObject(fen)
+                        list.add(
+                            EcoOpening(
+                                fen = fen,
+                                eco = entry.getString("eco"),
+                                name = entry.getString("name"),
+                                moves = entry.getString("moves")
+                            )
                         )
-                    )
-                }
+                    }
 
-                // Sort by ECO code
-                openings.sortBy { it.eco }
+                    // Sort by ECO code
+                    list.sortedBy { it.eco }
+                }
 
                 _uiState.update { it.copy(
                     ecoOpenings = openings,
@@ -683,8 +656,9 @@ ${opening.moves} *
         // Validate FEN by trying to set up the board
         val board = com.eval.chess.ChessBoard()
         if (!board.setFen(normalizedFen)) {
+            val reason = com.eval.chess.ChessBoard.fenValidationError(normalizedFen)
             _uiState.update { it.copy(
-                errorMessage = "Invalid FEN position"
+                errorMessage = if (reason != null) "Invalid FEN position: $reason" else "Invalid FEN position"
             ) }
             return false
         }
@@ -692,6 +666,7 @@ ${opening.moves} *
         gameLoader.invalidatePendingRetrieval()
         analysisOrchestrator.stop()
         liveGameManager.stopLiveFollow()
+        dismissAiInstructionSelection()
         mainTimeline.resetToInitial(board)
         exploringTimeline.clear()
 
@@ -732,6 +707,7 @@ ${opening.moves} *
             isLoading = false,
             errorMessage = null,
             game = lichessGame,
+            gameSelectionServer = ChessServer.LOCAL,
             gameLoadVersion = it.gameLoadVersion + 1,
             openingName = null,
             currentOpeningName = null,
@@ -784,53 +760,7 @@ ${opening.moves} *
 
     fun updateGeneralSettings(settings: GeneralSettings) = settingsManager.updateGeneralSettings(settings)
 
-    /**
-     * Reset the app to the homepage (logo only), clearing all game state.
-     */
-    fun resetToHomepage() {
-        gameLoader.invalidatePendingRetrieval()
-        liveGameManager.stopLiveFollow()
-        // Stop any ongoing analysis
-        analysisOrchestrator.stop()
-
-        // Clear board histories
-        boardHistory.clear()
-        exploringLineHistory.clear()
-
-        // Reset UI state to show only the homepage with logo
-        _uiState.update { it.copy(
-            game = null,
-            gameList = emptyList(),
-            showGameSelection = false,
-            showRetrieveScreen = false,  // Show homepage with logo only
-            currentBoard = ChessBoard(),
-            moves = emptyList(),
-            moveDetails = emptyList(),
-            currentMoveIndex = -1,
-            analysisResult = null,
-            analysisResultFen = null,
-            flippedBoard = false,
-            userPlayedBlack = false,
-            isExploringLine = false,
-            exploringLineMoves = emptyList(),
-            exploringLineMoveIndex = -1,
-            savedGameMoveIndex = -1,
-            currentStage = AnalysisStage.PREVIEW,
-            previewScores = emptyMap(),
-            analyseScores = emptyMap(),
-            autoAnalysisIndex = -1,
-            openingName = null,
-            currentOpeningName = null,
-            openingExplorerData = null,
-            openingExplorerLoading = false,
-            openingExplorerError = null,
-            moveQualities = emptyMap()
-        ) }
-    }
-
     // ===== AI Instructions CRUD =====
-
-    fun updateAiInstructions(instructions: List<AiInstructionEntry>) = settingsManager.updateAiInstructions(instructions)
 
     fun addAiInstruction(entry: AiInstructionEntry) = settingsManager.addAiInstruction(entry)
 
@@ -871,6 +801,8 @@ ${opening.moves} *
         aiReportJob?.cancel()
         aiReportJob = null
         aiEngineStop = null
+        aiSignerChangeConfirmed = false
+        _pendingAiLaunch.value = null
         _uiState.update { it.copy(pendingAiReport = null, aiReportDraft = null, aiReportEditing = false, aiMovesProgress = null,
             aiEngineProgress = null, aiEngineStopping = false, aiReportError = null) }
     }
@@ -920,16 +852,37 @@ ${opening.moves} *
             showAiAppNotInstalledDialog()
             return
         }
+        if (signerTrust.check(AppSignerTrust.AI_PACKAGE) == AppSignerTrust.Status.CHANGED) {
+            if (!aiSignerChangeConfirmed) {
+                aiSignerChangeConfirmed = true
+                _uiState.update { it.copy(aiReportError = "Nothing was sent: the installed AI app is signed by a different " +
+                    "developer than before. If you installed it yourself, tap Submit again to trust it.") }
+                return
+            }
+            signerTrust.trustCurrent(AppSignerTrust.AI_PACKAGE)
+        }
+        aiSignerChangeConfirmed = false
         val settings = _uiState.value.stockfishSettings
         val resolved = AiAppLauncher.composeInstruction(draft)
         val usedNames = AiAppLauncher.usedContextNames(resolved.instructions)
+        val needsEngine = "moves" in usedNames || "engine" in usedNames
+        // Only a weak reference: preparation can take minutes and must not keep an Activity alive.
+        val launcher = java.lang.ref.WeakReference(context)
+        // The moves that led here let Stockfish see repetitions in the AI evaluations too.
+        val history = analysisOrchestrator.historyFor(data.fen)
         val stop = CompletableDeferred<Unit>()
         _uiState.update { it.copy(aiMovesProgress = "Preparing AI request…",
             aiEngineProgress = null, aiEngineStopping = false, aiReportError = null) }
         aiReportJob = viewModelScope.launch {
+            // The dedicated engines get fixed search times; don't let Manual analysis compete for the CPU.
+            val pausedManual = needsEngine && _uiState.value.currentStage == AnalysisStage.MANUAL
+            if (pausedManual) {
+                analysisOrchestrator.manualAnalysisJob?.cancel()
+                stockfish.stop()
+            }
             try {
                 val moves = if ("moves" in usedNames) {
-                    AiMovesList(getApplication()).generate(data.fen, settings.movesListForAi) { completed, total ->
+                    AiMovesList(getApplication()).generate(data.fen, settings.movesListForAi, history) { completed, total ->
                         _uiState.update {
                             if (it.pendingAiReport !== data) it else it.copy(
                                 aiMovesProgress = "Evaluating moves: $completed of $total"
@@ -942,15 +895,20 @@ ${opening.moves} *
                         aiMovesProgress = "Finding the best ${settings.engineMovesForAi.multiPv} Stockfish lines…"
                     ) }
                     aiEngineStop = stop
-                    AiEngineLines(getApplication()).generate(data.fen, settings.engineMovesForAi, stop) { progress ->
+                    AiEngineLines(getApplication()).generate(data.fen, settings.engineMovesForAi, stop, history) { progress ->
                         _uiState.update { if (it.pendingAiReport !== data) it else it.copy(aiEngineProgress = progress) }
                     }
                 } else ""
                 ensureActive()
                 if (_uiState.value.pendingAiReport !== data) return@launch
-                if (AiAppLauncher.launchAiReport(context, resolved, data.copy(moves = moves, engine = engine))) {
-                    _uiState.update { it.copy(pendingAiReport = null, aiReportDraft = null, aiReportEditing = false, aiMovesProgress = null,
-                        aiEngineProgress = null, aiEngineStopping = false) }
+                val prepared = PreparedAiLaunch(data, resolved, data.copy(moves = moves, engine = engine))
+                val caller = launcher.get()
+                // Launch with the caller while Eval is visible; otherwise the foreground UI sends it
+                // when the user returns (a background launch would be blocked by Android).
+                if (inForeground && caller != null && (caller as? android.app.Activity)?.isDestroyed != true) {
+                    performAiLaunch(caller, prepared)
+                } else {
+                    _pendingAiLaunch.value = prepared
                 }
             } catch (e: TimeoutCancellationException) {
                 _uiState.update { if (it.pendingAiReport !== data) it else it.copy(
@@ -966,7 +924,29 @@ ${opening.moves} *
                 if (aiEngineStop === stop) aiEngineStop = null
                 _uiState.update { if (it.pendingAiReport !== data) it else it.copy(
                     aiMovesProgress = null, aiEngineProgress = null, aiEngineStopping = false) }
+                if (pausedManual) viewModelScope.launch {
+                    if (_uiState.value.currentStage == AnalysisStage.MANUAL) analysisOrchestrator.restartAnalysisForExploringLine()
+                }
             }
+        }
+    }
+
+    /**
+     * Send a prepared AI request. Called by the UI while it is in the foreground, with its own
+     * Activity, so preparation that finishes in the background waits for the user to return
+     * instead of launching from a stale or background context.
+     */
+    internal fun completeAiLaunch(context: android.content.Context) {
+        val launch = _pendingAiLaunch.value ?: return
+        _pendingAiLaunch.value = null
+        performAiLaunch(context, launch)
+    }
+
+    private fun performAiLaunch(context: android.content.Context, launch: PreparedAiLaunch) {
+        if (_uiState.value.pendingAiReport !== launch.source) return
+        if (AiAppLauncher.launchAiReport(context, launch.entry, launch.context)) {
+            _uiState.update { it.copy(pendingAiReport = null, aiReportDraft = null, aiReportEditing = false, aiMovesProgress = null,
+                aiEngineProgress = null, aiEngineStopping = false) }
         }
     }
 
@@ -986,30 +966,15 @@ ${opening.moves} *
 
     /**
      * Import settings from a JSON file URI. Reloads all settings into UI state after import.
-     * @return true if import succeeded
      */
-    fun importSettings(context: android.content.Context, uri: android.net.Uri): Boolean {
-        return settingsManager.importSettings(context, uri) {
+    fun importSettings(context: android.content.Context, uri: android.net.Uri) {
+        settingsManager.importSettings(context, uri) {
             settingsPrefs.seedAiSystemPrompts(bundledSystemPrompts)
             settingsPrefs.seedAiReportPrompts(bundledReportPrompts)
-            val settings = loadStockfishSettings()
-            val boardSettings = loadBoardLayoutSettings()
-            val graphSettings = loadGraphSettings()
-            val interfaceVisibility = loadInterfaceVisibilitySettings()
-            val generalSettings = loadGeneralSettings()
-            val aiInstructions = loadAiInstructions()
-            _uiState.update {
-                it.copy(
-                    stockfishSettings = settings,
-                    boardLayoutSettings = boardSettings,
-                    graphSettings = graphSettings,
-                    interfaceVisibility = interfaceVisibility,
-                    generalSettings = generalSettings,
-                    aiInstructions = aiInstructions,
-                    aiSystemPrompts = settingsPrefs.loadAiSystemPrompts(),
-                    aiReportPrompts = settingsPrefs.loadAiReportPrompts()
-                )
-            }
+            loadPersistedState()
+            _uiState.update { it.copy(aiReportSelection = settingsPrefs.loadAiReportSelection()) }
+            // Apply imported engine settings to the running engine too.
+            settingsManager.updateStockfishSettings(_uiState.value.stockfishSettings)
         }
     }
 

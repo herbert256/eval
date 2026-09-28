@@ -120,7 +120,9 @@ fun ColorPickerDialog(
                     val bucketedBrightness = (kotlin.math.round(brightness * 50f) / 50f).coerceIn(0f, 1f)
                     if (cachedBitmap == null || cachedBrightness != bucketedBrightness || cachedWidth != w || cachedHeight != h) {
                         val step = 4
-                        val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+                        // Repaint the existing bitmap when only the brightness changed.
+                        val bmp = cachedBitmap?.takeIf { cachedWidth == w && cachedHeight == h }
+                            ?: android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
                         val canvas = android.graphics.Canvas(bmp)
                         val paint = android.graphics.Paint()
                         val hsvValues = floatArrayOf(0f, 0f, bucketedBrightness)

@@ -13,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -79,7 +80,9 @@ fun EvaluationGraph(
             .pointerInput(totalMoves, currentStage) {
                 // Only allow horizontal drag navigation in manual stage
                 if (totalMoves > 0 && isManualStage) {
-                    detectHorizontalDragGestures { change, _ ->
+                    // Only act when the selected move changes; every pointer event would restart the engine.
+                    var lastIndex = -1
+                    detectHorizontalDragGestures(onDragStart = { lastIndex = -1 }) { change, _ ->
                         change.consume()
                         val x = change.position.x.coerceIn(0f, graphWidth)
                         val moveIndex = if (totalMoves > 1) {
@@ -87,7 +90,10 @@ fun EvaluationGraph(
                         } else {
                             0
                         }
-                        onMoveSelected(moveIndex)
+                        if (moveIndex != lastIndex) {
+                            lastIndex = moveIndex
+                            onMoveSelected(moveIndex)
+                        }
                     }
                 }
             }
@@ -231,7 +237,8 @@ fun EvaluationGraph(
                     val crossX = p1.x + (p2.x - p1.x) * t
 
                     val color1 = if (p1.score >= 0) greenColor else redColor
-                    val path1 = androidx.compose.ui.graphics.Path().apply {
+                    val path1 = scratchPath.apply {
+                        reset()
                         moveTo(leftX, p1.y)
                         lineTo(crossX, centerY)
                         lineTo(leftX, centerY)
@@ -240,7 +247,8 @@ fun EvaluationGraph(
                     drawPath(path1, color1)
 
                     val color2 = if (p2.score >= 0) greenColor else redColor
-                    val path2 = androidx.compose.ui.graphics.Path().apply {
+                    val path2 = scratchPath.apply {
+                        reset()
                         moveTo(crossX, centerY)
                         lineTo(rightX, p2.y)
                         lineTo(rightX, centerY)
@@ -253,7 +261,8 @@ fun EvaluationGraph(
                 } else {
                     val color = if (p1.score >= 0) greenColor else redColor
 
-                    val path = androidx.compose.ui.graphics.Path().apply {
+                    val path = scratchPath.apply {
+                        reset()
                         moveTo(leftX, p1.y)
                         lineTo(rightX, p2.y)
                         lineTo(rightX, centerY)
@@ -296,7 +305,9 @@ fun TimeUsageGraph(
     currentStage: AnalysisStage,
     graphSettings: GraphSettings,
     onMoveSelected: (Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    // 1 when the game starts with Black to move, so index 0 is Black's move.
+    firstPly: Int = 0
 ) {
     val whiteTimeColor = Color(0xFFFFFFFF)  // White for white's time
     val blackTimeColor = AppColors.MediumGray  // Gray for black's time
@@ -313,7 +324,7 @@ fun TimeUsageGraph(
     moveDetails.forEachIndexed { index, detail ->
         val seconds = parseClockTimeToSeconds(detail.clockTime)
         if (seconds != null) {
-            if (index % 2 == 0) {
+            if ((index + firstPly) % 2 == 0) {
                 whiteTimes.add(index to seconds)
             } else {
                 blackTimes.add(index to seconds)
@@ -337,12 +348,17 @@ fun TimeUsageGraph(
             .padding(8.dp)
             .pointerInput(moveDetails.size, currentStage) {
                 if (moveDetails.isNotEmpty() && isManualStage) {
-                    detectHorizontalDragGestures { change, _ ->
+                    // Only act when the selected move changes; every pointer event would restart the engine.
+                    var lastIndex = -1
+                    detectHorizontalDragGestures(onDragStart = { lastIndex = -1 }) { change, _ ->
                         change.consume()
                         val x = change.position.x.coerceIn(0f, graphWidth)
                         val moveIndex = ((x / graphWidth) * (moveDetails.size - 1) + 0.5f)
                             .toInt().coerceIn(0, moveDetails.size - 1)
-                        onMoveSelected(moveIndex)
+                        if (moveIndex != lastIndex) {
+                            lastIndex = moveIndex
+                            onMoveSelected(moveIndex)
+                        }
                     }
                 }
             }
@@ -419,10 +435,12 @@ private fun parseClockTimeToSeconds(time: String?): Int? {
     if (time.isNullOrBlank()) return null
     val parts = time.split(":")
     return try {
+        // Seconds may carry tenths ("0:02:59.9", as chess.com writes them).
+        val seconds = parts.last().toDouble().toInt()
         when (parts.size) {
-            3 -> parts[0].toInt() * 3600 + parts[1].toInt() * 60 + parts[2].toInt()
-            2 -> parts[0].toInt() * 60 + parts[1].toInt()
-            1 -> parts[0].toInt()
+            3 -> parts[0].toInt() * 3600 + parts[1].toInt() * 60 + seconds
+            2 -> parts[0].toInt() * 60 + seconds
+            1 -> seconds
             else -> null
         }
     } catch (e: NumberFormatException) {
@@ -462,7 +480,9 @@ fun ScoreDifferenceGraph(
             .padding(8.dp)
             .pointerInput(totalMoves, currentStage) {
                 if (totalMoves > 0 && isManualStage) {
-                    detectHorizontalDragGestures { change, _ ->
+                    // Only act when the selected move changes; every pointer event would restart the engine.
+                    var lastIndex = -1
+                    detectHorizontalDragGestures(onDragStart = { lastIndex = -1 }) { change, _ ->
                         change.consume()
                         val x = change.position.x.coerceIn(0f, graphWidth)
                         val moveIndex = if (totalMoves > 0) {
@@ -470,7 +490,10 @@ fun ScoreDifferenceGraph(
                         } else {
                             0
                         }
-                        onMoveSelected(moveIndex)
+                        if (moveIndex != lastIndex) {
+                            lastIndex = moveIndex
+                            onMoveSelected(moveIndex)
+                        }
                     }
                 }
             }
@@ -656,14 +679,21 @@ fun AnalysisPanel(
     modifier: Modifier = Modifier
 ) {
     val result = uiState.analysisResult
+    if (!uiState.analysisEnabled) return
 
-    // Show if analysis is enabled, ready, and has results
-    // Keep showing even if result is stale (waiting for new position analysis) to avoid UI jumping
-    if (!uiState.analysisEnabled || !uiState.stockfishReady || result == null) {
-        return
-    }
+    // While the next position is being analysed, keep the previous lines on screen (dimmed, not
+    // tappable) so the content below doesn't jump on every move. Lines are always paired with the
+    // board they belong to. A new game starts empty.
+    val lastShown = remember(uiState.gameLoadVersion) { arrayOfNulls<Pair<AnalysisResult, ChessBoard>>(1) }
+    val fresh = result != null && uiState.stockfishReady && result.fen == uiState.currentBoard.getFen()
+    if (fresh) lastShown[0] = result!! to uiState.currentBoard
+    val (shownResult, shownBoard) = lastShown[0] ?: return
 
-    StockfishLinesCard(result, uiState.currentBoard, uiState.stockfishName, modifier, onExploreLine)
+    StockfishLinesCard(
+        shownResult, shownBoard, uiState.stockfishName,
+        if (fresh) modifier else modifier.alpha(0.45f),
+        if (fresh) onExploreLine else null
+    )
 }
 
 /** Shared with AI preparation; null exploration keeps the captured position fixed. */

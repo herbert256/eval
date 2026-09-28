@@ -2,10 +2,14 @@ package com.eval.ui
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
 import android.os.PersistableBundle
+import android.provider.MediaStore
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.core.content.FileProvider
@@ -25,7 +29,9 @@ import okhttp3.Protocol
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import okhttp3.MediaType.Companion.toMediaType
+import org.junit.After
 import org.junit.Assert.*
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
@@ -42,7 +48,28 @@ class ClipboardHistoryTest {
             nodes.none { it.viewIdResourceName == "eval_screen_title" }
     }
     private fun directory() = File(context.cacheDir, "settings_export/clipboard-test-${UUID.randomUUID()}").apply { mkdirs() }
-    private fun uri(file: File) = FileProvider.getUriForFile(context, "com.eval.fileprovider", file)
+    /** A URI into Eval's own FileProvider, which clipboard items must not be able to reach. */
+    private fun ownUri(file: File) = FileProvider.getUriForFile(context, "com.eval.fileprovider", file)
+    private val foreignFiles = mutableListOf<Uri>()
+    /** A file served by the system media provider, standing in for another app's clipboard item. */
+    private fun uri(name: String, bytes: ByteArray, type: String = "application/octet-stream"): Uri {
+        assumeTrue("MediaStore downloads need Android 10", Build.VERSION.SDK_INT >= 29)
+        val resolver = context.contentResolver
+        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, "clipboard-test-${System.nanoTime()}-$name")
+            put(MediaStore.MediaColumns.MIME_TYPE, type)
+            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/EvalTest")
+            put(MediaStore.MediaColumns.IS_PENDING, 1)
+        })!!
+        foreignFiles += uri
+        resolver.openOutputStream(uri)!!.use { it.write(bytes) }
+        resolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
+        return uri
+    }
+    @After fun deleteForeignFiles() { foreignFiles.forEach { context.contentResolver.delete(it, null, null) } }
+    /** Distinct legal positions: the white king walks along the first two ranks. */
+    private fun position(n: Int) = "4k3/8/8/8/8/8/" + (if (n >= 8) "${n - 8}K${15 - n}".replace("0", "") + "/8" else "8/" + "${n}K${7 - n}".replace("0", "")) + " w - - 0 1"
+    private val board by lazy { instrumentation.context.assets.open("url-scan/lichess-italian-black.png").use { it.readBytes() } }
     private suspend fun UrlGameScanner.settled(): UrlScanState {
         withTimeout(90_000) { while (uiState.value.busy) delay(30) }
         return uiState.value.also { assertNull(it.toString(), it.error) }
@@ -52,13 +79,20 @@ class ClipboardHistoryTest {
         val dir = directory()
         var history = ClipboardHistory(context, dir)
         try {
-            val writes = (1..12).map { history.record(ClipData.newPlainText("Entry $it", "Clipboard $it")) }
+            val writes = (1..12).map { history.record(ClipData.newPlainText("Entry $it", position(it))) }
             writes.forEach { it.await() }
-            assertEquals((12 downTo 3).map { "Clipboard $it" }, history.uiState.value.entries.map { it.input.texts.single() })
-            val last = ClipData.newPlainText("Copied again", "Clipboard 5")
+            assertEquals((12 downTo 3).map { position(it) }, history.uiState.value.entries.map { it.input.texts.single() })
+            // Only chess content is kept; other text leaves the history unchanged and explains why.
+            history.record(ClipData.newPlainText("Password", "correct horse battery staple")).await()
+            history.record(ClipData.newPlainText("Link", "https://example.com/reset?token=123")).await()
+            assertEquals((12 downTo 3).map { position(it) }, history.uiState.value.entries.map { it.input.texts.single() })
+            assertTrue(history.uiState.value.notice!!.contains("not saved"))
+            assertFalse(File(dir, "history.json").readText().contains("correct horse"))
+            val last = ClipData.newPlainText("Copied again", position(5))
             history.record(last).await()
             assertEquals(10, history.uiState.value.entries.size)
-            assertEquals("Clipboard 5", history.uiState.value.entries.first().input.texts.single())
+            assertEquals(position(5), history.uiState.value.entries.first().input.texts.single())
+            assertNull(history.uiState.value.notice)
             val ids = history.uiState.value.entries.map { it.input.id }
             history.record(last).await()
             assertEquals(ids, history.uiState.value.entries.map { it.input.id })
@@ -83,15 +117,13 @@ class ClipboardHistoryTest {
         val dir = directory()
         var history = ClipboardHistory(context, dir)
         try {
-            val board = File(dir, "board.bin").apply {
-                writeBytes(instrumentation.context.assets.open("url-scan/lichess-italian-black.png").use { it.readBytes() })
-            }
-            val game = File(dir, "game.pgn").apply { writeBytes(pgn.toByteArray(Charsets.UTF_16)) }
-            val clip = ClipData.newUri(context.contentResolver, "Chess files", uri(board)).apply { addItem(ClipData.Item(uri(game))) }
+            val boardUri = uri("board.bin", board)
+            val gameUri = uri("game.pgn", pgn.toByteArray(Charsets.UTF_16), "application/x-chess-pgn")
+            val clip = ClipData.newUri(context.contentResolver, "Chess files", boardUri).apply { addItem(ClipData.Item(gameUri)) }
             history.record(clip).await()
             val savedFiles = history.uiState.value.entries.single().files
             assertEquals(2, savedFiles.size)
-            assertTrue(board.delete()); assertTrue(game.delete())
+            assertEquals(2, foreignFiles.sumOf { context.contentResolver.delete(it, null, null) })
             history.close()
             history = ClipboardHistory(context, dir)
             history.awaitIdle().await()
@@ -109,9 +141,29 @@ class ClipboardHistoryTest {
                     assertTrue(image.needsReview)
                 } finally { scanner.close() }
             }
-            for (i in 1..10) history.record(ClipData.newPlainText("Entry", "$i")).await()
+            for (i in 1..10) history.record(ClipData.newPlainText("Entry", position(i))).await()
             assertEquals(10, history.uiState.value.entries.size)
             assertTrue(File(dir, "attachments").listFiles().orEmpty().isEmpty())
+        } finally { history.close(); dir.deleteRecursively() }
+    }
+
+    @Test fun files_without_chess_content_and_evals_own_files_are_not_saved() = runBlocking {
+        val dir = directory()
+        val history = ClipboardHistory(context, dir)
+        try {
+            val notes = uri("notes.txt", "Meeting at noon".toByteArray(), "text/plain")
+            history.record(ClipData.newUri(context.contentResolver, "Notes", notes)).await()
+            assertTrue(history.uiState.value.entries.isEmpty())
+            assertTrue(File(dir, "attachments").listFiles().orEmpty().isEmpty())
+            val own = File(dir, "own.pgn").apply { writeText(pgn) }
+            history.record(ClipData.newUri(context.contentResolver, "Own", ownUri(own))).await()
+            assertTrue(history.uiState.value.entries.isEmpty())
+            // A PGN text file is kept, whatever its name; unrelated files beside chess text are dropped.
+            val game = uri("game.txt", pgn.toByteArray(), "text/plain")
+            history.record(ClipData.newPlainText("Mixed", fen).apply { addItem(ClipData.Item(notes)); addItem(ClipData.Item(game)) }).await()
+            val entry = history.uiState.value.entries.single()
+            assertEquals(1, entry.files.size)
+            assertTrue(entry.input.warnings.toString(), entry.input.warnings.any { it.contains("not an image, PGN or document") })
         } finally { history.close(); dir.deleteRecursively() }
     }
 
@@ -161,9 +213,9 @@ class ClipboardHistoryTest {
             }).await()
             assertTrue(history.uiState.value.entries.isEmpty())
             assertTrue(history.uiState.value.notice!!.contains("sensitive"))
-            val large = File(dir, "large.bin").apply { writeBytes(ByteArray(16_000_001)) }
+            val large = uri("large.bin", ByteArray(16_000_001))
             history.record(ClipData.newPlainText("Mixed", fen).apply {
-                addItem(ClipData.Item(uri(large)))
+                addItem(ClipData.Item(large))
                 addItem(ClipData.Item(Uri.parse("content://com.eval.fileprovider/settings_export/missing-clipboard-file")))
                 addItem(ClipData.Item(Uri.parse("file:///private/not-readable")))
             }).await()
@@ -171,8 +223,9 @@ class ClipboardHistoryTest {
             assertEquals(listOf(fen), entry.input.texts)
             assertTrue(entry.input.streams.isEmpty())
             assertTrue(entry.input.warnings.toString(), entry.input.warnings.any { it.contains("16 MB") })
+            assertTrue(entry.input.warnings.toString(), entry.input.warnings.any { it.contains("Eval's own storage") })
             assertTrue(File(dir, "attachments").listFiles().orEmpty().isEmpty())
-            history.record(ClipData.newPlainText("Long", "x".repeat(SharedChessInput.MAX_TEXT + 1))).await()
+            history.record(ClipData.newPlainText("Long", "$fen " + "x".repeat(SharedChessInput.MAX_TEXT))).await()
             assertEquals(SharedChessInput.MAX_TEXT, history.uiState.value.entries.first().input.texts.single().length)
             assertTrue(history.uiState.value.entries.first().input.warnings.any { it.contains("2 MB") })
         } finally { history.close(); dir.deleteRecursively() }
@@ -210,9 +263,7 @@ class ClipboardHistoryTest {
         val previousIds = history.uiState.value.entries.map { it.input.id }.toSet()
         var previousClip: ClipData? = null
         val dir = directory()
-        val board = File(dir, "board.png").apply {
-            writeBytes(instrumentation.context.assets.open("url-scan/lichess-italian-black.png").use { it.readBytes() })
-        }
+        val boardUri = uri("board.png", board, "image/png")
         try {
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                 try {
@@ -221,7 +272,7 @@ class ClipboardHistoryTest {
                         ViewModelProvider(activity)[GameViewModel::class.java].dismissAiAppWarning()
                         val clipboard = activity.getSystemService(ClipboardManager::class.java)
                         previousClip = clipboard.primaryClip
-                        clipboard.setPrimaryClip(ClipData.newUri(context.contentResolver, "Clipboard board test", uri(board)))
+                        clipboard.setPrimaryClip(ClipData.newUri(context.contentResolver, "Clipboard board test", boardUri))
                     }
                     waitFor("Image clipboard listener saved the entry") {
                         history.uiState.value.entries.firstOrNull()?.title == "Image · Clipboard board test"

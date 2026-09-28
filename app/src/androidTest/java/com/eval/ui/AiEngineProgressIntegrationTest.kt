@@ -43,12 +43,14 @@ class AiEngineProgressIntegrationTest {
         assertEquals(formatAiEngineLines(fen, result), value)
     }
 
-    @Test fun stopping_before_the_first_iteration_returns_promptly_with_an_explicit_empty_result() = runBlocking {
+    @Test fun stopping_before_the_first_iteration_fails_promptly_instead_of_sending_a_sentence() = runBlocking {
         val stop = CompletableDeferred<Unit>().apply { complete(Unit) }
-        val value = withTimeout(5000) {
-            AiEngineLines(context).generate(fen, AiEngineSettings(secondsForPosition = 60f, hashMb = 8), stop)
+        val failure = withTimeout(5000) {
+            runCatching {
+                AiEngineLines(context).generate(fen, AiEngineSettings(secondsForPosition = 60f, hashMb = 8), stop)
+            }.exceptionOrNull()
         }
-        assertEquals("Stockfish search stopped before a complete set of lines was available.", value)
+        assertTrue("$failure", failure is AiEngineLinesStoppedException)
     }
 
     @Test fun live_card_stop_button_sends_complete_lines_once_without_waiting_for_the_time_limit() {

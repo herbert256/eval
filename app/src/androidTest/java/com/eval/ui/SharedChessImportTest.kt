@@ -1,10 +1,14 @@
 package com.eval.ui
 
 import android.content.ClipData
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModelProvider
@@ -22,7 +26,9 @@ import okhttp3.Protocol
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import okhttp3.MediaType.Companion.toMediaType
+import org.junit.After
 import org.junit.Assert.*
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
@@ -35,15 +41,37 @@ class SharedChessImportTest {
     private val pgn = "[Event \"Shared game\"]\n[White \"Alice\"]\n[Black \"Bob\"]\n\n1. e4 e5 2. Nf3 *"
     private val placement = "r1bqk1nr/pppp1ppp/2n5/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R"
 
-    private fun sharedFile(name: String, bytes: ByteArray): Uri {
+    /** A file in Eval's own FileProvider, which shares must not be able to reach. */
+    private fun ownFile(name: String, bytes: ByteArray): Uri {
         val directory = File(context.cacheDir, "settings_export").apply { mkdirs() }
         val file = File(directory, "share-test-$name").apply { writeBytes(bytes) }
         return FileProvider.getUriForFile(context, "com.eval.fileprovider", file)
     }
 
+    private val foreignFiles = mutableListOf<Uri>()
+    /** A file served by the system media provider, standing in for another app's share. */
+    private fun sharedFile(name: String, bytes: ByteArray, type: String = "application/octet-stream"): Uri {
+        assumeTrue("MediaStore downloads need Android 10", Build.VERSION.SDK_INT >= 29)
+        val resolver = context.contentResolver
+        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, "share-test-${System.nanoTime()}-$name")
+            put(MediaStore.MediaColumns.MIME_TYPE, type)
+            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/EvalTest")
+            put(MediaStore.MediaColumns.IS_PENDING, 1)
+        })!!
+        foreignFiles += uri
+        resolver.openOutputStream(uri)!!.use { it.write(bytes) }
+        resolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
+        return uri
+    }
+
+    @After fun deleteForeignFiles() { foreignFiles.forEach { context.contentResolver.delete(it, null, null) } }
+
+    private val requests = mutableListOf<String>()
     private fun client(body: String = pgn, type: String = "application/x-chess-pgn") =
         OkHttpClient.Builder().addInterceptor { chain ->
-            if (chain.request().url.encodedPath == "/slow") Thread.sleep(800)
+            synchronized(requests) { requests += chain.request().url.toString() }
+            if (chain.request().url.encodedPath == "/slow.pgn") Thread.sleep(800)
             val code = if (chain.request().url.encodedPath == "/missing") 404 else 200
             Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(code).message("Fixture")
                 .body(body.toResponseBody(type.toMediaType())).build()
@@ -88,6 +116,16 @@ class SharedChessImportTest {
         assertTrue(SharedChessInput.fromIntent(tooMany)!!.warnings.isNotEmpty())
     }
 
+    @Test fun uris_into_evals_own_file_provider_are_ignored() {
+        val foreign = Uri.parse("content://fixture/board.png")
+        val input = SharedChessInput(streams = listOf(Uri.parse("content://com.eval.fileprovider/settings_export/eval_settings.json"),
+            Uri.parse("content://0@com.eval.fileprovider/clipboard_history/x"), Uri.parse("content://COM.EVAL.FILEPROVIDER/x"), foreign))
+            .withoutOwnFiles(context)
+        assertEquals(listOf(foreign), input.streams)
+        assertEquals(listOf("A file from Eval's own storage was ignored."), input.warnings)
+        assertSame(input, input.withoutOwnFiles(context))
+    }
+
     @Test fun parses_html_entities_embedded_pgn_positions_and_image_references_without_running_scripts() {
         val html = """<p>A game:</p><pre>${pgn.replace("\"", "&quot;")}</pre>
             <div data-fen="$fen"></div><img src="https://fixture.test/board.png?a=1&amp;b=2">
@@ -99,7 +137,7 @@ class SharedChessImportTest {
         assertTrue(result.urls.contains("https://fixture.test/game.pgn"))
     }
 
-    @Test fun shared_urls_use_retrieval_and_keep_fen_text_when_a_link_fails() = runBlocking {
+    @Test fun shared_urls_follow_chess_links_and_list_other_links_until_chosen() = runBlocking {
         withContext(Dispatchers.Main) {
             val scanner = UrlGameScanner(context, this, client())
             try {
@@ -109,18 +147,30 @@ class SharedChessImportTest {
                 val state = scanner.settled()
                 assertTrue(state.results.any { it.content == fen })
                 assertTrue(state.results.any { it.kind == WebChessKind.PGN })
-                scanner.openShared(SharedChessInput(texts = listOf("$fen\nhttps://fixture.test/missing")))
-                val failed = scanner.settled()
-                assertEquals(fen, failed.results.single().content)
-                assertTrue(failed.warnings.single().contains("404"))
+                requests.clear()
+                // Other hosts, for example a password-reset link, are only listed.
+                scanner.openShared(SharedChessInput(texts = listOf("$fen\nhttps://fixture.test/missing\nhttps://example.com/reset?token=1")))
+                val listed = scanner.settled()
+                assertEquals(fen, listed.results.single().content)
+                assertEquals(listOf("https://fixture.test/missing", "https://example.com/reset?token=1"), listed.links)
+                assertTrue(listed.warnings.toString(), listed.warnings.isEmpty())
+                assertTrue(requests.toString(), requests.isEmpty())
+                scanner.scanLink("https://fixture.test/missing")
+                withTimeout(10_000) { while (scanner.uiState.value.busy) delay(30) }
+                val chosen = scanner.uiState.value
+                assertTrue(chosen.toString(), chosen.error.orEmpty().contains("404"))
+                assertEquals(fen, chosen.results.single().content)
+                assertEquals(listOf("https://example.com/reset?token=1"), chosen.links)
+                assertEquals(listOf("https://fixture.test/missing"), requests)
             } finally { scanner.close() }
         }
     }
 
     @Test fun shared_files_scan_pgn_and_board_images_and_preserve_results_after_unreadable_items() = runBlocking {
         val image = instrumentation.context.assets.open("url-scan/lichess-italian-black.png").use { it.readBytes() }
+        val own = pgn.replace("Alice", "Settings")
         val streams = listOf(sharedFile("game.pgn", pgn.toByteArray(Charsets.UTF_16)),
-            sharedFile("board.bin", image), Uri.parse("content://com.eval.fileprovider/settings_export/missing-share-test.pgn"))
+            sharedFile("board.bin", image), ownFile("own.pgn", own.toByteArray()))
         withContext(Dispatchers.Main) {
             val scanner = UrlGameScanner(context, this)
             try {
@@ -128,10 +178,11 @@ class SharedChessImportTest {
                 val state = scanner.settled()
                 assertEquals(3, state.results.size)
                 assertTrue(state.results.any { it.content == pgn })
+                assertTrue(state.results.none { it.content == own })
                 val board = state.results.single { it.kind == WebChessKind.IMAGE }
                 assertEquals("$placement w - - 0 1", board.content)
                 assertTrue(board.needsReview)
-                assertEquals(1, state.warnings.size)
+                assertEquals(listOf("A file from Eval's own storage was ignored."), state.warnings)
             } finally { scanner.close() }
         }
     }
@@ -145,13 +196,13 @@ class SharedChessImportTest {
                 assertTrue(scanner.settled().status.startsWith("No chess"))
                 scanner.openShared(SharedChessInput(streams = listOf(bigFile), texts = listOf(fen)))
                 assertTrue(scanner.settled().warnings.single().contains("too large"))
-                scanner.openShared(SharedChessInput(texts = listOf("https://fixture.test/slow")))
+                scanner.openShared(SharedChessInput(texts = listOf("https://fixture.test/slow.pgn")))
                 delay(50)
                 scanner.openShared(SharedChessInput(texts = listOf(fen)))
                 assertEquals(fen, scanner.settled().results.single().content)
                 delay(1000)
                 assertEquals(fen, scanner.uiState.value.results.single().content)
-                scanner.openShared(SharedChessInput(texts = listOf("https://fixture.test/slow")))
+                scanner.openShared(SharedChessInput(texts = listOf("https://fixture.test/slow.pgn")))
                 delay(50)
                 scanner.cancel()
                 delay(1000)
@@ -168,6 +219,10 @@ class SharedChessImportTest {
             return null
         }
         return instrumentation.uiAutomation.rootInActiveWindow?.let(::find)
+    }
+
+    private suspend fun waitForText(text: String) {
+        withTimeout(30_000) { while (nodeWithText(text) == null) delay(100) }
     }
 
     private suspend fun clickText(text: String) {
@@ -193,6 +248,8 @@ class SharedChessImportTest {
             scenario.onActivity { assertEquals(Intent.ACTION_SEND, it.intent.action) }
             scenario.recreate()
             scenario.onActivity { assertEquals(firstId, ViewModelProvider(it)[GameViewModel::class.java].sharedImport.value!!.id) }
+            // Nothing is read from a share until the user taps Scan.
+            clickText("Scan")
             clickText("Review position")
             clickText("Start from this position")
             scenario.onActivity {
@@ -204,6 +261,9 @@ class SharedChessImportTest {
             scenario.onActivity { assertNull(ViewModelProvider(it)[GameViewModel::class.java].sharedImport.value) }
             context.startActivity(Intent(context, MainActivity::class.java).setAction(Intent.ACTION_SEND)
                 .setType("text/plain").putExtra(Intent.EXTRA_TEXT, pgn).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            waitForText("Scan")
+            assertNull("Shares wait for Scan", nodeWithText("Open game"))
+            clickText("Scan")
             clickText("Open game")
             scenario.onActivity {
                 val model = ViewModelProvider(it)[GameViewModel::class.java]

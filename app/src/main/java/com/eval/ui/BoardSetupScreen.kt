@@ -13,8 +13,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.listSaver
@@ -46,6 +44,7 @@ import com.eval.chess.Piece
 import com.eval.chess.PieceColor
 import com.eval.chess.PieceType
 import com.eval.chess.Square
+import androidx.compose.foundation.selection.selectableGroup
 
 private val SetupSaver = listSaver<BoardSetupPosition, String>(
     save = { listOf(it.squares, it.whiteToMove.toString(), it.castling, it.enPassant, it.halfMoves, it.fullMove) },
@@ -296,29 +295,25 @@ private fun SetupMoveRights(draft: BoardSetupPosition, onChange: (BoardSetupPosi
                 color = AppColors.SubtleText, style = MaterialTheme.typography.bodySmall)
         }
         val lastMoves = remember(draft) { draft.enPassantLastMoves() }
-        var menu by remember { mutableStateOf(false) }
         if (lastMoves.isNotEmpty()) {
             Text("Last move", color = Color.White, style = MaterialTheme.typography.titleSmall)
-            Box {
-                OutlinedButton(onClick = { menu = true }, modifier = Modifier.testTag("setup_last_move")) {
-                    Text(lastMoves.firstOrNull { it.enPassant == draft.enPassant }?.label ?: "Unknown / no en passant")
-                    Icon(Icons.Default.ArrowDropDown, contentDescription = null)
-                }
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    DropdownMenuItem(text = { Text("Unknown / no en passant") }, onClick = {
-                        onChange(draft.copy(enPassant = "-")); menu = false
-                    })
-                    lastMoves.forEach { move ->
-                        DropdownMenuItem(text = { Text(move.label) }, onClick = {
-                            onChange(draft.copy(enPassant = move.enPassant, halfMoves = "0")); menu = false
-                        })
+            // Inline radio group, the app's selection pattern (no popups).
+            Column(Modifier.fillMaxWidth().selectableGroup().testTag("setup_last_move")) {
+                val options = listOf("-" to "Unknown / no en passant") + lastMoves.map { it.enPassant to it.label }
+                options.forEach { (enPassant, label) ->
+                    val selected = draft.enPassant == enPassant ||
+                        (enPassant == "-" && lastMoves.none { it.enPassant == draft.enPassant })
+                    Row(Modifier.fillMaxWidth().selectable(selected = selected, role = Role.RadioButton, onClick = {
+                        onChange(if (enPassant == "-") draft.copy(enPassant = "-")
+                            else draft.copy(enPassant = enPassant, halfMoves = "0"))
+                    }).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = selected, onClick = null)
+                        Text(label, color = Color.White)
                     }
                 }
             }
             Text("Choose the last pawn move only if it is known. This enables en passant.",
                 color = AppColors.SubtleText, style = MaterialTheme.typography.bodySmall)
-        } else {
-            LaunchedEffect(Unit) { menu = false }
         }
     }
 }

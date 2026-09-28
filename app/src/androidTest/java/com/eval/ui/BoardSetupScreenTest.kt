@@ -235,8 +235,7 @@ class BoardSetupScreenTest {
             absent("White can castle short"); absent("Black can castle long")
             absent("Move pieces"); absent("Erase")
             click("Black can castle short")
-            click("setup_last_move")
-            reveal("d7–d5"); click("f7–f5")
+            reveal("d7–d5"); reveal("f7–f5"); click("f7–f5")
             click("Start from this position")
             waitFor("Last move sets en passant and resets the halfmove counter") {
                 opened == "4k2r/8/8/3pPp2/8/8/8/R3K3 w Q f6 0 12"

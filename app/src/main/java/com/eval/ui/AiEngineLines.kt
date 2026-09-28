@@ -5,6 +5,7 @@ import android.os.SystemClock
 import com.eval.chess.ChessBoard
 import com.eval.chess.PieceColor
 import com.eval.stockfish.AnalysisResult
+import com.eval.stockfish.EngineHistory
 import com.eval.stockfish.StockfishEngine
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
@@ -43,11 +44,21 @@ data class AiEngineProgress(
     val fraction: Float get() = (elapsedMs.toFloat() / durationMs.coerceAtLeast(1)).coerceIn(0f, 1f)
 }
 
+/** Stop was requested before the first complete set of lines; there is nothing to send. */
+internal class AiEngineLinesStoppedException :
+    IllegalStateException("Stockfish was stopped before it finished a complete set of lines.")
+
 internal class AiEngineLines(private val context: Context) {
+    /**
+     * Returns the formatted lines of the last complete iteration. Throws
+     * [AiEngineLinesStoppedException] when [stopRequested] completes before any
+     * iteration finished, so no report is launched without engine lines.
+     */
     suspend fun generate(
         fen: String,
         settings: AiEngineSettings,
         stopRequested: Deferred<Unit>? = null,
+        history: EngineHistory? = null,
         onProgress: (AiEngineProgress) -> Unit = {}
     ): String = withContext(Dispatchers.IO) {
         if (fen.isBlank()) return@withContext ""
@@ -70,10 +81,10 @@ internal class AiEngineLines(private val context: Context) {
             coroutineScope {
                 publish()
                 val search = async {
-                    check(engine.initialize()) { "Stockfish is unavailable. Install or restart Stockfish and try again." }
+                    check(engine.initialize()) { engine.unavailableMessage() }
                     engine.configure(settings.threads, settings.hashMb, count, settings.useNnue)
                     startedAt.set(SystemClock.elapsedRealtime())
-                    engine.evaluateLines(fen, count, durationMs.toInt()) { latest.set(it) }
+                    engine.evaluateLines(fen, count, durationMs.toInt(), history) { latest.set(it) }
                 }
                 val ticker = launch {
                     while (isActive) {
@@ -89,13 +100,10 @@ internal class AiEngineLines(private val context: Context) {
                         }
                         search.onAwait { it }
                     }
-                    if (result == null) {
-                        "Stockfish search stopped before a complete set of lines was available."
-                    } else {
-                        latest.set(result)
-                        publish()
-                        formatAiEngineLines(fen, result)
-                    }
+                    if (result == null) throw AiEngineLinesStoppedException()
+                    latest.set(result)
+                    publish()
+                    formatAiEngineLines(fen, result)
                 } finally {
                     ticker.cancelAndJoin()
                 }

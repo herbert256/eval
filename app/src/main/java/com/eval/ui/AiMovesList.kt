@@ -4,6 +4,7 @@ import android.content.Context
 import com.eval.chess.ChessBoard
 import com.eval.chess.PieceColor
 import com.eval.chess.Square
+import com.eval.stockfish.EngineHistory
 import com.eval.stockfish.PvLine
 import com.eval.stockfish.StockfishEngine
 import java.util.Locale
@@ -42,6 +43,7 @@ internal class AiMovesList(private val context: Context) {
     suspend fun generate(
         fen: String,
         settings: AiMovesSettings,
+        history: EngineHistory? = null,
         onProgress: (completed: Int, total: Int) -> Unit = { _, _ -> }
     ): String = withContext(Dispatchers.IO) {
         if (fen.isBlank()) return@withContext ""
@@ -53,12 +55,12 @@ internal class AiMovesList(private val context: Context) {
 
         val engine = StockfishEngine(context.applicationContext)
         try {
-            check(engine.initialize()) { "Stockfish is unavailable. Install or restart Stockfish and try again." }
+            check(engine.initialize()) { engine.unavailableMessage() }
             engine.configure(settings.threads, settings.hashMb, 1, settings.useNnue)
             val rows = mutableListOf<String>()
             for ((index, move) in moves.withIndex()) {
                 currentCoroutineContext().ensureActive()
-                val result = engine.evaluateMove(fen, move.uci, (settings.secondsForMove * 1000).toInt())
+                val result = engine.evaluateMove(fen, move.uci, (settings.secondsForMove * 1000).toInt(), history)
                 val score = aiMoveScore(checkNotNull(result.bestLine), board.getTurn() == PieceColor.WHITE)
                 rows += "${move.san} (${move.uci}): $score (depth ${result.depth})"
                 onProgress(index + 1, moves.size)

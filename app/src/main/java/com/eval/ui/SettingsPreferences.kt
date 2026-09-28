@@ -67,7 +67,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
     // ============================================================================
 
     val savedLichessUsername: String
-        get() = prefs.getString(KEY_LICHESS_USERNAME, "DrNykterstein") ?: "DrNykterstein"
+        get() = prefs.getString(KEY_LICHESS_USERNAME, EXAMPLE_LICHESS_USERNAME) ?: EXAMPLE_LICHESS_USERNAME
 
     // The example shown on a fresh install is not a user-selected account.
     val knownLichessUsername: String?
@@ -323,17 +323,20 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
     fun loadGeneralSettings(): GeneralSettings {
         return GeneralSettings(
             moveSoundsEnabled = prefs.getBoolean(KEY_MOVE_SOUNDS_ENABLED, true),
-            lichessUsername = prefs.getString(KEY_LICHESS_USERNAME, "DrNykterstein") ?: "",
+            lichessUsername = prefs.getString(KEY_LICHESS_USERNAME, EXAMPLE_LICHESS_USERNAME) ?: "",
             fullScreen = prefs.getBoolean(KEY_FULL_SCREEN, false)
         )
     }
 
     fun saveGeneralSettings(settings: GeneralSettings) {
-        prefs.edit()
+        val editor = prefs.edit()
             .putBoolean(KEY_MOVE_SOUNDS_ENABLED, settings.moveSoundsEnabled)
             .putBoolean(KEY_FULL_SCREEN, settings.fullScreen)
-            .putString(KEY_LICHESS_USERNAME, settings.lichessUsername)
-            .apply()
+        // Saving other general settings must not turn the fresh-install example into a chosen account.
+        if (prefs.contains(KEY_LICHESS_USERNAME) || settings.lichessUsername != EXAMPLE_LICHESS_USERNAME) {
+            editor.putString(KEY_LICHESS_USERNAME, settings.lichessUsername)
+        }
+        editor.apply()
     }
 
     // ============================================================================
@@ -456,7 +459,8 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             var instructions = text("instructions")
             val email = text("email").trim()
             if (email.isNotEmpty() && !instructions.contains("<email>")) {
-                instructions += "\n<email>$email</email>"
+                val escaped = email.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                instructions += "\n<email>$escaped</email>"
             }
             AiInstructionEntry(
                 id = text("id").ifBlank { java.util.UUID.randomUUID().toString() },
@@ -476,6 +480,23 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
      */
     fun setAiAppDontAskAgain(dontAsk: Boolean) {
         prefs.edit().putBoolean(KEY_AI_APP_DONT_ASK_AGAIN, dontAsk).apply()
+    }
+
+    /** "Continue Without AI" on the startup screen is remembered across launches. */
+    fun isAiAppStartupWarningDismissed(): Boolean = prefs.getBoolean(KEY_AI_APP_STARTUP_WARNING_DISMISSED, false)
+
+    fun setAiAppStartupWarningDismissed(dismissed: Boolean) {
+        prefs.edit().putBoolean(KEY_AI_APP_STARTUP_WARNING_DISMISSED, dismissed).apply()
+    }
+
+    /**
+     * Remove data of retired features: AI provider API keys, models and prompts, and saved
+     * reports that builds from early 2026 stored before AI moved to the companion app.
+     */
+    fun removeRetiredData(filesDir: java.io.File) {
+        val retired = prefs.all.keys.filter { RETIRED_AI_KEY.matches(it) || it == "ai_report_email" }
+        if (retired.isNotEmpty()) prefs.edit().apply { retired.forEach { remove(it) } }.apply()
+        java.io.File(filesDir, "ai-history").deleteRecursively()
     }
 
     // ============================================================================
@@ -510,7 +531,8 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             aiReportPrompts = loadAiReportPrompts(),
             lastAiReportSelection = loadAiReportSelection(),
             seededAiReportPromptIds = prefs.getStringSet(KEY_SEEDED_AI_REPORT_PROMPTS, emptySet()).orEmpty().toSet(),
-            lichessUsername = savedLichessUsername,
+            // Export "" rather than the fresh-install example, so an import doesn't adopt it.
+            lichessUsername = if (prefs.contains(KEY_LICHESS_USERNAME)) savedLichessUsername else "",
             lichessMaxGames = lichessMaxGames,
             aiAppDontAskAgain = getAiAppDontAskAgain(),
             firstGameRetrievedVersion = getFirstGameRetrievedVersion(),
@@ -546,9 +568,6 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         }
     }
 
-    private fun isGameStorageKey(key: String): Boolean =
-        key == KEY_CURRENT_MANUAL_GAME || key == KEY_LIST_MANUAL_GAMES ||
-            key == KEY_RETRIEVES_LIST || key.startsWith(KEY_RETRIEVED_GAMES_PREFIX)
 
     private fun replacingSettingsEditor(): SharedPreferences.Editor = prefs.edit().also { editor ->
         // GameStorageManager shares this preferences file, but games are not
@@ -601,6 +620,9 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
                 // Old exports could include game blobs. Importing settings must
                 // neither remove nor overwrite the device's game collection.
                 if (isGameStorageKey(key)) continue
+                // Only settings this version knows are imported; anything else (for example
+                // AI provider keys from old exports) is skipped rather than stored verbatim.
+                if (!SettingsImportValidation.isKnownLegacyKey(key)) continue
                 val entry = typed.asJsonObject
                 val valueType = entry.get("_type").asString
                 val rawValue = requireNotNull(entry.get("_value"))
@@ -733,6 +755,16 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
 
     companion object {
         const val PREFS_NAME = "eval_prefs"
+        const val EXAMPLE_LICHESS_USERNAME = "DrNykterstein"
+        private const val KEY_AI_APP_STARTUP_WARNING_DISMISSED = "ai_app_startup_warning_dismissed"
+        private val RETIRED_AI_KEY = Regex(
+            "ai_[a-z]+_(api_key|model|model_source|manual_models|prompt|server_player_prompt|other_player_prompt|enabled)"
+        )
+
+        /** Keys GameStorageManager owns; they are never part of a settings export or import. */
+        fun isGameStorageKey(key: String): Boolean =
+            key == KEY_CURRENT_MANUAL_GAME || key == KEY_LIST_MANUAL_GAMES ||
+                key == KEY_RETRIEVES_LIST || key.startsWith(KEY_RETRIEVED_GAMES_PREFIX)
 
         // Current game storage
         const val KEY_CURRENT_MANUAL_GAME = "current_manual_game"

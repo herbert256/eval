@@ -133,6 +133,8 @@ internal class LiveGameManager(
                 }
             } else null
 
+            // Moves and move details hold SAN everywhere else (move list, symbols, export).
+            val san = board.sanForMove(uciMove) ?: uciMove
             val moveApplied = board.makeMoveFromSquares(fromSquare, toSquare, promotion)
             if (!moveApplied) return
             // Each connection replays the game from its starting position.
@@ -147,7 +149,7 @@ internal class LiveGameManager(
             streamedMoveCount++
             if (expectedHistoricalBoard != null) return
             appendBoardHistory(board)
-            currentMoves.add(uciMove)
+            currentMoves.add(san)
 
             val pieceType = when (piece.type) {
                 PieceType.KING -> "K"
@@ -165,7 +167,7 @@ internal class LiveGameManager(
             }
 
             val moveDetail = MoveDetails(
-                san = uciMove,
+                san = san,
                 from = from,
                 to = to,
                 isCapture = isCapture,
@@ -191,7 +193,11 @@ internal class LiveGameManager(
             if (autoFollow) analyzeDisplayedPosition()
 
             if (state.generalSettings.moveSoundsEnabled && autoFollow) {
-                moveSoundPlayer.playMove(isCapture = isCapture, isCheck = false, isCastle = false)
+                moveSoundPlayer.playMove(
+                    isCapture = isCapture,
+                    isCheck = board.isKingInCheck(board.getTurn()),
+                    isCastle = piece.type == PieceType.KING && kotlin.math.abs(fromSquare.file - toSquare.file) > 1
+                )
             }
         }
     }

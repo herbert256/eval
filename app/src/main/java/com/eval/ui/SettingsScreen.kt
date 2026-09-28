@@ -57,6 +57,9 @@ fun SettingsScreen(
     onDeleteAiInstruction: (String) -> Unit,
     onExportSettings: () -> Unit,
     onImportSettings: (Uri) -> Unit,
+    showNnueToggles: Boolean = false,
+    lichessToken: String = "",
+    onSaveLichessToken: (String) -> Unit = {},
     aiSystemPrompts: List<AiPromptEntry> = emptyList(),
     aiReportPrompts: List<AiPromptEntry> = emptyList(),
     onSaveAiPrompt: (AiPromptEntry, Boolean) -> Unit = { _, _ -> },
@@ -83,7 +86,9 @@ fun SettingsScreen(
             generalSettings = generalSettings,
             onBackToSettings = { currentSubScreen = SettingsSubScreen.MAIN },
             onBackToGame = onBack,
-            onSave = onSaveGeneral
+            onSave = onSaveGeneral,
+            lichessToken = lichessToken,
+            onSaveLichessToken = onSaveLichessToken
         )
         SettingsSubScreen.ARROW_SETTINGS -> ArrowSettingsScreen(
             stockfishSettings = stockfishSettings,
@@ -95,7 +100,8 @@ fun SettingsScreen(
             stockfishSettings = stockfishSettings,
             onBackToSettings = { currentSubScreen = SettingsSubScreen.MAIN },
             onBackToGame = onBack,
-            onSave = onSaveStockfish
+            onSave = onSaveStockfish,
+            showNnueToggles = showNnueToggles
         )
         SettingsSubScreen.BOARD_LAYOUT -> BoardLayoutSettingsScreen(
             boardLayoutSettings = boardLayoutSettings,

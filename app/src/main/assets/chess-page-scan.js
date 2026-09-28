@@ -44,6 +44,18 @@
   };
   visit(document);
   images.sort((a,b) => b.area - a.area);
-  return JSON.stringify({texts, links: [...new Set(links)], images: images.slice(0, 20),
-    limited: remaining <= 0 || images.length > 20});
+  // Inline images are large; keep the whole result to about 20 MB (Eval re-checks every limit).
+  const kept = [];
+  let inline = 16000000, skipped = false;
+  for (const image of images) {
+    if (kept.length >= 20) { skipped = true; break; }
+    const url = typeof image.url === 'string' ? image.url : '';
+    if (url.startsWith('data:')) {
+      if (url.length >= 4000000 || url.length > inline) { skipped = true; continue; }
+      inline -= url.length;
+    }
+    kept.push(image);
+  }
+  return JSON.stringify({texts, links: [...new Set(links)], images: kept,
+    limited: remaining <= 0 || skipped});
 })()

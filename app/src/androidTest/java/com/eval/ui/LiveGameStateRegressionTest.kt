@@ -127,7 +127,7 @@ class LiveGameStateRegressionTest {
                     exploringLineMoveIndex = 0, savedGameMoveIndex = 1, currentBoard = branchBoard)
             }
             h.deliver(request, """{"lm":"g1f3","wc":170,"bc":180}""")
-            assertEquals(listOf("e4", "e5", "g1f3"), h.state.moves)
+            assertEquals(listOf("e4", "e5", "Nf3"), h.state.moves)
             assertEquals(4, h.history.size)
             assertEquals(branchBoard.getFen(), h.state.currentBoard.getFen())
             assertEquals(1, h.state.currentMoveIndex)
@@ -143,7 +143,7 @@ class LiveGameStateRegressionTest {
             val request = h.start()
             val expected = h.history.last().copy().apply { check(makeUciMove("e2e4")) }
             h.deliver(request, """{"lm":"e2e4","wc":160,"bc":165}""")
-            assertEquals(moves + "e2e4", h.state.moves)
+            assertEquals(moves + "e4", h.state.moves)
             assertEquals(6, h.history.size)
             assertEquals(expected.getFen(), h.state.currentBoard.getFen())
         } finally { h.close() }

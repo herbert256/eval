@@ -33,6 +33,55 @@ class ChessBoard private constructor(skipReset: Boolean) {
     companion object {
         private val UCI_PATTERN = Regex("[a-h][1-8][a-h][1-8][qrbn]?")
         private val SAN_PATTERN = Regex("(?:[KQRBN][a-h]?[1-8]?x?[a-h][1-8]|[a-h](?:x[a-h])?[1-8](?:=[QRBN])?|O-O(?:-O)?|0-0(?:-0)?)[+#]?")
+        // Long algebraic ("e2-e4", "Ng1xf3", "e7-e8=Q"): both squares are named, so no search is needed.
+        private val LONG_ALGEBRAIC_PATTERN = Regex("([KQRBN]?)([a-h][1-8])([-x:])([a-h][1-8])(?:[=/]?([QRBNqrbn]))?[+#]?")
+        private val PROMOTION_SPELLING = Regex("""([a-h](?:x?[a-h])?[18])(?:=|/)?\(?([QRBNqrbn])\)?([+#]?)""")
+        private val FILE_ONLY_CAPTURE = Regex("([a-h])([a-h][1-8](?:=[QRBN])?[+#]?)")
+        private val EN_PASSANT_SUFFIX = Regex("""(?:e\.p\.|ep)(?=[+#]?$)""")
+        private val LOWERCASE_CASTLING = Regex("o-o(?:-o)?[+#]?")
+        private const val ANNOTATION_SUFFIX = "!?‼⁇⁉⁈±∓⩲⩱∞□"
+        private val FIGURINES = mapOf(
+            '♔' to 'K', '♕' to 'Q', '♖' to 'R', '♗' to 'B', '♘' to 'N', '♙' to 'P',
+            '♚' to 'K', '♛' to 'Q', '♜' to 'R', '♝' to 'B', '♞' to 'N', '♟' to 'P'
+        )
+
+        /** Move counters beyond this are not real games; the cap also keeps counter arithmetic from overflowing. */
+        const val MAX_MOVE_COUNTER = 1_000_000
+
+        /**
+         * Rewrite common non-standard move spellings as SAN: figurines, "Pe4", "e8Q", "e8=q",
+         * "e8(Q)", "e8/Q", "exd6e.p.", "ed6", "o-o" and trailing annotation glyphs.
+         * Text that is not a recognizable variant is returned trimmed but otherwise unchanged.
+         */
+        fun normalizeSan(notation: String): String {
+            var s = notation.trim().trimEnd(*ANNOTATION_SUFFIX.toCharArray())
+            s = String(CharArray(s.length) { FIGURINES[s[it]] ?: s[it] })
+            s = s.replace(EN_PASSANT_SUFFIX, "")
+            if (s.length > 2 && s[0] == 'P' && s[1] in 'a'..'h') s = s.substring(1)
+            if (LOWERCASE_CASTLING.matches(s)) s = s.replace('o', 'O')
+            PROMOTION_SPELLING.matchEntire(s)?.let {
+                s = "${it.groupValues[1]}=${it.groupValues[2].uppercase()}${it.groupValues[3]}"
+            }
+            // "ed6" names only the files of a pawn capture.
+            FILE_ONLY_CAPTURE.matchEntire(s)?.let {
+                if (kotlin.math.abs(it.groupValues[1][0] - it.groupValues[2][0]) == 1) {
+                    s = "${it.groupValues[1]}x${it.groupValues[2]}"
+                }
+            }
+            return s
+        }
+
+        /**
+         * Explain why [fen] cannot be opened, or return null when [setFen] would accept it.
+         * Castling rights whose king or rook has left its home square are dropped, not reported.
+         */
+        fun fenValidationError(fen: String): String? {
+            return try {
+                ChessBoard(skipReset = true).applyFen(fen)
+            } catch (e: Exception) {
+                "This FEN cannot be read."
+            }
+        }
     }
     private val board = arrayOfNulls<Piece>(64)
     private var turn: PieceColor = PieceColor.WHITE
@@ -82,7 +131,7 @@ class ChessBoard private constructor(skipReset: Boolean) {
         lastMove = null
     }
 
-    fun getPiece(square: Square): Piece? = board[square.index]
+    fun getPiece(square: Square): Piece? = getPiece(square.file, square.rank)
 
     fun getPiece(file: Int, rank: Int): Piece? {
         if (file !in 0..7 || rank !in 0..7) return null
@@ -140,8 +189,8 @@ class ChessBoard private constructor(skipReset: Boolean) {
 
     /**
      * Set the board position from a FEN string.
-     * Returns true if the FEN parsed and passed basic legality checks.
-     * Rejects impossible positions (missing kings, pawns on rank 1/8, bad turn).
+     * Returns true if the FEN parsed and describes a legal position; see [fenValidationError]
+     * for the reason a FEN is rejected. Stale castling rights are dropped rather than rejected.
      */
     fun setFen(fen: String): Boolean {
         // Snapshot the previous state so a failed validation can't leave the board
@@ -155,7 +204,7 @@ class ChessBoard private constructor(skipReset: Boolean) {
         val savedLastMove = lastMove
 
         val applied = try {
-            applyFenUnchecked(fen)
+            applyFen(fen) == null
         } catch (e: Exception) {
             false
         }
@@ -172,94 +221,129 @@ class ChessBoard private constructor(skipReset: Boolean) {
         return applied
     }
 
-    private fun applyFenUnchecked(fen: String): Boolean {
+    /** Parse [fen] into this board; returns why it was rejected, or null on success. */
+    private fun applyFen(fen: String): String? {
         val parts = fen.trim().split(Regex("\\s+"))
-        if (parts.size !in 1..6) return false
+        if (parts.size !in 1..6) return "A FEN has at most six fields."
 
         // Clear the board first
         for (i in 0..63) board[i] = null
 
         // Parse board position (first part)
         val ranks = parts[0].split("/")
-        if (ranks.size != 8) return false
+        if (ranks.size != 8) return "The board part of a FEN needs eight ranks separated by '/'."
 
-        var whiteKings = 0
-        var blackKings = 0
         for ((rankIndex, rankStr) in ranks.withIndex()) {
             val rank = 7 - rankIndex  // FEN starts from rank 8 (index 7)
+            val badRank = "Rank ${rank + 1} does not describe exactly eight squares."
             var file = 0
             var previousWasDigit = false
             for (c in rankStr) {
                 if (c in '1'..'8') {
-                    if (previousWasDigit) return false
+                    if (previousWasDigit) return badRank
                     file += c.digitToInt()
-                    if (file > 8) return false
+                    if (file > 8) return badRank
                     previousWasDigit = true
                 } else {
                     previousWasDigit = false
-                    val piece = charToPiece(c) ?: return false
-                    if (file > 7) return false
-                    // Pawns may never occupy rank 1 (index 0) or rank 8 (index 7)
-                    if (piece.type == PieceType.PAWN && (rank == 0 || rank == 7)) return false
-                    if (piece.type == PieceType.KING) {
-                        if (piece.color == PieceColor.WHITE) whiteKings++ else blackKings++
-                    }
+                    val piece = charToPiece(c) ?: return if (c.isDigit()) badRank else "'$c' is not a piece letter."
+                    if (file > 7) return badRank
                     board[rank * 8 + file] = piece
                     file++
                 }
             }
-            if (file != 8) return false
+            if (file != 8) return badRank
         }
-        // A legal position has exactly one king of each colour.
-        if (whiteKings != 1 || blackKings != 1) return false
 
         // Parse turn (second part): must be explicitly "w" or "b".
         val newTurn = when {
             parts.size <= 1 -> PieceColor.WHITE  // starting-position shorthand
             parts[1].equals("w", ignoreCase = true) -> PieceColor.WHITE
             parts[1].equals("b", ignoreCase = true) -> PieceColor.BLACK
-            else -> return false
+            else -> return "The side to move must be 'w' or 'b'."
         }
         turn = newTurn
 
-        // Parse castling rights (third part)
+        // Parse castling rights (third part). Rights whose king or rook is not on its home
+        // square cannot be used; pasted diagrams often carry a stale "KQkq", so drop them.
         castlingRights.clear()
         if (parts.size > 2 && parts[2] != "-") {
-            if (parts[2].any { it !in "KQkq" } || parts[2].toSet().size != parts[2].length) return false
-            for (c in parts[2]) {
-                castlingRights.add(c)
+            if (parts[2].any { it !in "KQkq" } || parts[2].toSet().size != parts[2].length) {
+                return "Castling rights must be '-' or letters from KQkq, each at most once."
             }
+            castlingRights.addAll(parts[2].filter { hasCastlingPieces(it) }.toList())
         }
 
         // Parse en passant square (fourth part). When present, the target square
         // must be on rank 6 after Black pushes or rank 3 after White pushes.
         enPassantSquare = if (parts.size > 3 && parts[3] != "-") {
-            val sq = Square.fromAlgebraic(parts[3]) ?: return false
+            val badTarget = "En passant square ${parts[3]} does not follow a double pawn push."
+            val sq = Square.fromAlgebraic(parts[3]) ?: return badTarget
             val expectedRank = if (newTurn == PieceColor.WHITE) 5 else 2
-            if (sq.rank != expectedRank) return false
+            if (sq.rank != expectedRank) return badTarget
             val pawnRank = if (newTurn == PieceColor.WHITE) 4 else 3
             val sourceRank = if (newTurn == PieceColor.WHITE) 6 else 1
             if (getPiece(sq) != null || getPiece(sq.file, sourceRank) != null ||
-                getPiece(sq.file, pawnRank) != Piece(PieceType.PAWN, oppositeColor(newTurn))) return false
+                getPiece(sq.file, pawnRank) != Piece(PieceType.PAWN, oppositeColor(newTurn))) return badTarget
             sq
         } else null
 
         // Half-move clock: non-negative integer when supplied.
         halfMoveClock = if (parts.size > 4) {
-            val v = parts[4].toIntOrNull() ?: return false
-            if (v < 0) return false
+            val v = parts[4].toIntOrNull()
+            if (v == null || v !in 0..MAX_MOVE_COUNTER) return "The halfmove clock must be a whole number from 0 to $MAX_MOVE_COUNTER."
             v
         } else 0
 
         // Full-move number: positive integer when supplied.
         fullMoveNumber = if (parts.size > 5) {
-            val v = parts[5].toIntOrNull() ?: return false
-            if (v < 1) return false
+            val v = parts[5].toIntOrNull()
+            if (v == null || v !in 1..MAX_MOVE_COUNTER) return "The move number must be a whole number from 1 to $MAX_MOVE_COUNTER."
             v
         } else 1
 
         lastMove = null
-        return true
+        return positionError()
+    }
+
+    private fun hasCastlingPieces(right: Char): Boolean {
+        val color = if (right.isUpperCase()) PieceColor.WHITE else PieceColor.BLACK
+        val rank = if (color == PieceColor.WHITE) 0 else 7
+        val rookFile = if (right.uppercaseChar() == 'K') 7 else 0
+        return getPiece(4, rank) == Piece(PieceType.KING, color) && getPiece(rookFile, rank) == Piece(PieceType.ROOK, color)
+    }
+
+    /**
+     * Rules every position must meet, whatever its history. Shared by FEN import and
+     * Board setup, so both reject the same positions with the same explanation.
+     */
+    private fun positionError(): String? {
+        val kings = PieceColor.values().map { color -> (0..63).filter { board[it] == Piece(PieceType.KING, color) } }
+        if (kings.any { it.size != 1 }) return "Place one white king and one black king."
+        if ((0..7).any { board[it]?.type == PieceType.PAWN || board[56 + it]?.type == PieceType.PAWN })
+            return "Pawns cannot be on the first or last rank."
+        val (whiteKing, blackKing) = kings.map { it.single() }
+        if (kotlin.math.abs(whiteKing / 8 - blackKing / 8) <= 1 && kotlin.math.abs(whiteKing % 8 - blackKing % 8) <= 1)
+            return "The kings cannot be next to each other."
+        for (color in PieceColor.values()) {
+            val squares = (0..63).filter { board[it]?.color == color }
+            fun count(type: PieceType) = squares.count { board[it]?.type == type }
+            val pawns = count(PieceType.PAWN)
+            if (squares.size > 16 || pawns > 8) return "Each side can have at most 16 pieces, including 8 pawns."
+            // Every piece beyond the starting set must be a promoted pawn. Bishops never change
+            // square colour, so a second bishop on the same colour is promoted as well.
+            val bishops = squares.filter { board[it]?.type == PieceType.BISHOP }
+            val lightBishops = bishops.count { (it / 8 + it % 8) % 2 == 1 }
+            val promoted = maxOf(0, count(PieceType.QUEEN) - 1) + maxOf(0, count(PieceType.ROOK) - 2) +
+                maxOf(0, count(PieceType.KNIGHT) - 2) + maxOf(0, lightBishops - 1) + maxOf(0, bishops.size - lightBishops - 1)
+            if (pawns + promoted > 8) {
+                val side = if (color == PieceColor.WHITE) "White" else "Black"
+                return "$side has more promoted pieces than missing pawns."
+            }
+        }
+        if (isKingInCheck(oppositeColor(turn)))
+            return "The side that just moved cannot be in check. Change the side to move or adjust the pieces."
+        return null
     }
 
     private fun charToPiece(c: Char): Piece? {
@@ -289,11 +373,30 @@ class ChessBoard private constructor(skipReset: Boolean) {
     }
 
     fun makeMove(san: String): Boolean {
-        val notation = san.trimEnd('!', '?')
-        if (!SAN_PATTERN.matches(notation)) return false
-        val move = parseSanMove(notation) ?: return false
+        val notation = normalizeSan(san)
+        val move = if (SAN_PATTERN.matches(notation)) {
+            parseSanMove(notation)
+        } else {
+            LONG_ALGEBRAIC_PATTERN.matchEntire(notation)?.let(::parseLongAlgebraicMove)
+        } ?: return false
         if (!isLegalMove(move.from, move.to) || !isValidPromotion(move)) return false
         return executeMove(move.copy(san = san))
+    }
+
+    /** Coordinates name the move; a piece letter, when given, and the capture sign must agree with the board. */
+    private fun parseLongAlgebraicMove(match: MatchResult): Move? {
+        val (letter, fromName, separator, toName, promotionLetter) = match.destructured
+        val from = Square.fromAlgebraic(fromName) ?: return null
+        val to = Square.fromAlgebraic(toName) ?: return null
+        val piece = getPiece(from) ?: return null
+        if (letter.isNotEmpty() && letter[0] != pieceToChar(Piece(piece.type, PieceColor.WHITE))) return null
+        val isCapture = getPiece(to) != null || (piece.type == PieceType.PAWN && from.file != to.file)
+        if ((separator != "-") != isCapture) return null
+        val promotion = when (promotionLetter.uppercase()) {
+            "Q" -> PieceType.QUEEN; "R" -> PieceType.ROOK; "B" -> PieceType.BISHOP; "N" -> PieceType.KNIGHT
+            else -> null
+        }
+        return Move(from, to, promotion)
     }
 
     fun makeUciMove(uci: String): Boolean {
@@ -598,14 +701,15 @@ class ChessBoard private constructor(skipReset: Boolean) {
             }
         }
 
-        // Update counters (reset on pawn move or capture)
+        // Update counters (reset on pawn move or capture). They stop at the FEN limit so
+        // getFen() never writes a counter that setFen() would reject.
         if (piece.type == PieceType.PAWN || isCapture) {
             halfMoveClock = 0
-        } else {
+        } else if (halfMoveClock < MAX_MOVE_COUNTER) {
             halfMoveClock++
         }
 
-        if (turn == PieceColor.BLACK) {
+        if (turn == PieceColor.BLACK && fullMoveNumber < MAX_MOVE_COUNTER) {
             fullMoveNumber++
         }
 

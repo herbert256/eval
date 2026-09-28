@@ -6,12 +6,22 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 /**
  * Navigation routes for the app.
@@ -35,45 +45,77 @@ fun EvalNavHost(
     viewModel: GameViewModel = viewModel()
 ) {
     val sharedInput by viewModel.sharedImport.collectAsState()
+    // Remember which share was already shown, so recreating the activity (rotation) doesn't
+    // pull the user back to the share screen from Settings or Help.
+    var shownShareId by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(sharedInput?.id) {
-        if (sharedInput != null) navController.navigate(NavRoutes.SHARED) {
-            popUpTo(NavRoutes.GAME)
-            launchSingleTop = true
+        val id = sharedInput?.id
+        if (id != null && id != shownShareId) {
+            shownShareId = id
+            navController.navigate(NavRoutes.SHARED) {
+                popUpTo(NavRoutes.GAME)
+                launchSingleTop = true
+            }
         }
     }
-    val uiState by viewModel.uiState.collectAsState()
-    val home: () -> Unit = {
-        viewModel.dismissSharedContent()
-        viewModel.hideRetrieveScreen()
-        viewModel.dismissAiInstructionSelection()
-        viewModel.dismissPlayerInfo()
-        viewModel.dismissGameSelection()
-        viewModel.hideSharePositionDialog()
-        viewModel.hideAiAppNotInstalledDialog()
-        if (viewModel.uiState.value.showGifExportDialog) viewModel.cancelGifExport()
-        navController.popBackStack(NavRoutes.GAME, false)
+
+    // A prepared AI request is sent only while Eval is in the foreground, with this Activity.
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(viewModel, lifecycleOwner, context) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            viewModel.pendingAiLaunch.collect { if (it != null) viewModel.completeAiLaunch(context) }
+        }
     }
-    fun navigate(route: String) {
-        navController.navigate(route) { launchSingleTop = true }
+    LaunchedEffect(viewModel, lifecycleOwner, context) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewModel.shareRequests.collect { intent -> context.startActivity(intent) }
+        }
     }
-    val menu = EvalMenuActions(
-        home = home,
-        selectGame = {
-            home()
-            viewModel.dismissAnalysedGamesSelection()
-            viewModel.dismissSelectedRetrieveGames()
-            viewModel.dismissPreviousRetrievesSelection()
-            viewModel.dismissPgnEventSelection()
-            viewModel.showRetrieveScreen()
-            navigate(NavRoutes.RETRIEVE)
-        },
-        settings = { navigate(NavRoutes.SETTINGS) },
-        help = { navigate(NavRoutes.HELP) },
-        reload = if (uiState.game != null || uiState.hasLastServerUser) ({
-            home()
-            viewModel.reloadLastGame()
-        }) else null
-    )
+
+    // Collect only what the menu needs: the host must not recompose on every engine update.
+    val canReload by remember(viewModel) {
+        viewModel.uiState.map { it.game != null || it.hasLastServerUser }.distinctUntilChanged()
+    }.collectAsState(initial = viewModel.uiState.value.let { it.game != null || it.hasLastServerUser })
+    val menu = remember(navController, viewModel, canReload) {
+        val home: () -> Unit = {
+            viewModel.dismissSharedContent()
+            viewModel.hideRetrieveScreen()
+            viewModel.dismissAiInstructionSelection()
+            viewModel.dismissPlayerInfo()
+            viewModel.dismissLichessTv()
+            viewModel.dismissTournaments()
+            viewModel.dismissBroadcasts()
+            viewModel.dismissStreamers()
+            viewModel.dismissGameSelection()
+            viewModel.hideSharePositionDialog()
+            viewModel.hideAiAppNotInstalledDialog()
+            if (viewModel.uiState.value.showGifExportDialog) viewModel.cancelGifExport()
+            navController.popBackStack(NavRoutes.GAME, false)
+        }
+        fun navigate(route: String) {
+            navController.navigate(route) { launchSingleTop = true }
+        }
+        EvalMenuActions(
+            home = home,
+            selectGame = {
+                home()
+                viewModel.dismissAnalysedGamesSelection()
+                viewModel.dismissSelectedRetrieveGames()
+                viewModel.dismissPreviousRetrievesSelection()
+                viewModel.dismissPgnEventSelection()
+                viewModel.showRetrieveScreen()
+                navigate(NavRoutes.RETRIEVE)
+            },
+            settings = { navigate(NavRoutes.SETTINGS) },
+            help = { navigate(NavRoutes.HELP) },
+            reload = if (canReload) ({
+                home()
+                viewModel.reloadLastGame()
+            }) else null
+        )
+    }
+    val home = menu.home
     CompositionLocalProvider(LocalEvalMenuActions provides menu) {
         NavHost(
             navController = navController,
@@ -162,7 +204,10 @@ fun SettingsScreenNav(
         onUpdateAiInstruction = { viewModel.updateAiInstruction(it) },
         onDeleteAiInstruction = { viewModel.deleteAiInstruction(it) },
         onExportSettings = { viewModel.exportSettings(context) },
-        onImportSettings = { uri -> viewModel.importSettings(context, uri) }
+        onImportSettings = { uri -> viewModel.importSettings(context, uri) },
+        showNnueToggles = uiState.engineSupportsNnueOption,
+        lichessToken = remember { viewModel.lichessToken },
+        onSaveLichessToken = viewModel::saveLichessToken
     )
 }
 

@@ -5,6 +5,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.util.AtomicFile
@@ -34,7 +35,10 @@ internal data class ClipboardHistoryState(
     val notice: String? = null
 )
 
-/** App-private, bounded history of clips Android actually lets Eval read. No background polling. */
+/**
+ * App-private, bounded history of clips Android actually lets Eval read. No background polling.
+ * Only clips with chess content are kept: FEN, PGN, chess-site/.pgn links, and image, PGN or document files.
+ */
 internal class ClipboardHistory(
     context: Context,
     private val directory: File = File(context.filesDir, "clipboard-history")
@@ -48,6 +52,8 @@ internal class ClipboardHistory(
     private val state = MutableStateFlow(ClipboardHistoryState())
     val uiState = state.asStateFlow()
     private var lastObserved = ""
+    // Clips without chess content are remembered only in memory, so no trace of them is written.
+    private var lastRejected = ""
 
     init {
         scope.launch {
@@ -85,7 +91,7 @@ internal class ClipboardHistory(
         val input = SharedChessInput.fromIntent(Intent(Intent.ACTION_SEND).apply {
             type = if (clip.description.mimeTypeCount > 0) clip.description.getMimeType(0) else null
             clipData = clip
-        })!!
+        })!!.withoutOwnFiles(context)
         val label = clip.description.label?.toString()?.take(120).orEmpty()
         val timestamp = clip.description.timestamp
         return enqueue {
@@ -102,7 +108,7 @@ internal class ClipboardHistory(
     internal fun close() { commands.close(); scope.cancel() }
 
     private fun capture(input: SharedChessInput, label: String, token: String) {
-        if (token == lastObserved) return
+        if (token == lastObserved || token == lastRejected) return
         if (input.texts.isEmpty() && input.html.isEmpty() && input.streams.isEmpty() && input.warnings.isEmpty()) return
         attachments.mkdirs()
         val warnings = input.warnings.map { it.replace("Shared", "Clipboard").replace("shared", "clipboard") }.toMutableList()
@@ -120,6 +126,7 @@ internal class ClipboardHistory(
                         }
                     }.getOrNull() ?: "clipboard-file"
                     val name = originalName.takeLast(100).replace(Regex("[^a-zA-Z0-9._-]"), "_")
+                    val type = runCatching { resolver.getType(uri) }.getOrNull() ?: input.mimeType
                     destination = File(attachments, "${input.id}-$number-$name")
                     val hash = MessageDigest.getInstance("SHA-256")
                     resolver.openInputStream(uri)?.use { source ->
@@ -135,6 +142,11 @@ internal class ClipboardHistory(
                             }
                         }
                     } ?: error("Cannot open clipboard file")
+                    if (!chessFile(destination, type, originalName)) {
+                        destination.delete()
+                        warnings += "A clipboard file that is not an image, PGN or document was not saved."
+                        continue
+                    }
                     files += destination.name
                     hashes += hash.digest().hex()
                 } catch (_: Exception) {
@@ -143,12 +155,18 @@ internal class ClipboardHistory(
                         else "A clipboard file could not be saved. Copy it again while Eval is open, or use Start from a local file."
                 }
             }
+            val chessText = input.texts.any { SharedChessText.hasChess(it, false) } || input.html.any { SharedChessText.hasChess(it, true) }
+            if (!chessText && files.isEmpty()) {
+                lastRejected = token
+                state.value = state.value.copy(notice = "The current clipboard item has no FEN, PGN, chess link, image or document, so it was not saved.")
+                return
+            }
             val savedInput = input.copy(streams = files.map(::fileUri), warnings = warnings.distinct())
             val fingerprint = digest(JSONObject().put("text", JSONArray(input.texts)).put("html", JSONArray(input.html))
                 .put("files", JSONArray(hashes)).put("type", input.mimeType).put("warnings", JSONArray(warnings))
                 .toString().toByteArray())
             val kind = when {
-                input.streams.isNotEmpty() -> if (input.mimeType?.startsWith("image/") == true) "Image" else "File"
+                files.isNotEmpty() -> if (input.mimeType?.startsWith("image/") == true) "Image" else "File"
                 input.html.isNotEmpty() -> "HTML"
                 input.texts.any { it.trim().startsWith("https://", true) || it.trim().startsWith("http://", true) } -> "URL"
                 else -> "Text"
@@ -164,6 +182,25 @@ internal class ClipboardHistory(
             files.forEach { File(attachments, it).delete() }
             throw e
         }
+    }
+
+    /** Images, PGN/FEN files, supported documents, and text files that contain a chess position or game. */
+    private fun chessFile(file: File, type: String?, name: String): Boolean {
+        val mime = type.orEmpty().lowercase()
+        val extension = name.substringAfterLast('.', "").lowercase()
+        if (mime.startsWith("image/") || "pgn" in mime || extension in setOf("pgn", "fen")) return true
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.path, bounds)
+        if (bounds.outWidth > 0) return true
+        val head = file.inputStream().use { stream ->
+            val buffer = ByteArray(SharedChessInput.MAX_TEXT)
+            var size = 0
+            while (size < buffer.size) { val count = stream.read(buffer, size, buffer.size - size); if (count < 0) break; size += count }
+            buffer.copyOf(size)
+        }
+        if (ChessDocumentReader.isDocument(head, mime, name)) return true
+        val text = runCatching { ChessDocumentReader.decodeText(head) }.getOrNull() ?: return false
+        return SharedChessText.hasChess(text, "html" in mime || extension in setOf("html", "htm", "xhtml"))
     }
 
     private fun fileUri(name: String): Uri {

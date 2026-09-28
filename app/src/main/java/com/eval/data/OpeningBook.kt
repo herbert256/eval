@@ -15,11 +15,12 @@ object OpeningBook {
         listOf("e2e4") to "King's Pawn Opening",
         listOf("e2e4", "e7e5") to "Open Game",
         listOf("e2e4", "e7e5", "g1f3") to "King's Knight Opening",
-        listOf("e2e4", "e7e5", "g1f3", "b8c6") to "Italian Game / Ruy Lopez Setup",
+        listOf("e2e4", "e7e5", "g1f3", "b8c6") to "King's Knight Opening: Normal Variation",
         listOf("e2e4", "e7e5", "g1f3", "b8c6", "f1b5") to "Ruy Lopez",
         listOf("e2e4", "e7e5", "g1f3", "b8c6", "f1b5", "a7a6") to "Ruy Lopez: Morphy Defense",
         listOf("e2e4", "e7e5", "g1f3", "b8c6", "f1b5", "a7a6", "b5a4") to "Ruy Lopez: Morphy Defense",
-        listOf("e2e4", "e7e5", "g1f3", "b8c6", "f1b5", "a7a6", "b5a4", "g8f6") to "Ruy Lopez: Morphy Defense, Closed",
+        listOf("e2e4", "e7e5", "g1f3", "b8c6", "f1b5", "a7a6", "b5a4", "g8f6") to "Ruy Lopez: Morphy Defense",
+        listOf("e2e4", "e7e5", "g1f3", "b8c6", "f1b5", "a7a6", "b5a4", "g8f6", "e1g1", "f8e7") to "Ruy Lopez: Closed",
         listOf("e2e4", "e7e5", "g1f3", "b8c6", "f1b5", "g8f6") to "Ruy Lopez: Berlin Defense",
         listOf("e2e4", "e7e5", "g1f3", "b8c6", "f1b5", "f7f5") to "Ruy Lopez: Schliemann Defense",
         listOf("e2e4", "e7e5", "g1f3", "b8c6", "f1c4") to "Italian Game",
@@ -27,10 +28,11 @@ object OpeningBook {
         listOf("e2e4", "e7e5", "g1f3", "b8c6", "f1c4", "g8f6") to "Italian Game: Two Knights Defense",
         listOf("e2e4", "e7e5", "g1f3", "b8c6", "d2d4") to "Scotch Game",
         listOf("e2e4", "e7e5", "g1f3", "b8c6", "d2d4", "e5d4") to "Scotch Game",
-        listOf("e2e4", "e7e5", "g1f3", "b8c6", "b1c3") to "Four Knights Game",
+        listOf("e2e4", "e7e5", "g1f3", "b8c6", "b1c3") to "Three Knights Opening",
         listOf("e2e4", "e7e5", "g1f3", "b8c6", "b1c3", "g8f6") to "Four Knights Game",
         listOf("e2e4", "e7e5", "g1f3", "g8f6") to "Petrov's Defense",
-        listOf("e2e4", "e7e5", "g1f3", "g8f6", "f3e5") to "Petrov's Defense: Classical Attack",
+        listOf("e2e4", "e7e5", "g1f3", "g8f6", "f3e5") to "Petrov's Defense",
+        listOf("e2e4", "e7e5", "g1f3", "g8f6", "f3e5", "d7d6", "e5f3", "f6e4", "d2d4") to "Petrov's Defense: Classical Attack",
         listOf("e2e4", "e7e5", "g1f3", "d7d6") to "Philidor Defense",
         listOf("e2e4", "e7e5", "f1c4") to "Bishop's Opening",
         listOf("e2e4", "e7e5", "b1c3") to "Vienna Game",
@@ -44,12 +46,14 @@ object OpeningBook {
         listOf("e2e4", "c7c5", "g1f3") to "Sicilian Defense: Open",
         listOf("e2e4", "c7c5", "g1f3", "d7d6") to "Sicilian Defense: Open",
         listOf("e2e4", "c7c5", "g1f3", "d7d6", "d2d4") to "Sicilian Defense: Open",
-        listOf("e2e4", "c7c5", "g1f3", "d7d6", "d2d4", "c5d4", "f3d4", "g8f6", "b1c3") to "Sicilian Defense: Najdorf Variation",
+        listOf("e2e4", "c7c5", "g1f3", "d7d6", "d2d4", "c5d4", "f3d4", "g8f6", "b1c3") to "Sicilian Defense: Open",
         listOf("e2e4", "c7c5", "g1f3", "d7d6", "d2d4", "c5d4", "f3d4", "g8f6", "b1c3", "a7a6") to "Sicilian Defense: Najdorf Variation",
+        listOf("e2e4", "c7c5", "g1f3", "d7d6", "d2d4", "c5d4", "f3d4", "g8f6", "b1c3", "b8c6") to "Sicilian Defense: Classical Variation",
+        listOf("e2e4", "c7c5", "g1f3", "d7d6", "d2d4", "c5d4", "f3d4", "g8f6", "b1c3", "e7e6") to "Sicilian Defense: Scheveningen Variation",
         listOf("e2e4", "c7c5", "g1f3", "b8c6") to "Sicilian Defense: Old Sicilian",
         listOf("e2e4", "c7c5", "g1f3", "e7e6") to "Sicilian Defense: French Variation",
         listOf("e2e4", "c7c5", "g1f3", "e7e6", "d2d4", "c5d4", "f3d4", "a7a6") to "Sicilian Defense: Paulsen Variation",
-        listOf("e2e4", "c7c5", "g1f3", "e7e6", "d2d4", "c5d4", "f3d4", "g8f6", "b1c3", "b8c6") to "Sicilian Defense: Scheveningen Variation",
+        listOf("e2e4", "c7c5", "g1f3", "e7e6", "d2d4", "c5d4", "f3d4", "g8f6", "b1c3", "b8c6") to "Sicilian Defense: Four Knights Variation",
         listOf("e2e4", "c7c5", "b1c3") to "Sicilian Defense: Closed",
         listOf("e2e4", "c7c5", "c2c3") to "Sicilian Defense: Alapin Variation",
         listOf("e2e4", "c7c5", "d2d4") to "Sicilian Defense: Smith-Morra Gambit",
@@ -70,18 +74,20 @@ object OpeningBook {
         listOf("e2e4", "c7c6") to "Caro-Kann Defense",
         listOf("e2e4", "c7c6", "d2d4") to "Caro-Kann Defense",
         listOf("e2e4", "c7c6", "d2d4", "d7d5") to "Caro-Kann Defense",
-        listOf("e2e4", "c7c6", "d2d4", "d7d5", "b1c3") to "Caro-Kann Defense: Classical Variation",
-        listOf("e2e4", "c7c6", "d2d4", "d7d5", "b1c3", "d5e4", "c3e4") to "Caro-Kann Defense: Classical Variation",
+        listOf("e2e4", "c7c6", "d2d4", "d7d5", "b1c3") to "Caro-Kann Defense",
+        listOf("e2e4", "c7c6", "d2d4", "d7d5", "b1c3", "d5e4", "c3e4") to "Caro-Kann Defense",
+        listOf("e2e4", "c7c6", "d2d4", "d7d5", "b1c3", "d5e4", "c3e4", "c8f5") to "Caro-Kann Defense: Classical Variation",
         listOf("e2e4", "c7c6", "d2d4", "d7d5", "e4e5") to "Caro-Kann Defense: Advance Variation",
         listOf("e2e4", "c7c6", "d2d4", "d7d5", "e4d5") to "Caro-Kann Defense: Exchange Variation",
-        listOf("e2e4", "c7c6", "d2d4", "d7d5", "b1d2") to "Caro-Kann Defense: Two Knights Variation",
+        listOf("e2e4", "c7c6", "d2d4", "d7d5", "b1d2") to "Caro-Kann Defense: Modern Variation",
 
         // Pirc Defense (1.e4 d6)
         listOf("e2e4", "d7d6") to "Pirc Defense",
         listOf("e2e4", "d7d6", "d2d4") to "Pirc Defense",
         listOf("e2e4", "d7d6", "d2d4", "g8f6") to "Pirc Defense",
-        listOf("e2e4", "d7d6", "d2d4", "g8f6", "b1c3") to "Pirc Defense: Classical Variation",
-        listOf("e2e4", "d7d6", "d2d4", "g8f6", "b1c3", "g7g6") to "Pirc Defense: Classical Variation",
+        listOf("e2e4", "d7d6", "d2d4", "g8f6", "b1c3") to "Pirc Defense",
+        listOf("e2e4", "d7d6", "d2d4", "g8f6", "b1c3", "g7g6") to "Pirc Defense",
+        listOf("e2e4", "d7d6", "d2d4", "g8f6", "b1c3", "g7g6", "g1f3") to "Pirc Defense: Classical Variation",
 
         // Scandinavian Defense (1.e4 d5)
         listOf("e2e4", "d7d5") to "Scandinavian Defense",
@@ -102,7 +108,8 @@ object OpeningBook {
         listOf("d2d4", "d7d5", "c2c4", "e7e6") to "Queen's Gambit Declined",
         listOf("d2d4", "d7d5", "c2c4", "e7e6", "b1c3") to "Queen's Gambit Declined",
         listOf("d2d4", "d7d5", "c2c4", "e7e6", "b1c3", "g8f6") to "Queen's Gambit Declined",
-        listOf("d2d4", "d7d5", "c2c4", "e7e6", "b1c3", "g8f6", "c1g5") to "Queen's Gambit Declined: Orthodox Defense",
+        listOf("d2d4", "d7d5", "c2c4", "e7e6", "b1c3", "g8f6", "c1g5") to "Queen's Gambit Declined",
+        listOf("d2d4", "d7d5", "c2c4", "e7e6", "b1c3", "g8f6", "c1g5", "f8e7", "e2e3", "e8g8", "g1f3", "b8d7") to "Queen's Gambit Declined: Orthodox Defense",
         listOf("d2d4", "d7d5", "c2c4", "c7c6") to "Slav Defense",
         listOf("d2d4", "d7d5", "c2c4", "c7c6", "g1f3") to "Slav Defense",
         listOf("d2d4", "d7d5", "c2c4", "c7c6", "g1f3", "g8f6") to "Slav Defense",
@@ -123,12 +130,13 @@ object OpeningBook {
         listOf("d2d4", "g8f6", "c2c4", "g7g6") to "King's Indian Defense",
         listOf("d2d4", "g8f6", "c2c4", "g7g6", "b1c3") to "King's Indian Defense",
         listOf("d2d4", "g8f6", "c2c4", "g7g6", "b1c3", "f8g7") to "King's Indian Defense",
-        listOf("d2d4", "g8f6", "c2c4", "g7g6", "b1c3", "f8g7", "e2e4") to "King's Indian Defense: Classical Variation",
-        listOf("d2d4", "g8f6", "c2c4", "g7g6", "b1c3", "f8g7", "e2e4", "d7d6") to "King's Indian Defense: Classical Variation",
+        listOf("d2d4", "g8f6", "c2c4", "g7g6", "b1c3", "f8g7", "e2e4") to "King's Indian Defense",
+        listOf("d2d4", "g8f6", "c2c4", "g7g6", "b1c3", "f8g7", "e2e4", "d7d6") to "King's Indian Defense",
+        listOf("d2d4", "g8f6", "c2c4", "g7g6", "b1c3", "f8g7", "e2e4", "d7d6", "g1f3", "e8g8", "f1e2", "e7e5") to "King's Indian Defense: Classical Variation",
         listOf("d2d4", "g8f6", "c2c4", "g7g6", "b1c3", "d7d5") to "Grunfeld Defense",
         listOf("d2d4", "g8f6", "c2c4", "g7g6", "b1c3", "d7d5", "c4d5") to "Grunfeld Defense: Exchange Variation",
         listOf("d2d4", "g8f6", "c2c4", "c7c5") to "Benoni Defense",
-        listOf("d2d4", "g8f6", "c2c4", "c7c5", "d4d5") to "Modern Benoni",
+        listOf("d2d4", "g8f6", "c2c4", "c7c5", "d4d5") to "Benoni Defense",
         listOf("d2d4", "g8f6", "c2c4", "c7c5", "d4d5", "e7e6") to "Modern Benoni",
         listOf("d2d4", "g8f6", "g1f3") to "Indian Game",
         listOf("d2d4", "g8f6", "c1f4") to "London System",
@@ -137,7 +145,8 @@ object OpeningBook {
         // Dutch Defense (1.d4 f5)
         listOf("d2d4", "f7f5") to "Dutch Defense",
         listOf("d2d4", "f7f5", "c2c4") to "Dutch Defense",
-        listOf("d2d4", "f7f5", "g2g3") to "Dutch Defense: Leningrad Variation",
+        listOf("d2d4", "f7f5", "g2g3") to "Dutch Defense",
+        listOf("d2d4", "f7f5", "c2c4", "g8f6", "g2g3", "g7g6") to "Dutch Defense: Leningrad Variation",
 
         // English Opening (1.c4)
         listOf("c2c4") to "English Opening",
@@ -201,7 +210,8 @@ object OpeningBook {
     fun getOpeningName(moves: List<String>, upToIndex: Int = moves.size - 1): String? {
         if (upToIndex < 0 || moves.isEmpty()) return null
 
-        val sequenceLength = upToIndex + 1
+        // An index past the end of the game means the whole game.
+        val sequenceLength = minOf(upToIndex + 1, moves.size)
 
         for ((moveSeq, name) in sortedOpenings) {
             if (moveSeq.size > sequenceLength) continue

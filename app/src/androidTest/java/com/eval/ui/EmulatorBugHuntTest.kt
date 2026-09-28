@@ -18,6 +18,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.*
@@ -27,6 +28,8 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class EmulatorBugHuntTest {
+    @Before fun requireStockfish() = TestEnvironment.assumeStockfishInstalled()
+
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val prefs = context.getSharedPreferences(SettingsPreferences.PREFS_NAME, Context.MODE_PRIVATE)
     private lateinit var previousSettings: String
@@ -181,7 +184,7 @@ class EmulatorBugHuntTest {
 
             1. d4 {[%clk 0:05:00]} d5 1/2-1/2
         """.trimIndent()
-        val storage = GameStorageManager(prefs, com.google.gson.Gson())
+        val storage = GameStorageManager.create(context, com.google.gson.Gson())
         onUi { vm.loadGamesFromPgnContent(draw) }
         await("Draw analysed and saved") {
             vm.uiState.value.currentStage == AnalysisStage.MANUAL && vm.uiState.value.stockfishReady &&
@@ -194,6 +197,10 @@ class EmulatorBugHuntTest {
         }
         onUi {
             vm.showAnalysedGames()
+        }
+        // The list is read off the main thread.
+        await("Analysed games listed") { vm.uiState.value.analysedGamesList.any { it.pgn == draw } }
+        onUi {
             vm.selectAnalysedGame(vm.uiState.value.analysedGamesList.first { it.pgn == draw })
         }
         await("Selected draw has live analysis") {
@@ -243,8 +250,8 @@ class EmulatorBugHuntTest {
         await("Opening name for e4") { vm.uiState.value.currentOpeningName == "King's Pawn Opening" }
         await("Opening lookup during live analysis") {
             val state = vm.uiState.value
-            (state.openingExplorerData != null ||
-                state.openingExplorerError == "Lichess requires authentication for opening statistics.") &&
+            // Statistics need a personal Lichess token; without one the reason is shown instead.
+            (state.openingExplorerData != null || state.openingExplorerError != null) &&
                 state.analysisResult?.fen == state.currentBoard.getFen()
         }
         assertFalse(vm.uiState.value.openingExplorerLoading)
@@ -324,7 +331,7 @@ class EmulatorBugHuntTest {
         @Suppress("DEPRECATION")
         val pgn = sent!!.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!.getStringExtra(Intent.EXTRA_TEXT)!!
         assertEquals(listOf("e4", "e5", "Nf3", "Nc6"), com.eval.chess.PgnParser.parseMoves(pgn))
-        assertEquals("Italian Game / Ruy Lopez Setup", com.eval.chess.PgnParser.parseHeaders(pgn)["Opening"])
+        assertEquals("King's Knight Opening: Normal Variation", com.eval.chess.PgnParser.parseHeaders(pgn)["Opening"])
         onUi {
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
             val previous = clipboard.primaryClip
@@ -422,7 +429,8 @@ class EmulatorBugHuntTest {
             assertTrue(vm.startFromFen(fen))
             assertFalse(vm.startFromFen("invalid"))
             assertEquals(fen, vm.uiState.value.currentBoard.getFen())
-            assertEquals("Invalid FEN position", vm.uiState.value.errorMessage)
+            // The message now also says why the FEN was rejected.
+            assertTrue(vm.uiState.value.errorMessage.orEmpty().startsWith("Invalid FEN position"))
             vm.loadGamesFromPgnContent(sample.replace("Nf3", "nonsense"))
             assertEquals(listOf("e4", "e5"), vm.uiState.value.moves)
             assertTrue(vm.uiState.value.errorMessage.orEmpty().contains("nonsense"))
@@ -441,12 +449,10 @@ class EmulatorBugHuntTest {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
         var state = vm.uiState.value
         val sent = java.util.concurrent.atomic.AtomicReference<Intent>()
-        val wrapper = object : ContextWrapper(context) {
-            override fun startActivity(intent: Intent) { sent.set(intent) }
-        }
         try {
             val exporter = ExportShareManager({ state }, { state = it(state) }, scope)
-            onUi { exporter.exportAsGif(wrapper) }
+            scope.launch { exporter.shareRequests.collect { sent.set(it) } }
+            onUi { exporter.exportAsGif(context) }
             await("GIF export") { sent.get() != null || state.errorMessage != null }
             assertNull(state.errorMessage)
             val chooser = requireNotNull(sent.get())
@@ -459,11 +465,15 @@ class EmulatorBugHuntTest {
             assertEquals("GIF89a", data.take(6).map { it.toInt().toChar() }.joinToString(""))
             val movie = Movie.decodeByteArray(data, 0, data.size)
             assertNotNull(movie)
-            assertTrue(movie.width() > 0 && movie.duration() >= 3000)
+            // Every annotated frame, including the start position, is board plus annotation bar.
+            assertEquals(420, movie.width())
+            assertEquals(430, movie.height())
+            assertTrue(movie.duration() >= 3000)
         } finally { scope.cancel() }
     }
 
     @Test fun public_games_can_be_retrieved_from_lichess() = runBlocking {
+        TestEnvironment.assumeNetwork()
         val result = ChessRepository().getLichessGames("DrNykterstein", 1)
         assertTrue("Lichess: $result", result is Result.Success)
         val games = (result as Result.Success).data

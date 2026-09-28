@@ -25,6 +25,7 @@ import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import kotlinx.coroutines.delay
+import com.eval.data.AppSignerTrust
 
 /**
  * Main game screen content composable that handles game display.
@@ -51,6 +52,16 @@ fun GameScreenContent(
             onInstalled = {
                 viewModel.initializeStockfish()
             }
+        )
+        return
+    }
+
+    // The Stockfish app is now signed by someone else than before: ask before running its binary.
+    uiState.untrustedAppPackage?.let { packageName ->
+        AppSignerChangedScreen(
+            packageName = packageName,
+            onTrust = { viewModel.trustChangedApp() },
+            onExit = { (context as? Activity)?.finish() }
         )
         return
     }
@@ -118,7 +129,7 @@ fun GameScreenContent(
         AiAppNotInstalledDialog(
             onDismiss = { viewModel.hideAiAppNotInstalledDialog() },
             onInstallClick = {
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=com.ai"))
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(AI_APP_PROJECT_URL))
                 context.startActivity(intent)
             },
             onDontAskAgain = { viewModel.setAiAppDontAskAgain() }
@@ -152,6 +163,7 @@ fun GameScreenContent(
             hasMoreGames = uiState.playerGamesHasMore,
             onNextPage = { pageSize -> viewModel.nextPlayerGamesPage(pageSize) },
             onPreviousPage = { viewModel.previousPlayerGamesPage() },
+            onPageClamped = { page -> viewModel.setPlayerGamesPage(page) },
             onGameSelected = { game -> viewModel.selectGameFromPlayerInfo(game) },
             onAiReportsClick = {
                 uiState.playerInfo?.let { info ->
@@ -162,7 +174,7 @@ fun GameScreenContent(
                     viewModel.requestPlayerAiReport(info.username, serverName)
                 }
             },
-            hasAiApiKeys = viewModel.isAiAppInstalled(context),
+            hasAiApiKeys = uiState.aiAppInstalled,
             onDismiss = { viewModel.dismissPlayerInfo() }
         )
         return
@@ -458,6 +470,51 @@ fun StockfishNotInstalledScreen(
     }
 }
 
+// The companion AI app is distributed by its project, not on Google Play.
+private const val AI_APP_PROJECT_URL = "https://github.com/herbert256/ai"
+
+/**
+ * Blocking screen shown when an app Eval relies on is now signed by a different developer than
+ * the one seen before. Stockfish's binary would run with Eval's own permissions and data.
+ */
+@Composable
+fun AppSignerChangedScreen(
+    packageName: String,
+    onTrust: () -> Unit,
+    onExit: () -> Unit
+) {
+    val appName = if (packageName == AppSignerTrust.STOCKFISH_PACKAGE) "Stockfish" else "AI"
+    EvalScreen(
+        backgroundColor = AppColors.CardBackground,
+        topBar = { EvalTitleBar(title = "$appName app changed", onBackClick = onExit, onEvalClick = onExit) }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = "The installed $appName app ($packageName) is signed by a different developer than the one Eval used before.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = Color.White
+            )
+            Text(
+                text = "Eval runs the Stockfish engine with its own permissions, so it only continues when you confirm " +
+                    "that you installed this version yourself. Otherwise, reinstall the original app.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = AppColors.SubtleText
+            )
+            Button(onClick = onTrust, modifier = Modifier.fillMaxWidth()) {
+                Text("I installed it, continue")
+            }
+            OutlinedButton(onClick = onExit, modifier = Modifier.fillMaxWidth()) {
+                Text("Exit")
+            }
+        }
+    }
+}
+
 /**
  * Full-screen view shown when user tries to use AI features without the AI app installed.
  */
@@ -494,7 +551,7 @@ fun AiAppNotInstalledDialog(
         )
 
         Text(
-            text = "Install the AI app from the Google Play Store to enable AI-powered game and player analysis.",
+            text = "Install the companion AI app from its project page to enable AI-powered game and player analysis.",
             style = MaterialTheme.typography.bodySmall,
             color = Color.Gray
         )
@@ -543,7 +600,7 @@ fun AiAppNotInstalledScreen(
     onInstalled: () -> Unit
 ) {
     val context = LocalContext.current
-    val playStoreUrl = "https://play.google.com/store/apps/details?id=com.ai"
+    val playStoreUrl = AI_APP_PROJECT_URL
 
     // Check every 2 seconds if AI app has been installed
     LaunchedEffect(Unit) {
@@ -594,7 +651,7 @@ fun AiAppNotInstalledScreen(
                         textAlign = TextAlign.Center
                     )
 
-                    // Clickable link to Play Store
+                    // Clickable link to the AI app's project page
                     val annotatedText = buildAnnotatedString {
                         append("Install ")
                         pushStringAnnotation(tag = "URL", annotation = playStoreUrl)
@@ -605,7 +662,7 @@ fun AiAppNotInstalledScreen(
                             append("AI App")
                         }
                         pop()
-                        append(" from the Google Play Store for full features.")
+                        append(" from its project page for full features.")
                     }
 
                     ClickableText(

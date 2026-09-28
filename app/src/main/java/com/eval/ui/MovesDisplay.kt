@@ -79,7 +79,7 @@ fun MovesList(
                     // Move number
                     Text(
                         text = "${pairIndex + firstMoveNumber}.",
-                        color = AppColors.DimGray,
+                        color = Color(0xFF9AA4B8),
                         fontFamily = FontFamily.Monospace,
                         fontSize = 15.sp,
                         modifier = Modifier.width(32.dp)
@@ -153,7 +153,7 @@ private fun MoveChip(
     }
 
     val backgroundColor = when {
-        isActive -> MaterialTheme.colorScheme.primary
+        isActive -> Color(0xFF1E6FD9)  // Dark enough for white text (WCAG AA)
         isAnalyzing -> Color(0xFFFFE082) // Light yellow when analyzing
         quality == MoveQuality.BLUNDER -> qualityBackground
         quality == MoveQuality.MISTAKE -> qualityBackground
@@ -194,7 +194,11 @@ private fun MoveChip(
             Text(
                 text = moveText,
                 fontSize = 15.sp,
-                color = if (isActive) Color.White else MaterialTheme.colorScheme.onSurface
+                color = when {
+                    isActive -> Color.White
+                    isAnalyzing -> Color(0xFF1A1A1A)  // Dark text on the yellow highlight
+                    else -> MaterialTheme.colorScheme.onSurface
+                }
             )
 
             // Show quality symbol if available and not NORMAL
@@ -224,10 +228,12 @@ private fun MoveChip(
             // Scores are already stored from WHITE's perspective
             val playerScore = score.score
             val playerMateIn = score.mateIn
+            // Signed, so the score doesn't depend on telling red from green.
             val scoreText = if (score.isMate) {
-                "M${kotlin.math.abs(playerMateIn)}"
+                (if (score.isPositiveMate) "+M" else "-M") + kotlin.math.abs(playerMateIn)
             } else {
-                "%.1f".format(Locale.ROOT, kotlin.math.abs(playerScore))
+                // No "-0.0" for scores that round to zero.
+                "%+.1f".format(Locale.ROOT, kotlin.math.round(playerScore * 10f) / 10f + 0f)
             }
             val scoreColor = when {
                 isActive -> Color.White.copy(alpha = 0.9f)

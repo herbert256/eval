@@ -6,11 +6,16 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.content.FileProvider
 import com.eval.chess.ChessBoard
+import com.eval.chess.PgnParser
+import com.eval.data.LichessGame
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -21,6 +26,22 @@ internal class ExportShareManager(
     private val viewModelScope: CoroutineScope
 ) {
     private var gifExportJob: Job? = null
+    private val pendingShares = Channel<Intent>(Channel.CONFLATED)
+
+    /**
+     * Share chooser intents produced by background exports. The UI collects this
+     * while it is started and launches each intent from its Activity, so a long
+     * export never holds an Activity or starts one from the background.
+     */
+    val shareRequests: Flow<Intent> = pendingShares.receiveAsFlow()
+
+    /** Player names from the Lichess players, then the PGN tags, then the colour. */
+    private fun playerNames(game: LichessGame): Pair<String, String> {
+        val headers by lazy { PgnParser.parseHeaders(game.pgn.orEmpty()) }
+        fun name(user: String?, tag: String) =
+            user?.takeIf { it.isNotBlank() } ?: headers[tag]?.takeIf { it.isNotBlank() && it != "?" } ?: tag
+        return name(game.players.white.user?.name, "White") to name(game.players.black.user?.name, "Black")
+    }
 
     fun showSharePositionDialog() {
         updateUiState { copy(showSharePositionDialog = true) }
@@ -49,7 +70,8 @@ internal class ExportShareManager(
 
         val shareText = buildString {
             if (game != null) {
-                appendLine("${game.players.white.user?.name ?: "White"} vs ${game.players.black.user?.name ?: "Black"}")
+                val (white, black) = playerNames(game)
+                appendLine("$white vs $black")
                 appendLine()
             }
             appendLine("Position: $turn to move (move ${fenFields[5]})")
@@ -89,11 +111,12 @@ internal class ExportShareManager(
         val state = getUiState()
         val game = state.game ?: return
         val pgn = pgnForExport(state) ?: return
+        val (white, black) = playerNames(game)
 
         val sendIntent = Intent().apply {
             action = Intent.ACTION_SEND
             putExtra(Intent.EXTRA_TEXT, pgn)
-            putExtra(Intent.EXTRA_SUBJECT, "Chess Game PGN - ${game.players.white.user?.name} vs ${game.players.black.user?.name}")
+            putExtra(Intent.EXTRA_SUBJECT, "Chess Game PGN - $white vs $black")
             type = "text/plain"
         }
         context.startActivity(Intent.createChooser(sendIntent, "Export PGN"))
@@ -124,8 +147,14 @@ internal class ExportShareManager(
         }
     }
 
+    /**
+     * Render the game as an annotated GIF and publish its share chooser on
+     * [shareRequests]. Only [context]'s application context is kept, so the
+     * export may outlive the calling Activity.
+     */
     fun exportAsGif(context: Context) {
         if (gifExportJob?.isActive == true) return
+        val appContext = context.applicationContext
         val state = getUiState()
         if (state.game == null) return
         val moveDetails = state.moveDetails
@@ -134,6 +163,7 @@ internal class ExportShareManager(
         } else {
             state.previewScores
         }
+        val boardLayout = state.boardLayoutSettings
 
         updateUiState { copy(showGifExportDialog = true, gifExportProgress = 0f) }
 
@@ -154,7 +184,7 @@ internal class ExportShareManager(
 
                 val moves = moveDetails.map { it.san }
                 val file = com.eval.export.GifExporter.exportAsGifWithAnnotations(
-                    context = context,
+                    context = appContext,
                     boards = boards,
                     moves = moves,
                     scores = boardScores,
@@ -167,14 +197,16 @@ internal class ExportShareManager(
                                 } else this
                             }
                         }
-                    }
+                    },
+                    lightSquareColor = boardLayout.whiteSquareColor.toInt(),
+                    darkSquareColor = boardLayout.blackSquareColor.toInt()
                 )
 
                 updateUiState { copy(showGifExportDialog = false, gifExportProgress = null) }
 
                 val uri = FileProvider.getUriForFile(
-                    context,
-                    "${context.packageName}.fileprovider",
+                    appContext,
+                    "${appContext.packageName}.fileprovider",
                     file
                 )
 
@@ -183,7 +215,7 @@ internal class ExportShareManager(
                     putExtra(Intent.EXTRA_STREAM, uri)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
-                context.startActivity(Intent.createChooser(shareIntent, "Share GIF"))
+                pendingShares.trySend(Intent.createChooser(shareIntent, "Share GIF"))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

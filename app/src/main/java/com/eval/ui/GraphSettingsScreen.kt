@@ -6,6 +6,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -35,8 +36,8 @@ fun GraphSettingsScreen(
     val scaleValues = listOf(50, 75, 100, 150, 200, 250, 300)
 
     // Color picker state
-    var activeColorPicker by remember { mutableStateOf<Pair<String, Long>?>(null) }
-    var activeColorCallback by remember { mutableStateOf<((Long) -> Unit)?>(null) }
+    // Only the open picker's title is saved, so it survives rotation; the target is looked up below.
+    var activeColorPicker by rememberSaveable { mutableStateOf<String?>(null) }
 
     fun saveSettings(
         newPlusScoreColor: Long = plusScoreColor,
@@ -63,17 +64,20 @@ fun GraphSettingsScreen(
     }
 
     // Full-screen color picker (early return pattern)
-    activeColorPicker?.let { (title, color) ->
+    val colorTarget: Pair<Long, (Long) -> Unit>? = when (activeColorPicker) {
+        "Plus score color" -> plusScoreColor to { color: Long -> plusScoreColor = color; saveSettings(newPlusScoreColor = color) }
+        "Negative score color" -> negativeScoreColor to { color: Long -> negativeScoreColor = color; saveSettings(newNegativeScoreColor = color) }
+        "Background color" -> backgroundColor to { color: Long -> backgroundColor = color; saveSettings(newBackgroundColor = color) }
+        "Line color in Analyse stage" -> analyseLineColor to { color: Long -> analyseLineColor = color; saveSettings(newAnalyseLineColor = color) }
+        "Vertical line color" -> verticalLineColor to { color: Long -> verticalLineColor = color; saveSettings(newVerticalLineColor = color) }
+        else -> null
+    }
+    if (colorTarget != null) {
         ColorPickerDialog(
-            currentColor = color,
-            title = title,
-            onColorSelected = { newColor ->
-                activeColorCallback?.invoke(newColor)
-            },
-            onDismiss = {
-                activeColorPicker = null
-                activeColorCallback = null
-            }
+            currentColor = colorTarget.first,
+            title = activeColorPicker.orEmpty(),
+            onColorSelected = { newColor -> colorTarget.second(newColor) },
+            onDismiss = { activeColorPicker = null }
         )
         return
     }
@@ -115,11 +119,7 @@ fun GraphSettingsScreen(
                     label = "Plus score color",
                     color = Color(plusScoreColor.toInt()),
                     onClick = {
-                        activeColorPicker = "Plus score color" to plusScoreColor
-                        activeColorCallback = { color ->
-                            plusScoreColor = color
-                            saveSettings(newPlusScoreColor = color)
-                        }
+                        activeColorPicker = "Plus score color"
                     }
                 )
 
@@ -128,11 +128,7 @@ fun GraphSettingsScreen(
                     label = "Negative score color",
                     color = Color(negativeScoreColor.toInt()),
                     onClick = {
-                        activeColorPicker = "Negative score color" to negativeScoreColor
-                        activeColorCallback = { color ->
-                            negativeScoreColor = color
-                            saveSettings(newNegativeScoreColor = color)
-                        }
+                        activeColorPicker = "Negative score color"
                     }
                 )
 
@@ -141,11 +137,7 @@ fun GraphSettingsScreen(
                     label = "Background color",
                     color = Color(backgroundColor.toInt()),
                     onClick = {
-                        activeColorPicker = "Background color" to backgroundColor
-                        activeColorCallback = { color ->
-                            backgroundColor = color
-                            saveSettings(newBackgroundColor = color)
-                        }
+                        activeColorPicker = "Background color"
                     }
                 )
 
@@ -154,11 +146,7 @@ fun GraphSettingsScreen(
                     label = "Line color in Analyse stage",
                     color = Color(analyseLineColor.toInt()),
                     onClick = {
-                        activeColorPicker = "Line color in Analyse stage" to analyseLineColor
-                        activeColorCallback = { color ->
-                            analyseLineColor = color
-                            saveSettings(newAnalyseLineColor = color)
-                        }
+                        activeColorPicker = "Line color in Analyse stage"
                     }
                 )
 
@@ -167,11 +155,7 @@ fun GraphSettingsScreen(
                     label = "Vertical line color",
                     color = Color(verticalLineColor.toInt()),
                     onClick = {
-                        activeColorPicker = "Vertical line color" to verticalLineColor
-                        activeColorCallback = { color ->
-                            verticalLineColor = color
-                            saveSettings(newVerticalLineColor = color)
-                        }
+                        activeColorPicker = "Vertical line color"
                     }
                 )
             }

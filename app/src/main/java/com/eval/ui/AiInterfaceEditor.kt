@@ -18,6 +18,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.Alignment
 
 /** Edit a reusable instruction independently of the system prompt and prompt. */
 @Composable
@@ -51,23 +55,24 @@ fun AiInstructionEditScreen(
     }
 }
 
+/** Inline radio group (the app's selection pattern) with "None" first. */
 @Composable
 internal fun AiPromptSelection(label: String, selectedId: String, entries: List<AiPromptEntry>, onSelect: (String) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
     val selected = entries.find { it.id == selectedId }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    val options = listOf("" to "None") + entries.sortedBy { it.name.lowercase() }.map { it.id to it.name }
+    Column(verticalArrangement = Arrangement.spacedBy(0.dp), modifier = Modifier.selectableGroup()) {
         Text(label, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onBackground)
-        Box {
-            OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()
-                .semantics { contentDescription = "Select $label" }) {
-                Text(selected?.name ?: "None", modifier = Modifier.weight(1f))
-                Text("▾")
-            }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                DropdownMenuItem(text = { Text("None") }, onClick = { onSelect(""); expanded = false })
-                entries.sortedBy { it.name.lowercase() }.forEach { entry ->
-                    DropdownMenuItem(text = { Text(entry.name) }, onClick = { onSelect(entry.id); expanded = false })
-                }
+        options.forEach { (id, name) ->
+            val isSelected = id == (selected?.id ?: "")
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .selectable(selected = isSelected, role = Role.RadioButton, onClick = { onSelect(id) })
+                    .semantics { contentDescription = "$label: $name" }
+            ) {
+                RadioButton(selected = isSelected, onClick = null)
+                Text(name, color = MaterialTheme.colorScheme.onBackground)
             }
         }
         if (selected != null) Text(selected.text, maxLines = 3, style = MaterialTheme.typography.bodySmall, color = AppColors.SubtleText)

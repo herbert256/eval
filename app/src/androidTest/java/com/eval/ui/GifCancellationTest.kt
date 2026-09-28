@@ -1,8 +1,6 @@
 package com.eval.ui
 
 import android.content.Context
-import android.content.ContextWrapper
-import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -34,9 +32,6 @@ class GifCancellationTest {
         val firstFrame = CountDownLatch(1)
         val resumeEncoder = CountDownLatch(1)
         val shared = AtomicBoolean(false)
-        val wrapper = object : ContextWrapper(context) {
-            override fun startActivity(intent: Intent) { shared.set(true) }
-        }
         val directory = File(context.cacheDir, "gif_exports")
         val previousFiles = directory.list()?.toSet().orEmpty()
         val manager = ExportShareManager({ state.value }, { transform ->
@@ -46,20 +41,25 @@ class GifCancellationTest {
                 check(resumeEncoder.await(15, TimeUnit.SECONDS))
             }
         }, scope)
+        val collector = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+        collector.launch { manager.shareRequests.collect { shared.set(true) } }
         try {
-            InstrumentationRegistry.getInstrumentation().runOnMainSync { manager.exportAsGif(wrapper) }
+            InstrumentationRegistry.getInstrumentation().runOnMainSync { manager.exportAsGif(context) }
             assertTrue("Export did not start", firstFrame.await(15, TimeUnit.SECONDS))
             InstrumentationRegistry.getInstrumentation().runOnMainSync { manager.cancelGifExport() }
             resumeEncoder.countDown()
             runBlocking { withTimeout(15000) { scope.coroutineContext[Job]!!.children.toList().joinAll() } }
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync() // let the collector see any request
             assertFalse("Cancelled export opened share chooser", shared.get())
             assertFalse(state.value.showGifExportDialog)
             assertNull(state.value.gifExportProgress)
             assertNull("Cancellation was displayed as an error", state.value.errorMessage)
-            assertEquals("Cancelled export left a file", previousFiles, directory.list()?.toSet().orEmpty())
+            // Earlier exports may be pruned as stale; the cancelled one must not be added.
+            assertEquals("Cancelled export left a file", emptySet<String>(), directory.list()?.toSet().orEmpty() - previousFiles)
         } finally {
             resumeEncoder.countDown()
             scope.cancel()
+            collector.cancel()
             directory.listFiles()?.filter { it.name !in previousFiles }?.forEach { it.delete() }
         }
     }

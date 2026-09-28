@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
+import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.util.Xml
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
@@ -17,6 +18,10 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.io.Writer
+import java.nio.ByteBuffer
+import java.nio.charset.CharacterCodingException
+import java.nio.charset.CodingErrorAction
+import java.util.zip.ZipException
 import java.util.zip.ZipInputStream
 
 /** Extracts inert document content; embedded programs/macros and external XML entities never run. */
@@ -62,6 +67,7 @@ internal class ChessDocumentReader(
         try { onImage(data, type, source) }
         catch (e: CancellationException) { throw e }
         catch (_: Exception) { onWarning("Could not scan an image in $source.") }
+        catch (_: OutOfMemoryError) { onWarning("An image in $source is too large to scan on this device.") }
     }
 
     private suspend fun pdf(data: ByteArray, name: String) {
@@ -118,47 +124,12 @@ internal class ChessDocumentReader(
             }
         } catch (e: CancellationException) { throw e }
         catch (_: Exception) { onWarning("PDF text was read, but some pages could not be rendered for board recognition.") }
+        catch (_: OutOfMemoryError) { onWarning("PDF text was read, but some pages could not be rendered for board recognition.") }
         finally { file.delete() }
     }
 
     private suspend fun archive(data: ByteArray, name: String) {
-        val parts = linkedMapOf<String, ByteArray>()
-        var expanded = 0
-        var count = 0
-        ZipInputStream(data.inputStream()).use { zip ->
-            while (true) {
-                currentCoroutineContext().ensureActive()
-                val entry = zip.nextEntry ?: break
-                if (++count > 512) { onWarning("Read the first 512 document/archive entries."); break }
-                val path = entry.name.replace('\\', '/')
-                require(!path.startsWith('/') && path.split('/').none { it == ".." }) { "This archive contains an unsafe file path." }
-                val keep = !entry.isDirectory && interesting(path)
-                val output = ByteArrayOutputStream()
-                val buffer = ByteArray(16_384)
-                var partTooLarge = false
-                while (true) {
-                    currentCoroutineContext().ensureActive()
-                    val length = zip.read(buffer)
-                    if (length < 0) break
-                    expanded += length
-                    if (expanded > 32_000_000) {
-                        onWarning("Expanded document content was limited to 32 MB; some parts were skipped.")
-                        break
-                    }
-                    if (keep && output.size() + length <= 8_000_000) output.write(buffer, 0, length)
-                    else if (keep) {
-                        onWarning("An archive part exceeds 8 MB and was skipped.")
-                        partTooLarge = true
-                        break
-                    }
-                }
-                // Stop without draining an oversized compressed entry.
-                if (expanded > 32_000_000 || partTooLarge) break
-                if (keep) parts[path] = output.toByteArray()
-                zip.closeEntry()
-            }
-        }
-        require(count > 0) { "This archive is empty or damaged." }
+        val parts = readArchive(data, ::interesting, onWarning)
         val office = parts.keys.any { it.startsWith("word/") || it.startsWith("ppt/") || it.startsWith("xl/") || it == "content.xml" }
         for ((path, bytes) in parts.entries.sortedBy { extension(it.key) in imageExtensions }) {
             currentCoroutineContext().ensureActive()
@@ -235,6 +206,8 @@ internal class ChessDocumentReader(
     private class TextLimit : IOException()
 
     companion object {
+        private const val MAX_FILE_BYTES = 16_000_000
+        private val windows1252 = charset("windows-1252")
         private val imageExtensions = setOf("png", "jpg", "jpeg", "webp", "gif", "bmp", "svg")
         private val textExtensions = setOf("txt", "fen", "pgn", "md", "csv", "tsv", "json", "xml", "log")
         private fun imageType(ext: String) = if (ext == "svg") "image/svg+xml" else if (ext == "jpg") "image/jpeg" else "image/$ext"
@@ -245,12 +218,99 @@ internal class ChessDocumentReader(
         private fun isOle(data: ByteArray) = data.take(8).toByteArray().contentEquals(byteArrayOf(0xd0.toByte(), 0xcf.toByte(), 0x11, 0xe0.toByte(), 0xa1.toByte(), 0xb1.toByte(), 0x1a, 0xe1.toByte()))
         fun isDocument(data: ByteArray, type: String, name: String) = isPdf(data) || isZip(data) || isRtf(data) || isOle(data) ||
             type.contains("pdf") || extension(name) in setOf("pdf", "docx", "docm", "doc", "odt", "ods", "odp", "rtf", "epub", "pptx", "pptm", "ppt", "xlsx", "xlsm", "xls", "zip")
-        fun decodeText(data: ByteArray): String {
+        fun decodeText(data: ByteArray): String = decodeBytes(data).also { text ->
+            require(text.take(4096).none { it == '\u0000' }) { "This file is not a supported text, document or image file." }
+        }
+
+        /**
+         * UTF-16 with a byte-order mark, otherwise strict UTF-8. Malformed UTF-8 falls back to windows-1252,
+         * a superset of the ISO-8859-1 that the PGN standard specifies and older databases use.
+         */
+        fun decodeBytes(data: ByteArray): String {
             val utf16 = data.size >= 2 && ((data[0] == 0xff.toByte() && data[1] == 0xfe.toByte()) ||
                 (data[0] == 0xfe.toByte() && data[1] == 0xff.toByte()))
-            val text = data.toString(if (utf16) Charsets.UTF_16 else Charsets.UTF_8).removePrefix("\uFEFF")
-            require(text.take(4096).none { it == '\u0000' }) { "This file is not a supported text, document or image file." }
-            return text
+            val text = if (utf16) data.toString(Charsets.UTF_16) else try {
+                Charsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(data)).toString()
+            } catch (_: CharacterCodingException) { data.toString(windows1252) }
+            return text.removePrefix("\uFEFF")
+        }
+
+        /**
+         * Bounded ZIP expansion: 512 entries, 32 MB expanded in total and 8 MB per kept part; unsafe paths are
+         * rejected. An oversized part is skipped and later parts are still read while the total budget remains.
+         */
+        suspend fun readArchive(data: ByteArray, keep: (String) -> Boolean, onWarning: suspend (String) -> Unit): Map<String, ByteArray> {
+            val parts = linkedMapOf<String, ByteArray>()
+            var expanded = 0L
+            var count = 0
+            val coroutine = currentCoroutineContext()
+            ZipInputStream(data.inputStream()).use { zip ->
+                entries@ while (true) {
+                    coroutine.ensureActive()
+                    val entry = zip.nextEntry ?: break
+                    if (++count > 512) { onWarning("Read the first 512 document/archive entries."); break }
+                    val path = entry.name.replace('\\', '/')
+                    require(!path.startsWith('/') && path.split('/').none { it == ".." }) { "This archive contains an unsafe file path." }
+                    var output = if (!entry.isDirectory && keep(path)) ByteArrayOutputStream() else null
+                    val buffer = ByteArray(16_384)
+                    while (true) {
+                        coroutine.ensureActive()
+                        val length = zip.read(buffer)
+                        if (length < 0) break
+                        expanded += length
+                        // Stop without draining the rest of an oversized compressed archive.
+                        if (expanded > 32_000_000) {
+                            onWarning("Expanded document content was limited to 32 MB; later parts were skipped.")
+                            break@entries
+                        }
+                        if (output != null && output.size() + length > 8_000_000) {
+                            onWarning("An archive part exceeds 8 MB and was skipped: $path")
+                            output = null
+                        }
+                        output?.write(buffer, 0, length)
+                    }
+                    output?.let { parts[path] = it.toByteArray() }
+                }
+            }
+            require(count > 0) { "This archive is empty or damaged." }
+            return parts
+        }
+
+        /**
+         * Reads a PGN file, or every .pgn file in a ZIP archive (joined by blank lines), for the PGN game list.
+         * Runs on the IO dispatcher and is cancellable. Files are limited to 16 MB and archives to the limits of
+         * [readArchive]; skipped archive parts are reported through [onWarning], on the IO dispatcher. Text is decoded
+         * like [decodeText].
+         * @throws IOException with a message that can be shown to the user when nothing readable was found.
+         */
+        suspend fun readPgnFile(context: Context, uri: Uri, onWarning: (String) -> Unit = {}): String = withContext(Dispatchers.IO) {
+            try {
+                val coroutine = currentCoroutineContext()
+                val data = context.contentResolver.openInputStream(uri)?.use { stream ->
+                    val output = ByteArrayOutputStream()
+                    val buffer = ByteArray(16_384)
+                    while (true) {
+                        coroutine.ensureActive()
+                        val count = stream.read(buffer)
+                        if (count < 0) break
+                        require(output.size() + count <= MAX_FILE_BYTES) { "This file is too large (limit 16 MB)." }
+                        output.write(buffer, 0, count)
+                    }
+                    output.toByteArray()
+                } ?: throw IllegalArgumentException("This file could not be opened. Choose it again.")
+                val text = if (isZip(data)) {
+                    val parts = readArchive(data, { it.lowercase().endsWith(".pgn") }) { onWarning(it) }
+                    require(parts.isNotEmpty()) { "This ZIP archive contains no .pgn files." }
+                    parts.values.joinToString("\n\n") { decodeText(it) }
+                } else decodeText(data)
+                require(text.isNotBlank()) { "This PGN file is empty." }
+                text
+            } catch (e: CancellationException) { throw e }
+            catch (e: IllegalArgumentException) { throw IOException(e.message, e) }
+            catch (e: ZipException) { throw IOException("This ZIP archive is damaged or contains an unsafe file path.", e) }
+            catch (e: OutOfMemoryError) { throw IOException("This file is too large to read on this device.", e) }
+            catch (e: Exception) { throw IOException("This file could not be read. Choose it again.", e) }
         }
     }
 }

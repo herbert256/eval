@@ -6,9 +6,11 @@ import com.eval.chess.ChessBoard
 import com.eval.chess.PieceColor
 import com.eval.data.LichessGame
 import com.eval.data.OpeningBook
+import com.eval.data.Player
 import com.eval.ui.MoveDetails
 import com.eval.ui.MoveQuality
 import com.eval.ui.MoveScore
+import com.eval.ui.gameResultToken
 
 /**
  * Exports games as annotated PGN with evaluations and move quality symbols.
@@ -47,17 +49,23 @@ object PgnExporter {
             openingMoves.add(move.from.toAlgebraic() + move.to.toAlgebraic())
             san
         }
-        val gameOpening = originalHeaders["Opening"] ?: openingName ?: if (startingBoard.getFen() == ChessBoard().getFen()) {
+        // A caller's opening name may really be the ECO code; that belongs in its own tag.
+        val callerOpening = openingName?.takeUnless { ECO_CODE.matches(it) || it == originalHeaders["ECO"] }
+        val gameOpening = originalHeaders["Opening"] ?: callerOpening ?: if (startingBoard.getFen() == ChessBoard().getFen()) {
             OpeningBook.getOpeningName(openingMoves)
         } else null
         val startsWithBlack = startingBoard.getTurn() == PieceColor.BLACK
         val firstMoveNumber = startingBoard.getFen().substringAfterLast(' ').toInt()
+        val result = gameResultToken(game)
         fun tag(name: String, value: String) {
             val escaped = value.replace("\\", "\\\\").replace("\"", "\\\"").replace('\n', ' ').replace('\r', ' ')
             sb.appendLine("[$name \"$escaped\"]")
         }
+        // Lichess AI opponents have no user; the source PGN still names them.
+        fun playerName(player: Player, color: String): String =
+            player.user?.name ?: originalHeaders[color] ?: player.aiLevel?.let { "lichess AI level $it" } ?: "?"
 
-        // PGN Headers
+        // PGN Headers: the Seven Tag Roster first, then the source's other tags.
         val siteName = when (server) {
             ChessServer.LOCAL -> "?"
             ChessServer.LICHESS -> "Lichess.org"
@@ -65,11 +73,14 @@ object PgnExporter {
         tag("Event", originalHeaders["Event"] ?: game.perf ?: "Game")
         tag("Site", originalHeaders["Site"] ?: siteName)
         tag("Date", originalHeaders["Date"] ?: formatDate(game.createdAt))
-        tag("White", game.players.white.user?.name ?: "Unknown")
-        tag("Black", game.players.black.user?.name ?: "Unknown")
-        sb.appendLine("[Result \"${formatResult(game.winner, game.status)}\"]")
-        game.players.white.rating?.let { sb.appendLine("[WhiteElo \"$it\"]") }
-        game.players.black.rating?.let { sb.appendLine("[BlackElo \"$it\"]") }
+        tag("Round", originalHeaders["Round"] ?: "?")
+        tag("White", playerName(game.players.white, "White"))
+        tag("Black", playerName(game.players.black, "Black"))
+        tag("Result", result)
+        (game.players.white.rating?.toString() ?: originalHeaders["WhiteElo"])?.let { tag("WhiteElo", it) }
+        (game.players.black.rating?.toString() ?: originalHeaders["BlackElo"])?.let { tag("BlackElo", it) }
+        // Titles, time control, ECO, termination, UTC date and the like are carried through unchanged.
+        originalHeaders.filterKeys { it !in REWRITTEN_TAGS }.forEach { (name, value) -> tag(name, value) }
         gameOpening?.let { tag("Opening", it) }
         if (originalHeaders["FEN"] != null) {
             tag("SetUp", "1")
@@ -80,6 +91,7 @@ object PgnExporter {
 
         // Moves with annotations
         val moves = mutableListOf<String>()
+        var previousHasComment = false
 
         for (i in moveDetails.indices) {
             val detail = moveDetails[i]
@@ -89,10 +101,10 @@ object PgnExporter {
 
             val moveText = StringBuilder()
 
-            // Add move number
+            // Add move number; Black's move needs its own number after a comment.
             if (isWhite) {
                 moveText.append("$moveNum. ")
-            } else if (i == 0 || moves.isEmpty()) {
+            } else if (i == 0 || moves.isEmpty() || previousHasComment) {
                 moveText.append("$moveNum... ")
             }
 
@@ -124,6 +136,7 @@ object PgnExporter {
                 moveText.append(" {[%clk $clock]}")
             }
 
+            previousHasComment = score != null || detail.clockTime != null
             moves.add(moveText.toString())
         }
 
@@ -145,24 +158,23 @@ object PgnExporter {
         }
 
         // Add result
-        sb.append(" ${formatResult(game.winner, game.status)}")
+        sb.append(" $result")
         sb.appendLine()
 
         return sb.toString()
     }
 
+    private val ECO_CODE = Regex("[A-E][0-9]{2}")
+
+    /** Tags written from the game data above, or recomputed for the exported moves. */
+    private val REWRITTEN_TAGS = setOf(
+        "Event", "Site", "Date", "Round", "White", "Black", "Result", "WhiteElo", "BlackElo",
+        "Opening", "SetUp", "FEN", "Annotator", "PlyCount"
+    )
+
     private fun formatDate(timestamp: Long?): String {
         if (timestamp == null) return "????.??.??"
         val date = java.text.SimpleDateFormat("yyyy.MM.dd", java.util.Locale.US)
         return date.format(java.util.Date(timestamp))
-    }
-
-    private fun formatResult(winner: String?, status: String?): String {
-        return when {
-            winner == "white" -> "1-0"
-            winner == "black" -> "0-1"
-            status == "draw" || status == "stalemate" || status == "1/2-1/2" -> "1/2-1/2"
-            else -> "*"
-        }
     }
 }

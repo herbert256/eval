@@ -1,5 +1,6 @@
 package com.eval.data
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.core.content.IntentCompat
@@ -14,6 +15,20 @@ internal data class SharedChessInput(
     val mimeType: String? = null,
     val warnings: List<String> = emptyList()
 ) {
+    /**
+     * Drops URIs served by Eval's own FileProvider: another app must not make Eval re-read its private files.
+     * Apply to shares and system clipboard items only; Eval's saved clipboard attachments use that provider too.
+     */
+    fun withoutOwnFiles(context: Context): SharedChessInput {
+        val own = "${context.packageName}.fileprovider"
+        // A "user@" prefix still reaches the same provider.
+        val (rejected, kept) = streams.partition {
+            it.scheme.equals("content", true) && it.authority?.substringAfterLast('@').equals(own, true)
+        }
+        return if (rejected.isEmpty()) this
+            else copy(streams = kept, warnings = (warnings + "A file from Eval's own storage was ignored.").distinct())
+    }
+
     companion object {
         const val MAX_ITEMS = 20
         const val MAX_TEXT = 2_000_000

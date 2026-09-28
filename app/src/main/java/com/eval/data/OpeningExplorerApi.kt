@@ -2,6 +2,7 @@ package com.eval.data
 
 import retrofit2.Response
 import retrofit2.http.GET
+import retrofit2.http.Header
 import retrofit2.http.Query
 
 /**
@@ -50,6 +51,7 @@ interface OpeningExplorerApi {
     @GET("lichess")
     suspend fun getLichessOpeningExplorer(
         @Query("fen") fen: String,
+        @Header("Authorization") authorization: String,
         @Query("speeds") speeds: String = "bullet,blitz,rapid,classical",
         @Query("ratings") ratings: String = "1600,1800,2000,2200,2500"
     ): Response<OpeningExplorerResponse>

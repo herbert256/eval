@@ -31,40 +31,31 @@ object AiAppLauncher {
     private const val AI_APP_ACTION = "com.ai.ACTION_NEW_REPORT"
     private const val AI_APP_PACKAGE = "com.ai"
 
-    // Optional SHA-256 fingerprint (colon-separated, uppercase) of the com.ai signing
-    // certificate. Leave empty to trust any installation. When set, the launcher
-    // refuses to send data to a package whose signer does not match.
-    // To obtain the fingerprint, run the app once with this empty and copy the value
-    // logged as "observed com.ai signature: ...".
+    // Optional SHA-256 fingerprint (colon-separated or plain hex) of the com.ai signing
+    // certificate. When set, the launcher refuses to send data to a package whose signers
+    // don't include it. Without it, AppSignerTrust still pins the first signer it sees.
     private const val AI_APP_SIGNATURE_SHA256 = ""
 
-    private fun observedSignatureSha256(context: Context): String? {
+    private fun isSignerTrusted(context: Context): Boolean {
+        if (AI_APP_SIGNATURE_SHA256.isBlank()) return true
+        val expected = AI_APP_SIGNATURE_SHA256.replace(":", "").trim().chunked(2)
+            .map { it.toInt(16).toByte() }.toByteArray()
         return try {
             val pm = context.packageManager
-            @Suppress("DEPRECATION")
-            val signatures = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-                val info = pm.getPackageInfo(AI_APP_PACKAGE, android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES)
-                info.signingInfo?.let {
-                    if (it.hasMultipleSigners()) it.apkContentsSigners else it.signingCertificateHistory
-                } ?: emptyArray()
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                // Checks every signer and the rotation history, not just the oldest certificate.
+                pm.hasSigningCertificate(AI_APP_PACKAGE, expected, android.content.pm.PackageManager.CERT_INPUT_SHA256)
             } else {
+                @Suppress("DEPRECATION")
                 pm.getPackageInfo(AI_APP_PACKAGE, android.content.pm.PackageManager.GET_SIGNATURES).signatures
-                    ?: emptyArray()
+                    .orEmpty().any {
+                        java.security.MessageDigest.getInstance("SHA-256").digest(it.toByteArray()).contentEquals(expected)
+                    }
             }
-            if (signatures.isEmpty()) return null
-            val digest = java.security.MessageDigest.getInstance("SHA-256").digest(signatures[0].toByteArray())
-            digest.joinToString(":") { "%02X".format(it) }
         } catch (e: Exception) {
             Log.w("AiAppLauncher", "failed to read signature: ${e.message}")
-            null
+            false
         }
-    }
-
-    private fun isSignerTrusted(context: Context): Boolean {
-        val observed = observedSignatureSha256(context)
-        if (observed != null) Log.i("AiAppLauncher", "observed com.ai signature: $observed")
-        if (AI_APP_SIGNATURE_SHA256.isBlank()) return true
-        return observed != null && observed.equals(AI_APP_SIGNATURE_SHA256.trim(), ignoreCase = true)
     }
 
     /**
@@ -267,9 +258,13 @@ object AiAppLauncher {
         val toMoveHtml = "<div style=\"text-align:center;padding:6px 12px;color:#ccc;font-size:18px;\">$toMoveText</div>"
 
         // Compact HTML without extra whitespace
-        return "<link rel=\"stylesheet\" href=\"https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css\">" +
-            "<script src=\"https://code.jquery.com/jquery-3.7.1.min.js\"></script>" +
-            "<script src=\"https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js\"></script>" +
+        // Subresource integrity: a changed CDN file is refused instead of running in the report.
+        return "<link rel=\"stylesheet\" href=\"https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css\" " +
+            "integrity=\"sha384-q94+BZtLrkL1/ohfjR8c6L+A6qzNH9R2hBLwyoAfu3i/WCvQjzL2RQJ3uNHDISdU\" crossorigin=\"anonymous\">" +
+            "<script src=\"https://code.jquery.com/jquery-3.7.1.min.js\" " +
+            "integrity=\"sha384-1H217gwSVyLSIfaLxHbE7dRb3v4mYCKbpQvzx0cegeju1MVsGrX5xXxAvs/HgeFs\" crossorigin=\"anonymous\"></script>" +
+            "<script src=\"https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js\" " +
+            "integrity=\"sha384-8Vi8VHwn3vjQ9eUHUxex3JSN/NFqUg3QbPyX8kWyb93+8AC/pPWTzj+nHtbC5bxD\" crossorigin=\"anonymous\"></script>" +
             "<div style=\"max-width:400px;margin:20px auto;\">" +
             lastMoveHtml +
             "<div style=\"background:#333;color:white;padding:8px 12px;font-weight:bold;text-align:center;\">${topPlayer.htmlEscape()}</div>" +

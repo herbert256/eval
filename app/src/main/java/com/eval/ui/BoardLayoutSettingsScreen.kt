@@ -6,11 +6,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.semantics.Role
 
 /**
  * Board layout settings screen for configuring chess board appearance.
@@ -37,8 +40,8 @@ fun BoardLayoutSettingsScreen(
     var evalBarRange by remember { mutableStateOf(boardLayoutSettings.evalBarRange) }
 
     // Color picker state: pair of (title, currentColor) and callback
-    var activeColorPicker by remember { mutableStateOf<Pair<String, Long>?>(null) }
-    var activeColorCallback by remember { mutableStateOf<((Long) -> Unit)?>(null) }
+    // Only the open picker's title is saved, so it survives rotation; the target is looked up below.
+    var activeColorPicker by rememberSaveable { mutableStateOf<String?>(null) }
 
     fun saveSettings(
         newShowCoordinates: Boolean = showCoordinates,
@@ -71,17 +74,21 @@ fun BoardLayoutSettingsScreen(
     }
 
     // Full-screen color picker (early return pattern)
-    activeColorPicker?.let { (title, color) ->
+    val colorTarget: Pair<Long, (Long) -> Unit>? = when (activeColorPicker) {
+        "White squares color" -> whiteSquareColor to { color: Long -> whiteSquareColor = color; saveSettings(newWhiteSquareColor = color) }
+        "Black squares color" -> blackSquareColor to { color: Long -> blackSquareColor = color; saveSettings(newBlackSquareColor = color) }
+        "White pieces color" -> whitePieceColor to { color: Long -> whitePieceColor = color; saveSettings(newWhitePieceColor = color) }
+        "Black pieces color" -> blackPieceColor to { color: Long -> blackPieceColor = color; saveSettings(newBlackPieceColor = color) }
+        "Evaluation bar color 1 (score)" -> evalBarColor1 to { color: Long -> evalBarColor1 = color; saveSettings(newEvalBarColor1 = color) }
+        "Evaluation bar color 2 (filler)" -> evalBarColor2 to { color: Long -> evalBarColor2 = color; saveSettings(newEvalBarColor2 = color) }
+        else -> null
+    }
+    if (colorTarget != null) {
         ColorPickerDialog(
-            currentColor = color,
-            title = title,
-            onColorSelected = { newColor ->
-                activeColorCallback?.invoke(newColor)
-            },
-            onDismiss = {
-                activeColorPicker = null
-                activeColorCallback = null
-            }
+            currentColor = colorTarget.first,
+            title = activeColorPicker.orEmpty(),
+            onColorSelected = { newColor -> colorTarget.second(newColor) },
+            onDismiss = { activeColorPicker = null }
         )
         return
     }
@@ -137,15 +144,17 @@ fun BoardLayoutSettingsScreen(
                 }
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    RadioButton(
+                    // The row is the radio button: TalkBack reads its label and tapping the label selects it.
+                    modifier = Modifier.weight(1f).selectable(
                         selected = playerBarMode == mode,
+                        role = Role.RadioButton,
                         onClick = {
                             playerBarMode = mode
                             saveSettings(newPlayerBarMode = mode)
                         }
                     )
+                ) {
+                    RadioButton(selected = playerBarMode == mode, onClick = null)
                     Text(label, color = Color.White)
                 }
             }
@@ -170,11 +179,7 @@ fun BoardLayoutSettingsScreen(
             label = "White squares color",
             color = Color(whiteSquareColor.toInt()),
             onClick = {
-                activeColorPicker = "White squares color" to whiteSquareColor
-                activeColorCallback = { color ->
-                    whiteSquareColor = color
-                    saveSettings(newWhiteSquareColor = color)
-                }
+                activeColorPicker = "White squares color"
             }
         )
 
@@ -183,11 +188,7 @@ fun BoardLayoutSettingsScreen(
             label = "Black squares color",
             color = Color(blackSquareColor.toInt()),
             onClick = {
-                activeColorPicker = "Black squares color" to blackSquareColor
-                activeColorCallback = { color ->
-                    blackSquareColor = color
-                    saveSettings(newBlackSquareColor = color)
-                }
+                activeColorPicker = "Black squares color"
             }
         )
 
@@ -198,11 +199,7 @@ fun BoardLayoutSettingsScreen(
             label = "White pieces color",
             color = Color(whitePieceColor.toInt()),
             onClick = {
-                activeColorPicker = "White pieces color" to whitePieceColor
-                activeColorCallback = { color ->
-                    whitePieceColor = color
-                    saveSettings(newWhitePieceColor = color)
-                }
+                activeColorPicker = "White pieces color"
             }
         )
 
@@ -211,11 +208,7 @@ fun BoardLayoutSettingsScreen(
             label = "Black pieces color",
             color = Color(blackPieceColor.toInt()),
             onClick = {
-                activeColorPicker = "Black pieces color" to blackPieceColor
-                activeColorCallback = { color ->
-                    blackPieceColor = color
-                    saveSettings(newBlackPieceColor = color)
-                }
+                activeColorPicker = "Black pieces color"
             }
         )
 
@@ -253,15 +246,17 @@ fun BoardLayoutSettingsScreen(
                         }
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            RadioButton(
+                            // The row is the radio button: TalkBack reads its label and tapping the label selects it.
+                            modifier = Modifier.weight(1f).selectable(
                                 selected = evalBarPosition == pos,
+                                role = Role.RadioButton,
                                 onClick = {
                                     evalBarPosition = pos
                                     saveSettings(newEvalBarPosition = pos)
                                 }
                             )
+                        ) {
+                            RadioButton(selected = evalBarPosition == pos, onClick = null)
                             Text(label, color = Color.White)
                         }
                     }
@@ -274,11 +269,7 @@ fun BoardLayoutSettingsScreen(
                         label = "Color 1 (score)",
                         color = Color(evalBarColor1.toInt()),
                         onClick = {
-                            activeColorPicker = "Evaluation bar color 1 (score)" to evalBarColor1
-                            activeColorCallback = { color ->
-                                evalBarColor1 = color
-                                saveSettings(newEvalBarColor1 = color)
-                            }
+                            activeColorPicker = "Evaluation bar color 1 (score)"
                         }
                     )
 
@@ -287,11 +278,7 @@ fun BoardLayoutSettingsScreen(
                         label = "Color 2 (filler)",
                         color = Color(evalBarColor2.toInt()),
                         onClick = {
-                            activeColorPicker = "Evaluation bar color 2 (filler)" to evalBarColor2
-                            activeColorCallback = { color ->
-                                evalBarColor2 = color
-                                saveSettings(newEvalBarColor2 = color)
-                            }
+                            activeColorPicker = "Evaluation bar color 2 (filler)"
                         }
                     )
 

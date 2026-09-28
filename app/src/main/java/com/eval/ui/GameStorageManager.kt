@@ -1,5 +1,6 @@
 package com.eval.ui
 
+import android.content.Context
 import android.content.SharedPreferences
 import com.eval.data.ChessServer
 import com.eval.data.LichessGame
@@ -10,23 +11,55 @@ import com.google.gson.reflect.TypeToken
 /**
  * Helper class for managing game storage operations via SharedPreferences.
  * Handles storing and loading retrieved games lists and analysed games.
+ *
+ * Games live in their own preferences file ([PREFS_NAME]): they are large, and sharing
+ * a file with the settings made every settings change rewrite megabytes of game JSON.
  */
 class GameStorageManager(
     private val prefs: SharedPreferences,
     private val gson: Gson
 ) {
+    companion object {
+        const val PREFS_NAME = "eval_games"
+        /** Games kept per retrieved account; paging further re-fetches from Lichess. */
+        const val MAX_STORED_GAMES_PER_RETRIEVE = 100
+
+        fun create(context: Context, gson: Gson): GameStorageManager {
+            val games = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            migrateFromSettings(context.getSharedPreferences(SettingsPreferences.PREFS_NAME, Context.MODE_PRIVATE), games)
+            return GameStorageManager(games, gson)
+        }
+
+        /** One-time move of game blobs out of the settings file (older versions stored them there). */
+        internal fun migrateFromSettings(settings: SharedPreferences, games: SharedPreferences) {
+            val legacy = settings.all.filterKeys { SettingsPreferences.isGameStorageKey(it) }
+            if (legacy.isEmpty()) return
+            val editor = games.edit()
+            legacy.forEach { (key, value) -> if (value is String && !games.contains(key)) editor.putString(key, value) }
+            // apply(), not commit(): this runs while the ViewModel is created on the main thread and
+            // the games can be megabytes. Both files are written in order on QueuedWork's single
+            // thread, so the removal below never reaches disk before the copy; if the process dies
+            // in between, the next start finds the keys in both files and only removes them here.
+            editor.apply()
+            settings.edit().apply { legacy.keys.forEach { remove(it) } }.apply()
+        }
+    }
 
     /**
      * Generic helper to load a JSON list from SharedPreferences.
      * Returns emptyList() on missing key or parse failure.
      */
-    private inline fun <reified T> loadJsonList(key: String): List<T> {
+    private inline fun <reified T> loadJsonList(key: String): List<T> = loadJsonListOrNull(key) ?: emptyList()
+
+    /** Like [loadJsonList], but null when the stored JSON exists and can't be read. */
+    private inline fun <reified T> loadJsonListOrNull(key: String): List<T>? {
         val json = prefs.getString(key, null) ?: return emptyList()
         return try {
             val type = object : TypeToken<List<T>>() {}.type
-            gson.fromJson(json, type) ?: emptyList()
+            gson.fromJson<List<T>>(json, type) ?: emptyList()
         } catch (e: Exception) {
-            emptyList()
+            android.util.Log.w("GameStorageManager", "Unreadable stored list $key: ${e.message}")
+            null
         }
     }
 
@@ -77,7 +110,7 @@ class GameStorageManager(
         val editor = prefs.edit()
         for (key in trimmedKeys) editor.remove(key)
         editor.putString(SettingsPreferences.KEY_RETRIEVES_LIST, gson.toJson(retrievesList))
-        editor.putString(getRetrievedGamesKey(username, server), gson.toJson(games))
+        editor.putString(getRetrievedGamesKey(username, server), gson.toJson(games.take(MAX_STORED_GAMES_PER_RETRIEVE)))
         editor.apply()
     }
 
@@ -130,7 +163,6 @@ class GameStorageManager(
     fun saveManualStageGame(analysedGame: AnalysedGame) {
         val json = gson.toJson(analysedGame)
         prefs.edit().putString(SettingsPreferences.KEY_CURRENT_MANUAL_GAME, json).apply()
-        android.util.Log.d("GameStorageManager", "saveManualStageGame: Saved ${analysedGame.whiteName} vs ${analysedGame.blackName}")
     }
 
     /**
@@ -140,9 +172,7 @@ class GameStorageManager(
     fun loadManualStageGame(): AnalysedGame? {
         val json = prefs.getString(SettingsPreferences.KEY_CURRENT_MANUAL_GAME, null) ?: return null
         return try {
-            val game = gson.fromJson(json, AnalysedGame::class.java)
-            android.util.Log.d("GameStorageManager", "loadManualStageGame: Loaded ${game?.whiteName} vs ${game?.blackName}")
-            game
+            gson.fromJson(json, AnalysedGame::class.java)
         } catch (e: Exception) {
             android.util.Log.e("GameStorageManager", "loadManualStageGame: Failed to parse JSON", e)
             null
@@ -154,7 +184,6 @@ class GameStorageManager(
      */
     fun clearManualStageGame() {
         prefs.edit().remove(SettingsPreferences.KEY_CURRENT_MANUAL_GAME).apply()
-        android.util.Log.d("GameStorageManager", "clearManualStageGame: Cleared")
     }
 
     // ============================================================================
@@ -166,7 +195,12 @@ class GameStorageManager(
      * Deduplicates by whiteName+blackName+pgn, adds at front, trims to MAX_MANUAL_GAMES.
      */
     fun storeManualGameToList(analysedGame: AnalysedGame) = synchronized(writeLock) {
-        val list = loadManualGamesList().toMutableList()
+        val key = SettingsPreferences.KEY_LIST_MANUAL_GAMES
+        val list = loadJsonListOrNull<AnalysedGame>(key)?.toMutableList() ?: run {
+            // Never overwrite an unreadable history with a one-game list: keep the raw data aside.
+            prefs.edit().putString("${key}_unreadable_${System.currentTimeMillis()}", prefs.getString(key, null)).apply()
+            mutableListOf()
+        }
         // Remove duplicate (same white, black, pgn)
         list.removeAll {
             it.whiteName == analysedGame.whiteName &&

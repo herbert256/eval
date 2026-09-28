@@ -30,6 +30,8 @@ fun AiSetupScreen(
 ) {
     var page by rememberSaveable { mutableStateOf("setup") }
     var editingId by rememberSaveable { mutableStateOf<String?>(null) }
+    // A copy is only a draft until it is saved; Back discards it.
+    var copyOfId by rememberSaveable { mutableStateOf<String?>(null) }
     val back = {
         when {
             page.endsWith("/edit") -> page = page.removeSuffix("/edit")
@@ -63,15 +65,16 @@ fun AiSetupScreen(
         )
         "instructions" -> AiInstructionsListScreen(
             instructions, back, onBackToGame,
-            onEditInstruction = { editingId = it; page = "instructions/edit" },
-            onAddInstruction = { editingId = null; page = "instructions/edit" },
+            onEditInstruction = { editingId = it; copyOfId = null; page = "instructions/edit" },
+            onAddInstruction = { editingId = null; copyOfId = null; page = "instructions/edit" },
             onCopyInstruction = {
-                val copy = it.copy(id = UUID.randomUUID().toString(), name = it.name + " (copy)")
-                onSaveInstruction(copy); editingId = copy.id; page = "instructions/edit"
+                copyOfId = it.id; editingId = UUID.randomUUID().toString(); page = "instructions/edit"
             }, onDeleteInstruction = onDeleteInstruction
         )
         "instructions/edit" -> AiInstructionEditScreen(
-            existingInstruction = instructions.find { it.id == editingId },
+            existingInstruction = instructions.find { it.id == editingId }
+                ?: copyOfId?.let { source -> instructions.find { it.id == source } }
+                    ?.let { it.copy(id = editingId ?: UUID.randomUUID().toString(), name = it.name + " (copy)") },
             onBackToList = back, onBackToGame = onBackToGame,
             onSave = { onSaveInstruction(it); back() }
         )

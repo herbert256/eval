@@ -2,8 +2,10 @@ package com.eval.ui
 
 import com.eval.chess.ChessBoard
 import com.eval.chess.PieceColor
+import com.eval.stockfish.EngineHistory
 import com.eval.stockfish.StockfishEngine
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
@@ -11,7 +13,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.yield
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.takeWhile
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.atomic.AtomicLong
 
@@ -26,13 +32,54 @@ internal class AnalysisOrchestrator(
     private val viewModelScope: CoroutineScope,
     private val getBoardHistory: () -> MutableList<ChessBoard>,
     private val saveManualGame: (AnalysedGame) -> Unit = {},
-    private val storeManualGameToList: (AnalysedGame) -> Unit = {}
+    private val storeManualGameToList: (AnalysedGame) -> Unit = {},
+    private val getExploringLineHistory: () -> List<ChessBoard> = { emptyList() }
 ) {
     private val analysisMutex = Mutex()
     var autoAnalysisJob: Job? = null
     var manualAnalysisJob: Job? = null
     var currentAnalysisFen: String? = null
     val analysisRequestId = AtomicLong(0)
+
+    // Analysis pauses while Eval is in the background (the engine would otherwise keep
+    // several cores busy for minutes behind other apps).
+    private val foreground = MutableStateFlow(true)
+    private var manualPausedInBackground = false
+
+    fun onAppBackgrounded() {
+        foreground.value = false
+        if (getUiState().currentStage == AnalysisStage.MANUAL && manualAnalysisJob?.isActive == true) {
+            manualPausedInBackground = true
+            analysisRequestId.incrementAndGet()
+            manualAnalysisJob?.cancel()
+            stockfish.stop()
+        }
+    }
+
+    fun onAppForegrounded() {
+        foreground.value = true
+        if (manualPausedInBackground) {
+            manualPausedInBackground = false
+            if (getUiState().currentStage == AnalysisStage.MANUAL) restartAnalysisForExploringLine()
+        }
+    }
+
+    /**
+     * The moves that led to [fen] on the displayed line, so Stockfish can see repetitions
+     * (a FEN alone can't). Null when they aren't known; the engine then gets the FEN only.
+     */
+    fun historyFor(fen: String): EngineHistory? {
+        val state = getUiState()
+        val main = getBoardHistory().let { synchronized(it) { it.toList() } }
+        val boards = if (state.isExploringLine) {
+            val branch = getExploringLineHistory().let { synchronized(it) { it.toList() } }
+            main.take(state.savedGameMoveIndex + 2) + branch.drop(1).take(state.exploringLineMoveIndex + 1)
+        } else {
+            main.take(state.currentMoveIndex + 2)
+        }
+        if (boards.lastOrNull()?.getFen() != fen) return null
+        return EngineHistory.fromBoards(boards)
+    }
 
     fun configureForPreviewStage() {
         val settings = getUiState().stockfishSettings.previewStage
@@ -75,7 +122,7 @@ internal class AnalysisOrchestrator(
                 // A game selected during engine startup must not remain stuck
                 // in Preview. Keep this request queued until initialization ends.
                 if (!stockfish.isReady.value) {
-                    val ready = withTimeoutOrNull(StockfishEngine.READY_TIMEOUT_MS) {
+                    val ready = withTimeoutOrNull(StockfishEngine.STARTUP_TIMEOUT_MS) {
                         stockfish.isReady.first { it }
                     } ?: stockfish.restart()
                     updateUiState { copy(stockfishReady = ready) }
@@ -225,6 +272,8 @@ internal class AnalysisOrchestrator(
 
         for (moveIndex in moveIndices) {
             yield()
+            // Wait while Eval is in the background; the current move's search has finished.
+            foreground.first { it }
 
             if (boardHistory.size != expectedBoardHistorySize) {
                 android.util.Log.e("Analysis", "$stageName EXIT: boardHistory changed")
@@ -246,8 +295,10 @@ internal class AnalysisOrchestrator(
             }
 
             val fen = board.getFen()
+            // Lets the live main-line card follow this search (it matches results by FEN).
+            currentAnalysisFen = fen
 
-            stockfish.analyzeWithTime(fen, timePerMoveMs)
+            stockfish.analyzeWithTime(fen, timePerMoveMs, EngineHistory.fromBoards(boardHistory.take(moveIndex + 2)))
 
             val completed = stockfish.waitForCompletion(timePerMoveMs.toLong() + StockfishEngine.READY_TIMEOUT_MS + 2000)
             if (!completed) {
@@ -263,7 +314,7 @@ internal class AnalysisOrchestrator(
                     configureEngine()
                     delay(100)
 
-                    stockfish.analyzeWithTime(fen, timePerMoveMs)
+                    stockfish.analyzeWithTime(fen, timePerMoveMs, EngineHistory.fromBoards(boardHistory.take(moveIndex + 2)))
                     val retryCompleted = stockfish.waitForCompletion(timePerMoveMs.toLong() + StockfishEngine.READY_TIMEOUT_MS + 2000)
                     if (!retryCompleted) {
                         stockfish.stop()
@@ -334,10 +385,12 @@ internal class AnalysisOrchestrator(
         for (i in 1 until sortedIndices.size) {
             val currentIndex = sortedIndices[i]
             val prevIndex = sortedIndices[i - 1]
-            val currentScore = scores[currentIndex]?.score ?: continue
-            val prevScore = scores[prevIndex]?.score ?: continue
+            val currentScore = scores[currentIndex] ?: continue
+            val prevScore = scores[prevIndex] ?: continue
 
-            val change = kotlin.math.abs(currentScore - prevScore)
+            val change = kotlin.math.abs(
+                MoveQualityThresholds.winningChances(currentScore) - MoveQualityThresholds.winningChances(prevScore)
+            )
             if (change > maxChange) {
                 maxChange = change
                 maxChangeIndex = currentIndex
@@ -351,43 +404,60 @@ internal class AnalysisOrchestrator(
      * Calculate move qualities based on evaluation changes.
      */
     fun calculateMoveQualities(scores: Map<Int, MoveScore> = getMergedScores()): Map<Int, MoveQuality> {
-        if (scores.isEmpty()) return emptyMap()
-
         val qualities = mutableMapOf<Int, MoveQuality>()
-
         for (moveIndex in scores.keys) {
-            val previousPositionIndex = moveIndex - 1
-
-            if (previousPositionIndex < 0) {
+            val current = scores[moveIndex] ?: continue
+            if (moveIndex == 0) {
                 qualities[moveIndex] = MoveQuality.NORMAL
                 continue
             }
-
-            val currentScore = scores[moveIndex]?.score ?: continue
             // Compare the positions immediately before and after this move.
             // Skipping the opponent's move incorrectly attributes its swing to this player.
-            val prevScore = scores[previousPositionIndex]?.score ?: continue
-
-            // Scores are from WHITE's perspective. For move quality:
-            // White move: positive change = good for white (the mover)
-            // Black move: negative change = good for black (the mover)
-            val isWhiteMove = getBoardHistory().getOrNull(moveIndex)?.getTurn() == PieceColor.WHITE
-            val change = currentScore - prevScore
-            val adjustedChange = if (isWhiteMove) change else -change
-
-            val quality = when {
-                adjustedChange <= -MoveQualityThresholds.BLUNDER -> MoveQuality.BLUNDER
-                adjustedChange <= -MoveQualityThresholds.MISTAKE -> MoveQuality.MISTAKE
-                adjustedChange <= -MoveQualityThresholds.DUBIOUS -> MoveQuality.DUBIOUS
-                adjustedChange >= MoveQualityThresholds.BRILLIANT -> MoveQuality.BRILLIANT
-                adjustedChange >= MoveQualityThresholds.GOOD -> MoveQuality.GOOD
-                else -> MoveQuality.NORMAL
-            }
-
-            qualities[moveIndex] = quality
+            val previous = scores[moveIndex - 1] ?: continue
+            qualities[moveIndex] = moveQuality(moveIndex, current, previous)
         }
-
         return qualities
+    }
+
+    /**
+     * Move qualities that only compare scores from the same stage: a 2-second score next to a
+     * 50 ms one differs mostly by search depth. [analyseScores] may already be filled with
+     * preview scores (as stored games are); entries identical to the preview score count as preview.
+     */
+    fun calculateMoveQualities(previewScores: Map<Int, MoveScore>, analyseScores: Map<Int, MoveScore>): Map<Int, MoveQuality> {
+        val deep = analyseScores.filter { (index, score) -> previewScores[index] != score }
+        val qualities = mutableMapOf<Int, MoveQuality>()
+        for (moveIndex in (previewScores.keys + deep.keys)) {
+            if (moveIndex == 0) {
+                qualities[moveIndex] = MoveQuality.NORMAL
+                continue
+            }
+            val pair = listOf(deep, previewScores).firstNotNullOfOrNull { stage ->
+                val current = stage[moveIndex]
+                val previous = stage[moveIndex - 1]
+                if (current != null && previous != null) current to previous else null
+            } ?: continue
+            qualities[moveIndex] = moveQuality(moveIndex, pair.first, pair.second)
+        }
+        return qualities
+    }
+
+    private fun moveQuality(moveIndex: Int, current: MoveScore, previous: MoveScore): MoveQuality {
+        // Scores are from WHITE's perspective; flip them to the mover's.
+        val isWhiteMove = getBoardHistory().getOrNull(moveIndex)?.getTurn() == PieceColor.WHITE
+        val sign = if (isWhiteMove) 1f else -1f
+        val before = sign * MoveQualityThresholds.winningChances(previous)
+        val change = sign * MoveQualityThresholds.winningChances(current) - before
+        return when {
+            change <= -MoveQualityThresholds.BLUNDER -> MoveQuality.BLUNDER
+            change <= -MoveQualityThresholds.MISTAKE -> MoveQuality.MISTAKE
+            change <= -MoveQualityThresholds.DUBIOUS -> MoveQuality.DUBIOUS
+            // Converting an already winning position (for example into a found mate) is not brilliant.
+            before >= 0.5f && change >= MoveQualityThresholds.GOOD -> MoveQuality.GOOD
+            change >= MoveQualityThresholds.BRILLIANT -> MoveQuality.BRILLIANT
+            change >= MoveQualityThresholds.GOOD -> MoveQuality.GOOD
+            else -> MoveQuality.NORMAL
+        }
     }
 
     /**
@@ -400,7 +470,7 @@ internal class AnalysisOrchestrator(
         val state = getUiState()
         val filledAnalyseScores = state.previewScores + state.analyseScores
 
-        val moveQualities = calculateMoveQualities(filledAnalyseScores)
+        val moveQualities = calculateMoveQualities(state.previewScores, state.analyseScores)
         val boardHistory = getBoardHistory()
 
         val previousJob = manualAnalysisJob
@@ -439,11 +509,7 @@ internal class AnalysisOrchestrator(
                     timestamp = System.currentTimeMillis(),
                     whiteName = game.players.white.user?.name ?: "White",
                     blackName = game.players.black.user?.name ?: "Black",
-                    result = when (game.winner) {
-                        "white" -> "1-0"
-                        "black" -> "0-1"
-                        else -> if (game.status == "draw") "1/2-1/2" else "*"
-                    },
+                    result = gameResultToken(game),
                     pgn = game.pgn ?: "",
                     moves = updatedState.moves,
                     moveDetails = updatedState.moveDetails,
@@ -452,8 +518,11 @@ internal class AnalysisOrchestrator(
                     openingName = updatedState.openingName,
                     speed = game.speed
                 )
-                saveManualGame(analysedGame)
-                storeManualGameToList(analysedGame)
+                // Multi-megabyte JSON: serialise and write off the main thread.
+                withContext(Dispatchers.IO) {
+                    saveManualGame(analysedGame)
+                    storeManualGameToList(analysedGame)
+                }
             }
 
             val ready = stockfish.restart()
@@ -516,48 +585,37 @@ internal class AnalysisOrchestrator(
 
             if (analysisRequestId.get() != requestId || getUiState().currentStage != AnalysisStage.MANUAL) return
             val depth = getUiState().stockfishSettings.manualStage.depth
-            stockfish.analyze(fen, depth)
+            stockfish.analyze(fen, depth, historyFor(fen))
 
-            var waitTime = 0
             val maxWaitTime = StockfishEngine.READY_TIMEOUT_MS + 2000
-            val checkInterval = 50L
-
-            var gotFirstResult = false
-            while (true) {
-                delay(checkInterval)
-
-                if (analysisRequestId.get() != requestId) {
-                    return
-                }
-
-                if (getUiState().currentStage != AnalysisStage.MANUAL) {
-                    return
-                }
-
-                val result = stockfish.analysisResult.value
-                if (result != null && result.fen == fen) {
-                    if (analysisRequestId.get() == requestId) {
-                        updateUiState {
-                            copy(
-                                analysisResult = result,
-                                analysisResultFen = fen
-                            )
+            val firstResult = withTimeoutOrNull(maxWaitTime) {
+                stockfish.analysisResult.first { it != null && it.fen == fen }
+            }
+            if (firstResult != null) {
+                // Follow the search by collecting engine updates (no polling). This suspends
+                // quietly once the search has finished, and ends when the request or stage
+                // changes or the engine dies; only a dead engine is restarted.
+                combine(stockfish.analysisResult, stockfish.isReady) { result, ready -> result to ready }
+                    .takeWhile { (_, ready) ->
+                        ready && analysisRequestId.get() == requestId && getUiState().currentStage == AnalysisStage.MANUAL
+                    }
+                    .collect { (result, _) ->
+                        if (result != null && result.fen == fen) {
+                            updateUiState { copy(analysisResult = result, analysisResultFen = fen) }
                         }
-                        gotFirstResult = true
-                    } else {
-                        return
                     }
-                }
-
-                if (!gotFirstResult) {
-                    waitTime += checkInterval.toInt()
-                    if (waitTime >= maxWaitTime) {
-                        break
-                    }
-                }
+                if (analysisRequestId.get() != requestId || getUiState().currentStage != AnalysisStage.MANUAL) return
+                android.util.Log.w("Analysis", "Stockfish stopped during analysis, restarting (attempt ${attempt + 1})")
             }
 
-            android.util.Log.w("Analysis", "No Stockfish results after ${maxWaitTime}ms, restarting (attempt ${attempt + 1})")
+            // Stockfish refused this position (it exits on illegal ones): retrying can't help.
+            stockfish.lastError.value?.takeIf { it.fen == fen }?.let { error ->
+                updateUiState { copy(errorMessage = error.message) }
+                return
+            }
+            if (firstResult == null) {
+                android.util.Log.w("Analysis", "No Stockfish results after ${maxWaitTime}ms, restarting (attempt ${attempt + 1})")
+            }
 
             stockfish.stop()
             updateUiState { copy(stockfishReady = false) }

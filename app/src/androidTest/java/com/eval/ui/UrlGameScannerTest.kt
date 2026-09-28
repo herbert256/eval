@@ -1,6 +1,7 @@
 package com.eval.ui
 
 import android.content.Context
+import android.os.Build
 import android.util.Base64
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.height
@@ -22,6 +23,7 @@ import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import okhttp3.MediaType.Companion.toMediaType
 import org.junit.Assert.*
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -114,6 +116,87 @@ class UrlGameScannerTest {
                 val board = state.results.single { it.kind == WebChessKind.IMAGE }
                 assertEquals("$expectedPlacement w - - 0 1", board.content)
                 assertTrue(board.needsReview)
+            } finally { scanner.close() }
+        }
+    }
+
+    private fun pageClient(html: String, requests: MutableList<String> = mutableListOf()) = OkHttpClient.Builder().addInterceptor { chain ->
+        val path = chain.request().url.encodedPath
+        synchronized(requests) { requests += path }
+        val (code, body, type) = when {
+            path.endsWith(".pgn") -> Triple(200, "[Event \"Linked\"]\n\n1. d4 d5 *", "application/x-chess-pgn")
+            path.endsWith(".png") -> Triple(404, "", "text/plain")
+            else -> Triple(200, html, "text/html")
+        }
+        Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(code).message("Fixture")
+            .body(body.toResponseBody(type.toMediaType())).build()
+    }.build()
+
+    private fun renderedScanner(scope: CoroutineScope, client: OkHttpClient) = UrlGameScanner(context, scope, client) { view, url, content ->
+        view.loadDataWithBaseURL(url, content, "text/html", "UTF-8", url)
+    }
+
+    @Test fun a_lost_page_renderer_is_reported_and_the_next_scan_uses_a_new_page() = runBlocking {
+        assumeTrue("Renderer termination needs Android 10", Build.VERSION.SDK_INT >= 29)
+        withContext(Dispatchers.Main) {
+            val scanner = renderedScanner(this, pageClient("<p>Position: $fen</p>"))
+            try {
+                scanner.open("https://fixture.test/page")
+                withTimeout(90_000) { while (scanner.uiState.value.busy) delay(100) }
+                assertTrue(scanner.uiState.value.hasPage)
+                val first = scanner.pageView
+                assertTrue(first.webViewRenderProcess!!.terminate())
+                withTimeout(30_000) { while (scanner.uiState.value.error == null) delay(50) }
+                assertEquals("The page crashed; scan again.", scanner.uiState.value.error)
+                assertFalse(scanner.uiState.value.hasPage)
+                scanner.open("https://fixture.test/page")
+                withTimeout(90_000) { while (scanner.uiState.value.busy) delay(100) }
+                val state = scanner.uiState.value
+                assertNull(state.toString(), state.error)
+                assertTrue(state.results.any { it.content == fen })
+                assertNotSame(first, scanner.pageView)
+            } finally { scanner.close() }
+        }
+    }
+
+    @Test fun an_unresponsive_page_times_out_and_board_recognition_still_works() = runBlocking {
+        assumeTrue("Renderer termination needs Android 10", Build.VERSION.SDK_INT >= 29)
+        val stall = "<p>Stall</p><script>addEventListener('load', () => setTimeout(() => { for (;;) {} }, 300));</script>"
+        withContext(Dispatchers.Main) {
+            val scanner = renderedScanner(this, pageClient(stall))
+            try {
+                scanner.open("https://fixture.test/stall")
+                withTimeout(60_000) { while (scanner.uiState.value.busy) delay(100) }
+                assertTrue(scanner.uiState.value.toString(), scanner.uiState.value.error.orEmpty().contains("did not respond"))
+                assertFalse(scanner.uiState.value.hasPage)
+                val recognizer = BoardImageRecognizer(context)
+                try {
+                    val result = recognizer.recognize("data:image/png;base64," + Base64.encodeToString(fixture("chesscom-italian-white.png"), Base64.NO_WRAP))
+                    assertEquals(expectedPlacement, result!!.getString("placement"))
+                } finally { recognizer.close() }
+            } finally { scanner.close() }
+        }
+    }
+
+    @Test fun page_results_are_capped_even_when_the_page_replaces_the_scan_script_built_ins() = runBlocking {
+        val forged = """<script>
+            const real = JSON.stringify;
+            JSON.stringify = () => real({texts: ['$fen'],
+              links: Array.from({length: 1000}, (_, i) => 'https://fixture.test/g' + i + '.pgn'),
+              images: Array.from({length: 50}, (_, i) => ({url: 'https://fixture.test/i' + i + '.png', label: 'x'})), limited: false});
+            </script><p>Forged</p>"""
+        val requests = mutableListOf<String>()
+        withContext(Dispatchers.Main) {
+            val scanner = renderedScanner(this, pageClient(forged, requests))
+            try {
+                scanner.open("https://fixture.test/page")
+                withTimeout(120_000) { while (scanner.uiState.value.busy) delay(100) }
+                val state = scanner.uiState.value
+                assertNull(state.toString(), state.error)
+                assertTrue(state.results.any { it.content == fen })
+                assertEquals(12, synchronized(requests) { requests.count { it.endsWith(".pgn") } })
+                assertEquals(20, synchronized(requests) { requests.count { it.endsWith(".png") } })
+                assertTrue(state.warnings.toString(), state.warnings.any { it.startsWith("This page is large") })
             } finally { scanner.close() }
         }
     }

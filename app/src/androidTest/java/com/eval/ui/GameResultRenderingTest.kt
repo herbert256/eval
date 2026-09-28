@@ -13,9 +13,12 @@ import com.eval.ui.theme.EvalTheme
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.Before
 
 @RunWith(AndroidJUnit4::class)
 class GameResultRenderingTest {
+    @Before fun requireStockfish() = TestEnvironment.assumeStockfishInstalled()
+
     private fun game(status: String, winner: String? = null) = LichessGame(
         status, false, "standard", "blitz", null, status, winner,
         Players(Player(User("Alice", "alice"), null, null), Player(User(status, status), null, null)),

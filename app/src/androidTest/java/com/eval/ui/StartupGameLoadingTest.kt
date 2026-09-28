@@ -19,9 +19,12 @@ import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED
 import kotlin.coroutines.resume
+import org.junit.Before
 
 @RunWith(AndroidJUnit4::class)
 class StartupGameLoadingTest {
+    @Before fun requireStockfish() = TestEnvironment.assumeStockfishInstalled()
+
     private class Harness(scope: CoroutineScope) : AutoCloseable {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val prefs = context.getSharedPreferences("startup_game_loading_test", Context.MODE_PRIVATE)

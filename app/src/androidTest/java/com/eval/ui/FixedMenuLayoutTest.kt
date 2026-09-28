@@ -27,9 +27,12 @@ import com.eval.ui.theme.EvalTheme
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.Before
 
 @RunWith(AndroidJUnit4::class)
 class FixedMenuLayoutTest {
+    @Before fun requireStockfish() = TestEnvironment.assumeStockfishInstalled()
+
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val settings = SettingsPreferences(context.getSharedPreferences(SettingsPreferences.PREFS_NAME, Context.MODE_PRIVATE))

@@ -77,6 +77,19 @@ class MoveSoundPlayer(context: Context) {
     }
 
     /**
+     * Play the sound for a move given in SAN. Check ("+" or "#") and castling
+     * ("O-O", "O-O-O", also written with zeros) are read from the notation; the
+     * flags add what the caller knows otherwise, e.g. for non-SAN move text.
+     */
+    fun playSanMove(san: String, isCapture: Boolean, isCheck: Boolean = false, isCastle: Boolean = false) {
+        playMove(
+            isCapture = isCapture,
+            isCheck = isCheck || sanGivesCheck(san),
+            isCastle = isCastle || sanIsCastle(san)
+        )
+    }
+
+    /**
      * Play a simple move sound (used for navigation).
      */
     fun playMoveSound() {
@@ -89,5 +102,17 @@ class MoveSoundPlayer(context: Context) {
      */
     fun release() {
         soundPool.release()
+    }
+
+    companion object {
+        private fun stripAnnotations(san: String) = san.trim().trimEnd('!', '?')
+
+        /** True when the SAN move gives check or mate ("+" or "#"). */
+        internal fun sanGivesCheck(san: String): Boolean =
+            stripAnnotations(san).let { it.endsWith('+') || it.endsWith('#') }
+
+        /** True for castling in SAN, with letter O or digit zero. */
+        internal fun sanIsCastle(san: String): Boolean =
+            stripAnnotations(san).trimEnd('+', '#').replace('0', 'O').let { it == "O-O" || it == "O-O-O" }
     }
 }

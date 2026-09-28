@@ -12,6 +12,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 
 /**
  * Reusable color setting row with label and color swatch.
@@ -56,15 +60,28 @@ fun SettingsToggle(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
+    // The whole row is the switch, so TalkBack reads the label and tapping it toggles.
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(label, color = Color.White)
         Switch(
             checked = checked,
-            onCheckedChange = onCheckedChange
+            onCheckedChange = null
         )
     }
+}
+
+/**
+ * Number of list rows that fit in [available] once the pager controls ([reserved]) are placed,
+ * for rows of [rowHeight] at the current font scale, so a page doesn't need scrolling.
+ */
+@Composable
+fun rowsThatFit(available: Dp, rowHeight: Dp, reserved: Dp = 56.dp, minimum: Int = 3): Int {
+    val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
+    return ((available - reserved).value / (rowHeight.value * fontScale)).toInt().coerceAtLeast(minimum)
 }

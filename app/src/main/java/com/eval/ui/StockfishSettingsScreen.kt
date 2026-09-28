@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -21,6 +22,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
+import com.eval.stockfish.StockfishEngine
 
 /**
  * Reusable stepper component for settings.
@@ -123,13 +125,31 @@ private fun CollapsibleStockfishCard(
     }
 }
 
+/** Stepper values. Thread and hash lists stop at what the engine will actually use. */
+internal object StockfishStepperOptions {
+    val aiEngineSeconds = listOf(0.25f, 0.5f, 1f, 2f, 5f, 10f, 30f, 60f)
+    val aiSeconds = listOf(0.05f, 0.10f, 0.25f, 0.50f, 1f, 2f, 5f, 10f)
+    val aiHash = listOf(8, 16, 32, 64, 128, 256)
+    val previewSeconds = listOf(0.01f, 0.05f, 0.10f, 0.25f, 0.50f)
+    val previewHash = listOf(8, 16, 64)
+    val analyseSeconds = listOf(0.50f, 0.75f, 1.00f, 1.50f, 2.00f, 2.50f, 5.00f, 10.00f)
+    val analyseHash = listOf(16, 64, 96, 128, 192, 256).filter { it <= StockfishEngine.MAX_SAFE_HASH_MB }
+    val manualDepth = (16..64 step 2).toList()
+    val manualHash = listOf(32, 64, 96, 128, 192, 256).filter { it <= StockfishEngine.MAX_SAFE_HASH_MB }
+    val manualMultiPv = (1..32).toList()
+
+    fun threads(limit: Int = Int.MAX_VALUE) = (1..minOf(limit, StockfishEngine.maxUsableThreads())).toList()
+}
+
 /** Stockfish settings for board analysis and AI handoffs. */
 @Composable
 fun StockfishSettingsScreen(
     stockfishSettings: StockfishSettings,
     onBackToSettings: () -> Unit,
     onBackToGame: () -> Unit,
-    onSave: (StockfishSettings) -> Unit
+    onSave: (StockfishSettings) -> Unit,
+    // Stockfish 16+ has no "Use NNUE" option; only show the toggles when the engine advertises it.
+    showNnueToggles: Boolean = false
 ) {
     // Preview Stage state
     var previewSeconds by remember { mutableStateOf(stockfishSettings.previewStage.secondsForMove) }
@@ -152,23 +172,23 @@ fun StockfishSettingsScreen(
 
     var aiMoves by remember { mutableStateOf(stockfishSettings.movesListForAi) }
     var aiEngine by remember { mutableStateOf(stockfishSettings.engineMovesForAi) }
-    val aiEngineSecondsOptions = listOf(0.25f, 0.5f, 1f, 2f, 5f, 10f, 30f, 60f)
-    val aiSecondsOptions = listOf(0.05f, 0.10f, 0.25f, 0.50f, 1f, 2f, 5f, 10f)
-    val aiHashOptions = listOf(8, 16, 32, 64, 128, 256)
+    val aiEngineSecondsOptions = StockfishStepperOptions.aiEngineSeconds
+    val aiSecondsOptions = StockfishStepperOptions.aiSeconds
+    val aiHashOptions = StockfishStepperOptions.aiHash
 
-    // Options for steppers
-    val previewSecondsOptions = listOf(0.01f, 0.05f, 0.10f, 0.25f, 0.50f)
-    val previewThreadsOptions = (1..4).toList()
-    val previewHashOptions = listOf(8, 16, 64)
+    val maxThreads = StockfishEngine.maxUsableThreads()
+    val previewSecondsOptions = StockfishStepperOptions.previewSeconds
+    val previewThreadsOptions = StockfishStepperOptions.threads(limit = 4)
+    val previewHashOptions = StockfishStepperOptions.previewHash
 
-    val analyseSecondsOptions = listOf(0.50f, 0.75f, 1.00f, 1.50f, 2.50f, 5.00f, 10.00f)
-    val analyseThreadsOptions = (1..8).toList()
-    val analyseHashOptions = listOf(16, 64, 96, 128, 192, 256)
+    val analyseSecondsOptions = StockfishStepperOptions.analyseSeconds
+    val analyseThreadsOptions = StockfishStepperOptions.threads()
+    val analyseHashOptions = StockfishStepperOptions.analyseHash
 
-    val manualDepthOptions = (16..64 step 2).toList()
-    val manualThreadsOptions = (1..16).toList()
-    val manualHashOptions = listOf(32, 64, 96, 128, 192, 256, 384, 512)
-    val manualMultiPvOptions = (1..32).toList()
+    val manualDepthOptions = StockfishStepperOptions.manualDepth
+    val manualThreadsOptions = StockfishStepperOptions.threads()
+    val manualHashOptions = StockfishStepperOptions.manualHash
+    val manualMultiPvOptions = StockfishStepperOptions.manualMultiPv
 
     fun saveAllSettings() {
         onSave(stockfishSettings.copy(
@@ -197,9 +217,13 @@ fun StockfishSettingsScreen(
     }
 
     // Helper functions for stepping through list options
-    fun <T> stepInList(current: T, options: List<T>, delta: Int): T {
+    fun <T : Comparable<T>> stepInList(current: T, options: List<T>, delta: Int): T {
         val currentIndex = options.indexOf(current)
-        if (currentIndex == -1) return options.first()
+        // Values from older versions or imports can fall between options: step to the neighbour.
+        if (currentIndex == -1) {
+            return if (delta > 0) options.firstOrNull { it > current } ?: options.last()
+            else options.lastOrNull { it < current } ?: options.first()
+        }
         val newIndex = (currentIndex + delta).coerceIn(0, options.lastIndex)
         return options[newIndex]
     }
@@ -235,56 +259,47 @@ fun StockfishSettingsScreen(
                         previewSeconds = stepInList(previewSeconds, previewSecondsOptions, 1)
                         saveAllSettings()
                     },
-                    canDecrement = previewSecondsOptions.indexOf(previewSeconds) > 0,
-                    canIncrement = previewSecondsOptions.indexOf(previewSeconds) < previewSecondsOptions.lastIndex
+                    canDecrement = previewSecondsOptions.any { it < previewSeconds },
+                    canIncrement = previewSecondsOptions.any { it > previewSeconds }
                 )
 
                 // Number of threads
                 SettingStepper(
                     label = "Number of threads",
-                    value = previewThreads.toString(),
+                    value = minOf(previewThreads, maxThreads).toString(),
                     onDecrement = {
-                        previewThreads = stepInList(previewThreads, previewThreadsOptions, -1)
+                        previewThreads = stepInList(minOf(previewThreads, maxThreads), previewThreadsOptions, -1)
                         saveAllSettings()
                     },
                     onIncrement = {
-                        previewThreads = stepInList(previewThreads, previewThreadsOptions, 1)
+                        previewThreads = stepInList(minOf(previewThreads, maxThreads), previewThreadsOptions, 1)
                         saveAllSettings()
                     },
-                    canDecrement = previewThreadsOptions.indexOf(previewThreads) > 0,
-                    canIncrement = previewThreadsOptions.indexOf(previewThreads) < previewThreadsOptions.lastIndex
+                    canDecrement = previewThreadsOptions.any { it < minOf(previewThreads, maxThreads) },
+                    canIncrement = previewThreadsOptions.any { it > minOf(previewThreads, maxThreads) }
                 )
 
                 // Hash memory
                 SettingStepper(
                     label = "Hash memory (MB)",
-                    value = "$previewHash MB",
+                    value = "${minOf(previewHash, StockfishEngine.MAX_SAFE_HASH_MB)} MB",
                     onDecrement = {
-                        previewHash = stepInList(previewHash, previewHashOptions, -1)
+                        previewHash = stepInList(minOf(previewHash, StockfishEngine.MAX_SAFE_HASH_MB), previewHashOptions, -1)
                         saveAllSettings()
                     },
                     onIncrement = {
-                        previewHash = stepInList(previewHash, previewHashOptions, 1)
+                        previewHash = stepInList(minOf(previewHash, StockfishEngine.MAX_SAFE_HASH_MB), previewHashOptions, 1)
                         saveAllSettings()
                     },
-                    canDecrement = previewHashOptions.indexOf(previewHash) > 0,
-                    canIncrement = previewHashOptions.indexOf(previewHash) < previewHashOptions.lastIndex
+                    canDecrement = previewHashOptions.any { it < minOf(previewHash, StockfishEngine.MAX_SAFE_HASH_MB) },
+                    canIncrement = previewHashOptions.any { it > minOf(previewHash, StockfishEngine.MAX_SAFE_HASH_MB) }
                 )
 
-                // Use NNUE toggle
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Use NNUE", color = Color.White)
-                    Switch(
-                        checked = previewNnue,
-                        onCheckedChange = {
-                            previewNnue = it
-                            saveAllSettings()
-                        }
-                    )
+                if (showNnueToggles) {
+                    NnueToggleRow(checked = previewNnue) {
+                        previewNnue = it
+                        saveAllSettings()
+                    }
                 }
             }
 
@@ -302,56 +317,47 @@ fun StockfishSettingsScreen(
                         analyseSeconds = stepInList(analyseSeconds, analyseSecondsOptions, 1)
                         saveAllSettings()
                     },
-                    canDecrement = analyseSecondsOptions.indexOf(analyseSeconds) > 0,
-                    canIncrement = analyseSecondsOptions.indexOf(analyseSeconds) < analyseSecondsOptions.lastIndex
+                    canDecrement = analyseSecondsOptions.any { it < analyseSeconds },
+                    canIncrement = analyseSecondsOptions.any { it > analyseSeconds }
                 )
 
                 // Number of threads
                 SettingStepper(
                     label = "Number of threads",
-                    value = analyseThreads.toString(),
+                    value = minOf(analyseThreads, maxThreads).toString(),
                     onDecrement = {
-                        analyseThreads = stepInList(analyseThreads, analyseThreadsOptions, -1)
+                        analyseThreads = stepInList(minOf(analyseThreads, maxThreads), analyseThreadsOptions, -1)
                         saveAllSettings()
                     },
                     onIncrement = {
-                        analyseThreads = stepInList(analyseThreads, analyseThreadsOptions, 1)
+                        analyseThreads = stepInList(minOf(analyseThreads, maxThreads), analyseThreadsOptions, 1)
                         saveAllSettings()
                     },
-                    canDecrement = analyseThreadsOptions.indexOf(analyseThreads) > 0,
-                    canIncrement = analyseThreadsOptions.indexOf(analyseThreads) < analyseThreadsOptions.lastIndex
+                    canDecrement = analyseThreadsOptions.any { it < minOf(analyseThreads, maxThreads) },
+                    canIncrement = analyseThreadsOptions.any { it > minOf(analyseThreads, maxThreads) }
                 )
 
                 // Hash memory
                 SettingStepper(
                     label = "Hash memory (MB)",
-                    value = "$analyseHash MB",
+                    value = "${minOf(analyseHash, StockfishEngine.MAX_SAFE_HASH_MB)} MB",
                     onDecrement = {
-                        analyseHash = stepInList(analyseHash, analyseHashOptions, -1)
+                        analyseHash = stepInList(minOf(analyseHash, StockfishEngine.MAX_SAFE_HASH_MB), analyseHashOptions, -1)
                         saveAllSettings()
                     },
                     onIncrement = {
-                        analyseHash = stepInList(analyseHash, analyseHashOptions, 1)
+                        analyseHash = stepInList(minOf(analyseHash, StockfishEngine.MAX_SAFE_HASH_MB), analyseHashOptions, 1)
                         saveAllSettings()
                     },
-                    canDecrement = analyseHashOptions.indexOf(analyseHash) > 0,
-                    canIncrement = analyseHashOptions.indexOf(analyseHash) < analyseHashOptions.lastIndex
+                    canDecrement = analyseHashOptions.any { it < minOf(analyseHash, StockfishEngine.MAX_SAFE_HASH_MB) },
+                    canIncrement = analyseHashOptions.any { it > minOf(analyseHash, StockfishEngine.MAX_SAFE_HASH_MB) }
                 )
 
-                // Use NNUE toggle
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Use NNUE", color = Color.White)
-                    Switch(
-                        checked = analyseNnue,
-                        onCheckedChange = {
-                            analyseNnue = it
-                            saveAllSettings()
-                        }
-                    )
+                if (showNnueToggles) {
+                    NnueToggleRow(checked = analyseNnue) {
+                        analyseNnue = it
+                        saveAllSettings()
+                    }
                 }
             }
 
@@ -369,40 +375,40 @@ fun StockfishSettingsScreen(
                         manualDepth = stepInList(manualDepth, manualDepthOptions, 1)
                         saveAllSettings()
                     },
-                    canDecrement = manualDepthOptions.indexOf(manualDepth) > 0,
-                    canIncrement = manualDepthOptions.indexOf(manualDepth) < manualDepthOptions.lastIndex
+                    canDecrement = manualDepthOptions.any { it < manualDepth },
+                    canIncrement = manualDepthOptions.any { it > manualDepth }
                 )
 
                 // Number of threads
                 SettingStepper(
                     label = "Number of threads",
-                    value = manualThreads.toString(),
+                    value = minOf(manualThreads, maxThreads).toString(),
                     onDecrement = {
-                        manualThreads = stepInList(manualThreads, manualThreadsOptions, -1)
+                        manualThreads = stepInList(minOf(manualThreads, maxThreads), manualThreadsOptions, -1)
                         saveAllSettings()
                     },
                     onIncrement = {
-                        manualThreads = stepInList(manualThreads, manualThreadsOptions, 1)
+                        manualThreads = stepInList(minOf(manualThreads, maxThreads), manualThreadsOptions, 1)
                         saveAllSettings()
                     },
-                    canDecrement = manualThreadsOptions.indexOf(manualThreads) > 0,
-                    canIncrement = manualThreadsOptions.indexOf(manualThreads) < manualThreadsOptions.lastIndex
+                    canDecrement = manualThreadsOptions.any { it < minOf(manualThreads, maxThreads) },
+                    canIncrement = manualThreadsOptions.any { it > minOf(manualThreads, maxThreads) }
                 )
 
                 // Hash memory
                 SettingStepper(
                     label = "Hash memory (MB)",
-                    value = "$manualHash MB",
+                    value = "${minOf(manualHash, StockfishEngine.MAX_SAFE_HASH_MB)} MB",
                     onDecrement = {
-                        manualHash = stepInList(manualHash, manualHashOptions, -1)
+                        manualHash = stepInList(minOf(manualHash, StockfishEngine.MAX_SAFE_HASH_MB), manualHashOptions, -1)
                         saveAllSettings()
                     },
                     onIncrement = {
-                        manualHash = stepInList(manualHash, manualHashOptions, 1)
+                        manualHash = stepInList(minOf(manualHash, StockfishEngine.MAX_SAFE_HASH_MB), manualHashOptions, 1)
                         saveAllSettings()
                     },
-                    canDecrement = manualHashOptions.indexOf(manualHash) > 0,
-                    canIncrement = manualHashOptions.indexOf(manualHash) < manualHashOptions.lastIndex
+                    canDecrement = manualHashOptions.any { it < minOf(manualHash, StockfishEngine.MAX_SAFE_HASH_MB) },
+                    canIncrement = manualHashOptions.any { it > minOf(manualHash, StockfishEngine.MAX_SAFE_HASH_MB) }
                 )
 
                 // MultiPV lines
@@ -417,24 +423,15 @@ fun StockfishSettingsScreen(
                         manualMultiPv = stepInList(manualMultiPv, manualMultiPvOptions, 1)
                         saveAllSettings()
                     },
-                    canDecrement = manualMultiPvOptions.indexOf(manualMultiPv) > 0,
-                    canIncrement = manualMultiPvOptions.indexOf(manualMultiPv) < manualMultiPvOptions.lastIndex
+                    canDecrement = manualMultiPvOptions.any { it < manualMultiPv },
+                    canIncrement = manualMultiPvOptions.any { it > manualMultiPv }
                 )
 
-                // Use NNUE toggle
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Use NNUE", color = Color.White)
-                    Switch(
-                        checked = manualNnue,
-                        onCheckedChange = {
-                            manualNnue = it
-                            saveAllSettings()
-                        }
-                    )
+                if (showNnueToggles) {
+                    NnueToggleRow(checked = manualNnue) {
+                        manualNnue = it
+                        saveAllSettings()
+                    }
                 }
             }
 
@@ -463,7 +460,7 @@ fun StockfishSettingsScreen(
                     onDecrement = { aiMoves = aiMoves.copy(threads = aiMoves.threads - 1); saveAllSettings() },
                     onIncrement = { aiMoves = aiMoves.copy(threads = aiMoves.threads + 1); saveAllSettings() },
                     canDecrement = aiMoves.threads > 1,
-                    canIncrement = aiMoves.threads < 4
+                    canIncrement = aiMoves.threads < maxThreads
                 )
                 SettingStepper(
                     label = "Hash memory (MB)",
@@ -479,16 +476,11 @@ fun StockfishSettingsScreen(
                     canDecrement = aiMoves.hashMb > aiHashOptions.first(),
                     canIncrement = aiMoves.hashMb < aiHashOptions.last()
                 )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Use NNUE", color = Color.White)
-                    Switch(checked = aiMoves.useNnue, onCheckedChange = {
+                if (showNnueToggles) {
+                    NnueToggleRow(checked = aiMoves.useNnue) {
                         aiMoves = aiMoves.copy(useNnue = it)
                         saveAllSettings()
-                    })
+                    }
                 }
             }
 
@@ -525,7 +517,7 @@ fun StockfishSettingsScreen(
                     onDecrement = { aiEngine = aiEngine.copy(threads = aiEngine.threads - 1); saveAllSettings() },
                     onIncrement = { aiEngine = aiEngine.copy(threads = aiEngine.threads + 1); saveAllSettings() },
                     canDecrement = aiEngine.threads > 1,
-                    canIncrement = aiEngine.threads < 4
+                    canIncrement = aiEngine.threads < maxThreads
                 )
                 SettingStepper(
                     label = "Hash memory (MB)",
@@ -541,19 +533,28 @@ fun StockfishSettingsScreen(
                     canDecrement = aiEngine.hashMb > aiHashOptions.first(),
                     canIncrement = aiEngine.hashMb < aiHashOptions.last()
                 )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Use NNUE", color = Color.White)
-                    Switch(checked = aiEngine.useNnue, onCheckedChange = {
+                if (showNnueToggles) {
+                    NnueToggleRow(checked = aiEngine.useNnue) {
                         aiEngine = aiEngine.copy(useNnue = it)
                         saveAllSettings()
-                    })
+                    }
                 }
             }
         }
 
+    }
+}
+
+@Composable
+private fun NnueToggleRow(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("Use NNUE", color = Color.White)
+        Switch(checked = checked, onCheckedChange = null)
     }
 }

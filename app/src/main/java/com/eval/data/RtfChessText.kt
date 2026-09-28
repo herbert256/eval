@@ -2,6 +2,8 @@ package com.eval.data
 
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import java.io.ByteArrayOutputStream
+import java.nio.charset.Charset
 
 /** Small RTF reader for visible text and PNG/JPEG pictures; ignores formatting and embedded objects. */
 internal data class RtfChessText(val text: String, val images: List<Pair<ByteArray, String>>, val warnings: List<String>) {
@@ -19,17 +21,30 @@ internal data class RtfChessText(val text: String, val images: List<Pair<ByteArr
             var fallback = 0
             var position = 0
             val coroutine = currentCoroutineContext()
+            // \'hh bytes use the document code page; consecutive ones are decoded together for double-byte pages.
+            var codePage = charset("windows-1252")
+            val pending = ByteArrayOutputStream()
             fun append(value: Char) {
                 if (fallback > 0) { fallback--; return }
                 if (!group.skip && output.length < SharedChessInput.MAX_TEXT) output.append(value)
             }
+            fun flush() {
+                if (pending.size() == 0) return
+                val text = String(pending.toByteArray(), codePage)
+                pending.reset()
+                if (!group.skip) output.append(text.take(SharedChessInput.MAX_TEXT - output.length))
+            }
             while (position < input.length) {
                 if (position % 1024 == 0) coroutine.ensureActive()
-                when (val c = input[position++]) {
+                val c = input[position++]
+                // RTF line breaks carry no meaning, so a byte pair may span one.
+                if (c != '\r' && c != '\n' && !(c == '\\' && position < input.length && input[position] == '\'')) flush()
+                when (c) {
                     '{' -> {
                         require(stack.size < 512) { "RTF nesting is too deep." }
                         stack.addLast(group)
-                        group = group.copy(ownsPicture = false, ignorable = false)
+                        // Nested groups such as {\*\picprop …} or {\*\blipuid …} never hold the picture's own hex data.
+                        group = group.copy(picture = null, ownsPicture = false, ignorable = false)
                     }
                     '}' -> {
                         if (group.ownsPicture) {
@@ -52,7 +67,8 @@ internal data class RtfChessText(val text: String, val images: List<Pair<ByteArr
                         if (symbol == '\'') {
                             if (position + 2 < input.length) {
                                 val value = input.substring(position + 1, position + 3).toIntOrNull(16)
-                                value?.let { append(byteArrayOf(it.toByte()).toString(charset("windows-1252"))[0]) }
+                                // A \u fallback is counted in bytes.
+                                if (value != null) { if (fallback > 0) fallback-- else pending.write(value) }
                             }
                             position = minOf(input.length, position + 3)
                             continue
@@ -74,6 +90,7 @@ internal data class RtfChessText(val text: String, val images: List<Pair<ByteArr
                         group.ignorable = false
                         when (word) {
                             "fonttbl", "colortbl", "stylesheet", "info", "object", "fldinst", "datastore", "themedata", "nonshppict" -> group.skip = true
+                            "ansicpg" -> codePage = number?.let(::codePage) ?: codePage
                             "uc" -> group.unicodeFallback = (number ?: 1).coerceIn(0, 16)
                             "u" -> {
                                 fallback = 0
@@ -100,9 +117,16 @@ internal data class RtfChessText(val text: String, val images: List<Pair<ByteArr
                     }
                 }
             }
+            flush()
             require(stack.isEmpty()) { "This RTF document is incomplete." }
             if (output.length >= SharedChessInput.MAX_TEXT) warnings += "Document text was limited to 2 MB."
             return RtfChessText(output.toString(), images, warnings.toList())
         }
+
+        /** Windows code page by number, e.g. 1251 (Cyrillic) or 932 (Japanese); null if this device lacks it. */
+        private fun codePage(number: Int): Charset? =
+            listOf("windows-$number", "cp$number", "MS$number", "x-windows-$number").firstNotNullOfOrNull { name ->
+                try { Charset.forName(name) } catch (_: Exception) { null }
+            }
     }
 }

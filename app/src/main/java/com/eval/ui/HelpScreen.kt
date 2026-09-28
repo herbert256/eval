@@ -59,7 +59,8 @@ private val helpSections = listOf(
             "Edits survive screen recreation; Android Back returns to results. PGN still uses Open game. " +
             "Photos of physical boards at an angle are not supported. " +
             "For a dynamic page, scroll the embedded page to the board and use Scan page again. " +
-            "Large pages are limited to 20 images, 12 game links and 100 results per scan; limits and failed downloads are shown."
+            "Large pages are limited to 20 images, 12 game links and 100 results per scan; limits and failed downloads are shown. " +
+            "Links to chess sites and .pgn files are followed automatically; other links are listed under Other links, each with Scan link."
     ),
     HelpEntry(
         title = "Supported document files",
@@ -69,7 +70,8 @@ private val helpSections = listOf(
             "The reader extracts text and embedded PNG/JPEG and other supported images. PDF pages are rendered to find scanned or drawn chessboards. " +
             "Image results must be reviewed. Text in scanned page images is not OCR-transcribed; chess-font diagrams in Word should be exported to PDF. " +
             "Files are limited to 16 MB, text to 2 MB, PDF text to 100 pages and board recognition to 20 images/pages per document. " +
-            "Archives are limited to 512 entries, 32 MB expanded and 8 MB per part. Nested archives and embedded Office/PDF attachments are not scanned. " +
+            "Archives are limited to 512 entries, 32 MB expanded and 8 MB per part; a larger part is skipped and the rest is still read. Nested archives and embedded Office/PDF attachments are not scanned. " +
+            "Text is read as UTF-8, or as Windows-1252 when it isn't valid UTF-8. Links inside documents are only followed automatically for chess sites and .pgn files. " +
             "Limits and unreadable parts are reported. Older binary DOC/XLS/PPT files and password-protected documents must first be saved as unlocked modern Office files or PDF."
     ),
     HelpEntry(
@@ -82,15 +84,18 @@ private val helpSections = listOf(
             "See Supported document files for the formats and limits."
     ),
     HelpEntry(
-        title = "Camera",
-        content = "On Select a game, choose Camera and allow camera access. Point the camera at a 2D chess diagram in a book or on a screen, " +
-            "held straight so the whole board is visible. Recognition runs on your device. When the same board is read on two frames in a row, " +
-            "Board setup opens with the found pieces for review. Check the pieces, orientation, side to move, castling and en passant before starting. " +
-            "Android Back returns to the camera. Photos of physical boards at an angle are not supported."
+        title = "Start from camera",
+        content = "On Select a game, choose Start from camera. Your camera app opens: take a photo of a 2D chess diagram in a book or on a screen, " +
+            "holding the phone straight above it so the whole board fills most of the photo, and confirm it. " +
+            "The photo is scanned on your device with the same board recognizer as image files. Choose Review position to open Board setup with the found pieces. " +
+            "Check the pieces, orientation, side to move, castling and en passant before starting. " +
+            "Take another photo replaces the scan; Scan again retries it; Stop cancels it. Photos of physical boards at an angle are not supported."
     ),
     HelpEntry(
         title = "Start from clipboard history",
         content = "Choose one of the last 10 clipboard entries captured by Eval, newest first. " +
+            "Only chess content is kept: a FEN or PGN, a link to a chess site or a .pgn file, an image, or a chess document or file. " +
+            "Anything else you copy is not saved. " +
             "Android provides the current item when Eval has focus. Copy something and return to Eval to capture it; " +
             "changes while Eval is open are also saved. Earlier keyboard clipboard history and copies made while Eval is in the background cannot be read. " +
             "Select an entry to scan text, FEN, PGN, HTML, URLs, documents or image/file attachments using the same scanner as URL and local-file imports. " +
@@ -101,7 +106,8 @@ private val helpSections = listOf(
     ),
     HelpEntry(
         title = "Share to Eval",
-        content = "In another Android app, tap Share and choose Eval. Shared URLs open the same scanner as Start from url. " +
+        content = "In another Android app, tap Share and choose Eval. Eval shows what was shared; nothing is read or downloaded until you tap Scan, and your current game keeps running. " +
+            "Shared URLs open the same scanner as Start from url. " +
             "Shared text, HTML, PGN files, PDF/Office documents and one or more images are checked for games and positions. " +
             "Choose Open game for a PGN, or Review position to check and edit a FEN or recognized board before starting. " +
             "Images are recognized locally and must show a clear 2D chessboard. Files are limited to 16 MB each and 20 files per share. " +
@@ -112,7 +118,7 @@ private val helpSections = listOf(
         icon = "\uD83D\uDCCA",
         content = "Games progress through three analysis stages:\n\n" +
             "1. Preview Stage (orange) - Quick scan of all positions (50ms/move)\n" +
-            "2. Analyse Stage (blue) - Deep analysis backward (1s/move), tap to skip\n" +
+            "2. Analyse Stage (blue) - Deep analysis backward (2s/move by default), tap to skip\n" +
             "3. Manual Stage - Interactive exploration with real-time analysis"
     ),
     HelpEntry(
@@ -145,38 +151,23 @@ private val helpSections = listOf(
             "Arrow colors can be customized in Settings."
     ),
     HelpEntry(
-        title = "AI Position Analysis",
+        title = "AI reports",
         icon = "\uD83E\uDD16",
-        content = "In Manual stage, tap AI logos next to the board to get intelligent analysis from 9 AI services:\n\n" +
-            "• ChatGPT (OpenAI)\n" +
-            "• Claude (Anthropic)\n" +
-            "• Gemini (Google)\n" +
-            "• Grok (xAI)\n" +
-            "• DeepSeek\n" +
-            "• Mistral\n" +
-            "• Perplexity\n" +
-            "• Together AI\n" +
-            "• OpenRouter\n\n" +
-            "Configure API keys in Settings > AI Setup."
-    ),
-    HelpEntry(
-        title = "AI Hub",
-        icon = "\uD83D\uDCDD",
-        content = "Access the AI Hub from the main screen for advanced AI features:\n\n" +
-            "• New AI Report - Create custom AI reports with any prompt\n" +
-            "• Prompt History - Reuse previously submitted prompts\n" +
-            "• AI History - View previously generated reports\n\n" +
-            "Reports are saved as HTML files you can view in Chrome or share."
+        content = "AI reports are written by the companion AI app (com.ai), which you install separately from its project page; " +
+            "the AI provider and API keys are configured in that app, not in Eval.\n\n" +
+            "Use Generate AI reports on the Share / Export screen for the current position, or the AI button on a player profile. " +
+            "Eval prepares the request (optionally with Stockfish evaluations) and opens the AI app. " +
+            "If the installed AI app is later signed by a different developer, Eval asks you to confirm before sending anything."
     ),
     HelpEntry(
         title = "AI setup",
         icon = "⚙",
         content = "Settings > AI setup has separate System prompts, Prompts and AI instructions screens. Create, edit and delete each part independently. AI instructions contain instruction text only. Prompt editors offer @ popups; the instruction editor offers both @ and < popups.\n\n" +
-            "When requesting any AI report, choose System prompts, Prompts and AI instructions from three dropdowns. The app remembers your last choices, including None. Tap Next to review and edit all three text fields, then Submit to prepare the data and open AI. These edits apply only to this request. Back returns to your choices and keeps edits until you change a selection.\n\n" +
+            "When requesting any AI report, choose System prompts, Prompts and AI instructions from three option lists. The app remembers your last choices, including None. Tap Next to review and edit all three text fields, then Submit to prepare the data and open AI. These edits apply only to this request. Back returns to your choices and keeps edits until you change a selection.\n\n" +
             "Eval sends a data field only when its matching @name@ placeholder is used in the final edited request. This also applies to custom data and the date. Stockfish searches run only for the requested @MOVES@ or @ENGINE@ values. <prompt> and <system> contain the literal prompt text; they never select saved definitions. <model>model@provider</model> selects a model. <default> and <edit> are no longer controls. The AI app replaces placeholders in prompts, system prompts and report presentation; Eval keeps that text unchanged. Repeated placeholders share one data field. Unavailable values are empty.\n\n" +
             "Instruction placeholders: @FEN@, @COLOR@, @SERVER@, @PLAYER@, @PGN@, @MOVES@, @ENGINE@, @BOARD@ and @DATE@. @COLOR@ is White or Black according to the side to move.\n\n" +
-            "@MOVES@ contains every legal move at the current position with its Stockfish evaluation. Scores use White's perspective; +M/-M marks mate for White/Black. Settings > Stockfish > Moves list for AI controls time per move, threads, memory and NNUE. Eval shows cancellable progress before handing off the complete list.\n\n" +
-            "@ENGINE@ contains Stockfish's best continuations, ranked for the side to move, with scores and search depth. Settings > Stockfish > Engine moves for AI controls the number of lines, time per position, threads, memory and NNUE. A timed progress bar and the Manual analysis card show the latest complete lines. Stop and go to AI ends the search early and sends those lines immediately; Cancel returns without sending. If stopped before a complete set is available, AI receives that explanation instead of scores. Both data sets use the same captured position."
+            "@MOVES@ contains every legal move at the current position with its Stockfish evaluation. Scores use White's perspective; +M/-M marks mate for White/Black. Settings > Stockfish > Moves list for AI controls time per move, threads and memory. Eval shows cancellable progress before handing off the complete list.\n\n" +
+            "@ENGINE@ contains Stockfish's best continuations, ranked for the side to move, with scores and search depth. Settings > Stockfish > Engine moves for AI controls the number of lines, time per position, threads and memory. A timed progress bar and the Manual analysis card show the latest complete lines. Stop and go to AI ends the search early and sends those lines immediately; Cancel returns without sending. If stopped before a complete set is available, nothing is sent and you can try again. Both data sets use the same captured position."
     ),
     HelpEntry(
         title = "Game Sources",
@@ -200,7 +191,9 @@ private val helpSections = listOf(
             "• Popular moves played in this position\n" +
             "• Win/Draw/Loss percentages\n" +
             "• Number of games with each move\n\n" +
-            "Data from Lichess opening database."
+            "Data from the Lichess opening database, which requires a personal Lichess access token. " +
+            "Create one on lichess.org (no permissions needed) and enter it in Settings > General. " +
+            "The opening name is shown without a token."
     ),
     HelpEntry(
         title = "Top Bar Icons",
@@ -255,30 +248,19 @@ private val helpSections = listOf(
             "• The menu stays fixed while the content below it scrolls, on every screen. Enable Full screen in Settings → General settings to place it at the top edge with no gap. Swipe down from the top to reveal the status bar temporarily. Android navigation remains available."
     ),
     HelpEntry(
-        title = "Live Games",
+        title = "Lichess TV",
         icon = "\uD83D\uDCFA",
-        content = "Follow games in real-time:\n\n" +
-            "• Select a game from TV channels or streamers\n" +
-            "• Enable 'Auto-follow' to update automatically\n" +
-            "• Watch moves appear as they're played\n" +
-            "• Analysis updates with each new move"
-    ),
-    HelpEntry(
-        title = "Developer: API Tracing",
-        icon = "\uD83D\uDC1B",
-        content = "Enable 'Track API calls' in General settings to log all network requests:\n\n" +
-            "• All Lichess and AI service calls are logged\n" +
-            "• View requests/responses in the trace viewer\n" +
-            "• Useful for debugging API issues\n" +
-            "• Traces are cleared when tracking is disabled"
+        content = "Select game → Lichess → TV shows the games Lichess is currently featuring. " +
+            "Pick a channel to load that game as far as it has been played and analyse it. " +
+            "Reload the game later to include newer moves."
     ),
     HelpEntry(
         title = "About",
         icon = "ℹ",
         content = "Eval uses the installed Stockfish engine. Its reported version appears in the Stockfish card.\n\n" +
             "Game data from Lichess.org public APIs.\n\n" +
-            "AI analysis from OpenAI, Anthropic, Google, xAI, DeepSeek, Mistral, Perplexity, Together AI, and OpenRouter.\n\n" +
-            "All data stored locally on your device."
+            "AI reports are produced by the separate AI app with the provider you configure there.\n\n" +
+            "Settings, games and clipboard history are stored on your device only."
     )
 )
 

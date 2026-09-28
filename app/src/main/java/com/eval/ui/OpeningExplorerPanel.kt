@@ -124,12 +124,12 @@ fun OpeningExplorerPanel(
                         Text(
                             text = "Black: ${(explorerData.black * 100 / total)}%",
                             fontSize = 11.sp,
-                            color = AppColors.DimGray
+                            color = Color(0xFF9E9E9E)
                         )
                         Text(
                             text = "($total games)",
                             fontSize = 11.sp,
-                            color = AppColors.DarkGray
+                            color = Color(0xFF8C8C8C)
                         )
                     }
                 }

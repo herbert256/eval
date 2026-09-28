@@ -22,6 +22,37 @@ class MoveQualityRegressionTest {
         return orchestrator.calculateMoveQualities(values.mapValues { MoveScore(it.value, false, 0) })
     }
 
+    private fun scored(scores: Map<Int, MoveScore>): Map<Int, MoveQuality> {
+        val history = BoardHistoryBuilder.build(listOf("e4", "e5", "Nf3", "Nc6"), ChessBoard()).boards.toMutableList()
+        val orchestrator = AnalysisOrchestrator(StockfishEngine(ApplicationProvider.getApplicationContext<Context>()),
+            { GameUiState() }, {}, CoroutineScope(Job().apply { cancel() }), { history })
+        return orchestrator.calculateMoveQualities(scores)
+    }
+
+    @Test fun keeping_a_crushing_advantage_instead_of_a_mate_is_not_a_blunder() {
+        val mateIn4 = MoveScore(100f, true, 4)
+        // Black to move after 1.e4 (index 1 is Black's move; index 2 is White's).
+        val result = scored(mapOf(1 to mateIn4, 2 to MoveScore(9.5f, false, 0)))
+        assertNotEquals(MoveQuality.BLUNDER, result[2])
+        assertNotEquals(MoveQuality.MISTAKE, result[2])
+    }
+
+    @Test fun finding_a_mate_from_an_already_winning_position_is_not_brilliant() {
+        val result = scored(mapOf(1 to MoveScore(3f, false, 0), 2 to MoveScore(100f, true, 3)))
+        assertNotEquals(MoveQuality.BRILLIANT, result[2])
+    }
+
+    @Test fun deep_and_preview_scores_are_not_compared_with_each_other() {
+        val history = BoardHistoryBuilder.build(listOf("e4", "e5", "Nf3", "Nc6"), ChessBoard()).boards.toMutableList()
+        val orchestrator = AnalysisOrchestrator(StockfishEngine(ApplicationProvider.getApplicationContext<Context>()),
+            { GameUiState() }, {}, CoroutineScope(Job().apply { cancel() }), { history })
+        val preview = mapOf(0 to MoveScore(0.2f, false, 0), 1 to MoveScore(0.3f, false, 0), 2 to MoveScore(0.2f, false, 0))
+        // Only move 2 has a deep score, which differs from the 50 ms estimate by depth noise.
+        val analyse = preview + (2 to MoveScore(-0.9f, false, 0, depth = 20))
+        val result = orchestrator.calculateMoveQualities(preview, analyse)
+        assertEquals(MoveQuality.NORMAL, result[2])
+    }
+
     @Test fun returning_an_opponents_blunder_is_still_a_blunder() {
         val result = qualities(mapOf(0 to 0f, 1 to 5f, 2 to 0f))
         assertEquals("Black lost five pawns on its first move", MoveQuality.BLUNDER, result[1])

@@ -44,6 +44,7 @@ class LocalFileImportTest {
     @Test fun reads_plain_utf16_and_html_documents_for_fen_and_pgn() = runBlocking {
         val text = file("notes.txt", "Position: $fen\n\n$pgn".toByteArray(Charsets.UTF_16))
         val html = file("chess.html", "<pre>${pgn.replace("\"", "&quot;")}</pre><p>$fen</p>".toByteArray())
+        val latin = file("old.pgn", pgn.replace("Alice", "Réti, Richard").toByteArray(charset("windows-1252")))
         withContext(Dispatchers.Main) {
             val scanner = UrlGameScanner(context, this)
             try {
@@ -59,6 +60,10 @@ class LocalFileImportTest {
                     assertTrue(result.warnings.toString(), result.warnings.isEmpty())
                     assertTrue(result.fileName in listOf("notes.txt", "chess.html"))
                 }
+                // Older PGN databases use ISO-8859-1/windows-1252 rather than UTF-8.
+                scanner.openLocalFile(latin)
+                val game = scanner.settled().results.single()
+                assertEquals("Réti, Richard", com.eval.chess.PgnParser.parseHeaders(game.content)["White"])
             } finally { scanner.close() }
         }
     }

@@ -50,6 +50,16 @@ class GameResultDisplayTest {
         assertEquals(GameOutcome.UNKNOWN, gameOutcome(game("unknown", pgn = "1. e4 { 1/2-1/2 } *")))
     }
 
+    @Test fun pgn_result_token_follows_the_same_outcome() {
+        assertEquals("1-0", gameResultToken(game("resign", "white")))
+        assertEquals("0-1", gameResultToken(game("mate", "black", pgn = "[Result \"1-0\"]\n\n1. e4")))
+        assertEquals("1/2-1/2", gameResultToken(game("stalemate")))
+        assertEquals("1/2-1/2", gameResultToken(game("outoftime", pgn = "[Result \"1/2-1/2\"]\n\n1. e4 e5 1/2-1/2")))
+        assertEquals("1/2-1/2", gameResultToken(game("unknown", pgn = "1. e4 e5 ½-½")))
+        assertEquals("*", gameResultToken(game("outoftime")))
+        assertEquals("*", gameResultToken(game("started", pgn = "[Result \"1-0\"]\n\n1. e4 *")))
+    }
+
     @Test fun live_status_wins_over_stale_pgn_result() {
         val game = game("started", pgn = "[Result \"1/2-1/2\"]\n\n1. e4 e5 *")
         assertEquals("-", gameOutcome(game).text)

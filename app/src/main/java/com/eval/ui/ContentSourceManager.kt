@@ -11,6 +11,7 @@ import com.eval.data.StreamerInfo
 import com.eval.data.TournamentInfo
 import com.eval.data.TvChannelInfo
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /**
@@ -23,6 +24,17 @@ internal class ContentSourceManager(
     private val viewModelScope: CoroutineScope,
     private val loadGame: (LichessGame, ChessServer?, String?) -> Unit
 ) {
+    // One request per content section: starting another, or leaving the section, cancels the
+    // previous one, so a slow response can't replace a newer game or reopen a closed screen.
+    private val sectionJobs = mutableMapOf<String, Job>()
+
+    private fun launchLatest(section: String, block: suspend CoroutineScope.() -> Unit): Job {
+        sectionJobs[section]?.cancel()
+        return viewModelScope.launch(block = block).also { sectionJobs[section] = it }
+    }
+
+    private fun cancelSection(vararg sections: String) = sections.forEach { sectionJobs.remove(it)?.cancel() }
+
     private fun <T> handleApiResult(
         result: Result<T>,
         onSuccess: GameUiState.(T) -> GameUiState,
@@ -49,7 +61,7 @@ internal class ContentSourceManager(
             )
         }
 
-        viewModelScope.launch {
+        launchLatest("tournaments") {
             if (server == ChessServer.LICHESS) {
                 handleApiResult(
                     result = repository.getLichessTournaments(),
@@ -76,7 +88,7 @@ internal class ContentSourceManager(
             )
         }
 
-        viewModelScope.launch {
+        launchLatest("tournaments") {
             handleApiResult(
                 result = repository.getLichessTournamentGames(tournament.id),
                 onSuccess = { copy(tournamentGamesLoading = false, tournamentGames = it) },
@@ -86,6 +98,7 @@ internal class ContentSourceManager(
     }
 
     fun backToTournamentList() {
+        cancelSection("tournaments")
         updateUiState {
             copy(
                 selectedTournament = null,
@@ -95,6 +108,7 @@ internal class ContentSourceManager(
     }
 
     fun dismissTournaments() {
+        cancelSection("tournaments")
         updateUiState {
             copy(
                 showTournamentsScreen = false,
@@ -127,7 +141,7 @@ internal class ContentSourceManager(
             )
         }
 
-        viewModelScope.launch {
+        launchLatest("broadcasts") {
             handleApiResult(
                 result = repository.getLichessBroadcasts(),
                 onSuccess = { copy(broadcastsLoading = false, broadcastsList = it) },
@@ -170,7 +184,7 @@ internal class ContentSourceManager(
             )
         }
 
-        viewModelScope.launch {
+        launchLatest("broadcasts") {
             handleApiResult(
                 result = repository.getLichessBroadcastGames(round.id),
                 onSuccess = { copy(broadcastGamesLoading = false, broadcastGames = it) },
@@ -180,6 +194,7 @@ internal class ContentSourceManager(
     }
 
     fun backToBroadcastList() {
+        cancelSection("broadcasts")
         val state = getUiState()
 
         if (state.selectedBroadcastRound != null) {
@@ -205,6 +220,7 @@ internal class ContentSourceManager(
     }
 
     fun dismissBroadcasts() {
+        cancelSection("broadcasts")
         updateUiState {
             copy(
                 showBroadcastsScreen = false,
@@ -235,7 +251,7 @@ internal class ContentSourceManager(
             )
         }
 
-        viewModelScope.launch {
+        launchLatest("tv") {
             try {
                 handleApiResult(
                     result = repository.getLichessTvChannels(),
@@ -256,7 +272,7 @@ internal class ContentSourceManager(
     fun selectTvGame(channel: TvChannelInfo) {
         updateUiState { copy(tvLoading = true) }
 
-        viewModelScope.launch {
+        launchLatest("tv") {
             when (val result = repository.getLichessGame(channel.gameId)) {
                 is Result.Success -> {
                     val game = result.data
@@ -277,7 +293,7 @@ internal class ContentSourceManager(
                                 }
                             }
                         }
-                        return@launch
+                        return@launchLatest
                     }
                     dismissLichessTv()
                     val whiteName = game.players.white.user?.name ?: "White"
@@ -296,6 +312,7 @@ internal class ContentSourceManager(
     }
 
     fun dismissLichessTv() {
+        cancelSection("tv")
         updateUiState {
             copy(
                 showTvScreen = false,
@@ -317,7 +334,7 @@ internal class ContentSourceManager(
             )
         }
 
-        viewModelScope.launch {
+        launchLatest("streamers") {
             handleApiResult(
                 result = repository.getLichessStreamers(),
                 onSuccess = { copy(streamersLoading = false, streamersList = it) },
@@ -332,6 +349,7 @@ internal class ContentSourceManager(
     }
 
     fun dismissStreamers() {
+        cancelSection("streamers")
         updateUiState {
             copy(
                 showStreamersScreen = false,
@@ -356,7 +374,7 @@ internal class ContentSourceManager(
             )
         }
 
-        viewModelScope.launch {
+        launchLatest("player") {
             val result = repository.getPlayerInfo(username, server)
             when (result) {
                 is Result.Success -> {
@@ -447,12 +465,20 @@ internal class ContentSourceManager(
         val nextPageStartIndex = (currentPage + 1) * pageSize
 
         if (nextPageStartIndex >= currentGames.size && hasMore) {
+            if (sectionJobs["playerGames"]?.isActive == true) return  // A double tap must not fetch twice.
             updateUiState { copy(playerGamesLoading = true) }
 
-            viewModelScope.launch {
+            launchLatest("playerGames") {
                 val newCount = currentGames.size + pageSize
+                // Fetch only the next batch when the last game's time is known; append it.
+                val until = currentGames.lastOrNull()?.createdAt
                 val result = when (playerInfo.server) {
-                    ChessServer.LICHESS -> repository.getLichessGames(playerInfo.username, newCount)
+                    ChessServer.LICHESS -> if (until != null) {
+                        when (val more = repository.getLichessGames(playerInfo.username, pageSize, until - 1)) {
+                            is Result.Success -> Result.Success((currentGames + more.data).distinctBy { it.id })
+                            is Result.Error -> more
+                        }
+                    } else repository.getLichessGames(playerInfo.username, newCount)
                     ChessServer.LOCAL -> Result.Error("Online retrieval is unavailable for local games")
                 }
                 handleApiResult(
@@ -477,6 +503,10 @@ internal class ContentSourceManager(
         } else if (nextPageStartIndex < currentGames.size) {
             updateUiState { copy(playerGamesPage = currentPage + 1) }
         }
+    }
+
+    fun setPlayerGamesPage(page: Int) {
+        updateUiState { copy(playerGamesPage = page.coerceAtLeast(0)) }
     }
 
     fun previousPlayerGamesPage() {
@@ -504,6 +534,7 @@ internal class ContentSourceManager(
     }
 
     fun dismissPlayerInfo() {
+        cancelSection("player", "playerGames")
         updateUiState {
             copy(
                 showPlayerInfoScreen = false,
@@ -528,7 +559,7 @@ internal class ContentSourceManager(
             )
         }
 
-        viewModelScope.launch {
+        launchLatest("rankings") {
             val result = when (server) {
                 ChessServer.LICHESS -> repository.getLichessLeaderboard()
                 ChessServer.LOCAL -> Result.Error("Rankings are available on Lichess")
@@ -543,6 +574,7 @@ internal class ContentSourceManager(
     }
 
     fun dismissTopRankings() {
+        cancelSection("rankings")
         updateUiState {
             copy(
                 showTopRankingsScreen = false,

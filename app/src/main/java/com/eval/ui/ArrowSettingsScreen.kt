@@ -9,12 +9,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.semantics.Role
 
 /**
  * Arrow settings screen for configuring move arrow display options.
@@ -36,8 +39,8 @@ fun ArrowSettingsScreen(
     var multiLinesArrowColor by remember { mutableStateOf(stockfishSettings.manualStage.multiLinesArrowColor) }
 
     // Color picker state
-    var activeColorPicker by remember { mutableStateOf<Pair<String, Long>?>(null) }
-    var activeColorCallback by remember { mutableStateOf<((Long) -> Unit)?>(null) }
+    // Only the open picker's title is saved, so it survives rotation; the target is looked up below.
+    var activeColorPicker by rememberSaveable { mutableStateOf<String?>(null) }
 
     val numArrowsOptions = listOf(1, 2, 3, 4, 5, 6, 7, 8)
     val arrowModeOptions = listOf(
@@ -67,17 +70,18 @@ fun ArrowSettingsScreen(
     }
 
     // Full-screen color picker (early return pattern)
-    activeColorPicker?.let { (title, color) ->
+    val colorTarget: Pair<Long, (Long) -> Unit>? = when (activeColorPicker) {
+        "Arrow color for white moves" -> whiteArrowColor to { color: Long -> whiteArrowColor = color; saveSettings(newWhiteArrowColor = color) }
+        "Arrow color for black moves" -> blackArrowColor to { color: Long -> blackArrowColor = color; saveSettings(newBlackArrowColor = color) }
+        "Arrow color for multi lines" -> multiLinesArrowColor to { color: Long -> multiLinesArrowColor = color; saveSettings(newMultiLinesArrowColor = color) }
+        else -> null
+    }
+    if (colorTarget != null) {
         ColorPickerDialog(
-            currentColor = color,
-            title = title,
-            onColorSelected = { newColor ->
-                activeColorCallback?.invoke(newColor)
-            },
-            onDismiss = {
-                activeColorPicker = null
-                activeColorCallback = null
-            }
+            currentColor = colorTarget.first,
+            title = activeColorPicker.orEmpty(),
+            onColorSelected = { newColor -> colorTarget.second(newColor) },
+            onDismiss = { activeColorPicker = null }
         )
         return
     }
@@ -115,15 +119,17 @@ fun ArrowSettingsScreen(
                     arrowModeOptions.forEach { (mode, label) ->
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            RadioButton(
+                            // The row is the radio button: TalkBack reads its label and tapping the label selects it.
+                            modifier = Modifier.weight(1f).selectable(
                                 selected = arrowMode == mode,
+                                role = Role.RadioButton,
                                 onClick = {
                                     arrowMode = mode
                                     saveSettings(newArrowMode = mode)
                                 }
                             )
+                        ) {
+                            RadioButton(selected = arrowMode == mode, onClick = null)
                             Text(label, color = Color.White)
                         }
                     }
@@ -157,15 +163,18 @@ fun ArrowSettingsScreen(
                 ) {
                     numArrowsOptions.forEach { num ->
                         Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
+                            verticalAlignment = Alignment.CenterVertically,
+                            // The row is the radio button: TalkBack reads its label and tapping the label selects it.
+                            modifier = Modifier.selectable(
                                 selected = numArrows == num,
+                                role = Role.RadioButton,
                                 onClick = {
                                     numArrows = num
                                     saveSettings(newNumArrows = num)
                                 }
                             )
+                        ) {
+                            RadioButton(selected = numArrows == num, onClick = null)
                             Text(num.toString(), color = Color.White)
                         }
                     }
@@ -195,11 +204,7 @@ fun ArrowSettingsScreen(
                             .background(Color(whiteArrowColor.toInt()))
                             .border(2.dp, Color.Gray, RoundedCornerShape(8.dp))
                             .clickable {
-                                activeColorPicker = "Arrow color for white moves" to whiteArrowColor
-                                activeColorCallback = { color ->
-                                    whiteArrowColor = color
-                                    saveSettings(newWhiteArrowColor = color)
-                                }
+                                activeColorPicker = "Arrow color for white moves"
                             }
                     )
                 }
@@ -218,11 +223,7 @@ fun ArrowSettingsScreen(
                             .background(Color(blackArrowColor.toInt()))
                             .border(2.dp, Color.Gray, RoundedCornerShape(8.dp))
                             .clickable {
-                                activeColorPicker = "Arrow color for black moves" to blackArrowColor
-                                activeColorCallback = { color ->
-                                    blackArrowColor = color
-                                    saveSettings(newBlackArrowColor = color)
-                                }
+                                activeColorPicker = "Arrow color for black moves"
                             }
                     )
                 }
@@ -261,11 +262,7 @@ fun ArrowSettingsScreen(
                             .background(Color(multiLinesArrowColor.toInt()))
                             .border(2.dp, Color.Gray, RoundedCornerShape(8.dp))
                             .clickable {
-                                activeColorPicker = "Arrow color for multi lines" to multiLinesArrowColor
-                                activeColorCallback = { color ->
-                                    multiLinesArrowColor = color
-                                    saveSettings(newMultiLinesArrowColor = color)
-                                }
+                                activeColorPicker = "Arrow color for multi lines"
                             }
                     )
                 }

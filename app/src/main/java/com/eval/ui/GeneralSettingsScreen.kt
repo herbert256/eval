@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.saveable.rememberSaveable
 
 /**
  * General settings screen for app-wide settings.
@@ -20,10 +21,13 @@ fun GeneralSettingsScreen(
     generalSettings: GeneralSettings,
     onBackToSettings: () -> Unit,
     onBackToGame: () -> Unit,
-    onSave: (GeneralSettings) -> Unit
+    onSave: (GeneralSettings) -> Unit,
+    lichessToken: String = "",
+    onSaveLichessToken: (String) -> Unit = {}
 ) {
     var moveSoundsEnabled by remember { mutableStateOf(generalSettings.moveSoundsEnabled) }
-    var lichessUsername by remember { mutableStateOf(generalSettings.lichessUsername) }
+    var lichessUsername by rememberSaveable { mutableStateOf(generalSettings.lichessUsername) }
+    var token by rememberSaveable { mutableStateOf(lichessToken) }
     var fullScreen by remember(generalSettings.fullScreen) { mutableStateOf(generalSettings.fullScreen) }
 
     fun saveSettings() {
@@ -148,6 +152,35 @@ fun GeneralSettingsScreen(
                         },
                         placeholder = { Text("Enter username") },
                         singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedBorderColor = AppColors.DarkGray,
+                            focusedBorderColor = AppColors.LichessGreen,
+                            unfocusedPlaceholderColor = AppColors.DimGray,
+                            focusedPlaceholderColor = AppColors.DimGray
+                        )
+                    )
+                }
+
+                // Lichess access token, only used for the opening explorer
+                Column {
+                    Text("Lichess access token", color = Color.White)
+                    Text(
+                        text = "Optional. Lichess requires a personal access token (no scopes needed) for opening " +
+                            "statistics. It stays on this device and is not included in settings exports.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppColors.SubtleText
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = token,
+                        onValueChange = {
+                            token = it.trim()
+                            onSaveLichessToken(token)
+                        },
+                        placeholder = { Text("lip_…") },
+                        singleLine = true,
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
                             unfocusedBorderColor = AppColors.DarkGray,

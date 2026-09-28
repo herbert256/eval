@@ -148,6 +148,8 @@ internal object SettingsImportValidation {
 
     private fun requireString(value: JsonElement) = require(value.isJsonPrimitive && value.asJsonPrimitive.isString)
 
+    fun isKnownLegacyKey(key: String): Boolean = key in legacyTypes
+
     private val legacyTypes = buildMap {
         fun fields(type: String, vararg keys: String) = keys.forEach { put(it, type) }
         fields("StringSet", "seeded_ai_system_prompt_ids", "seeded_ai_report_prompt_ids")

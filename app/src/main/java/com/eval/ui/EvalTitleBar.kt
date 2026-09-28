@@ -45,7 +45,7 @@ internal data class EvalMenuActions(
     val reload: (() -> Unit)? = null
 )
 
-internal val LocalEvalMenuActions = staticCompositionLocalOf<EvalMenuActions?> { null }
+internal val LocalEvalMenuActions = compositionLocalOf<EvalMenuActions?> { null }
 
 @OptIn(ExperimentalMaterial3Api::class)
 internal val LocalEvalTitleScrollState = staticCompositionLocalOf<TopAppBarState?> { null }

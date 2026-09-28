@@ -1,7 +1,5 @@
 package com.eval.chess
 
-import kotlin.math.abs
-
 /** An editor draft may be incomplete; only validated FEN is handed to the game. */
 internal data class BoardSetupPosition(
     val squares: String = ".".repeat(64),
@@ -117,19 +115,10 @@ internal data class BoardSetupPosition(
     }
 
     fun validationError(): String? {
-        if (squares.count { it == 'K' } != 1 || squares.count { it == 'k' } != 1)
-            return "Place one white king and one black king."
-        if ((0..7).any { squares[it].lowercaseChar() == 'p' || squares[56 + it].lowercaseChar() == 'p' })
-            return "Pawns cannot be on the first or last rank."
-        val whiteKing = squares.indexOf('K')
-        val blackKing = squares.indexOf('k')
-        if (abs(whiteKing / 8 - blackKing / 8) <= 1 && abs(whiteKing % 8 - blackKing % 8) <= 1)
-            return "The kings cannot be next to each other."
-        for (white in listOf(true, false)) {
-            val pieces = squares.filter { it != '.' && it.isUpperCase() == white }
-            if (pieces.length > 16 || pieces.count { it.lowercaseChar() == 'p' } > 8)
-                return "Each side can have at most 16 pieces, including 8 pawns."
-        }
+        // Pieces, kings and check follow the same rules as FEN import (ChessBoard.fenValidationError).
+        // Check them first with neutral details so an unfinished counter field doesn't hide them.
+        ChessBoard.fenValidationError(copy(castling = "", enPassant = "-", halfMoves = "0", fullMove = "1").toFen())
+            ?.let { return it }
         if (halfMoves.toIntOrNull()?.let { it >= 0 } != true || halfMoves.any { it !in '0'..'9' })
             return "Halfmove counter must be a whole number of 0 or more."
         if (fullMove.toIntOrNull()?.let { it >= 1 } != true || fullMove.any { it !in '0'..'9' })
@@ -137,11 +126,7 @@ internal data class BoardSetupPosition(
         if (castling.any { !canCastle(it) }) return "Castling requires the king and rook on their starting squares."
         if (enPassant != "-" && enPassant !in enPassantTargets()) return "Choose a valid en passant target."
         if (enPassant != "-" && halfMoves.toIntOrNull() != 0) return "En passant requires a halfmove counter of 0."
-        val board = ChessBoard()
-        if (!board.setFen(toFen())) return "This position cannot be opened. Check the position details."
-        if (board.isKingInCheck(if (whiteToMove) PieceColor.BLACK else PieceColor.WHITE))
-            return "The side that just moved cannot be in check. Change the side to move or adjust the pieces."
-        return null
+        return ChessBoard.fenValidationError(toFen())
     }
 
     companion object {
@@ -176,8 +161,10 @@ internal data class BoardSetupPosition(
             if (castling.any { it !in "KQkq" } || castling.toSet().size != castling.length) return null
             val ep = fields.getOrElse(3) { "-" }
             if (ep != "-" && Square.fromAlgebraic(ep) == null) return null
-            return BoardSetupPosition(String(squares), turn == "w", castling, ep,
+            val draft = BoardSetupPosition(String(squares), turn == "w", castling, ep,
                 fields.getOrElse(4) { "0" }, fields.getOrElse(5) { "1" })
+            // Like FEN import, repair a stale "KQkq" instead of leaving a hidden, unfixable error.
+            return draft.copy(castling = "KQkq".filter { it in castling && draft.canCastle(it) })
         }
 
         fun piece(symbol: Char): Piece? {

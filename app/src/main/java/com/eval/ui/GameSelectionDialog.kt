@@ -277,7 +277,7 @@ fun SelectedRetrieveGamesScreen(
                 .fillMaxWidth(),
             contentAlignment = Alignment.TopCenter
         ) {
-            val pageSize = (maxHeight.value / 38f).toInt().coerceAtLeast(5)
+            val pageSize = rowsThatFit(maxHeight, rowHeight = 48.dp, minimum = 5)
 
             // Calculate current page games
             val startIndex = currentPage * pageSize
@@ -425,7 +425,7 @@ fun AnalysedGamesSelectionScreen(
                 .fillMaxWidth(),
             contentAlignment = Alignment.TopCenter
         ) {
-            val pageSize = (maxHeight.value / 72f).toInt().coerceAtLeast(3)
+            val pageSize = rowsThatFit(maxHeight, rowHeight = 92.dp, minimum = 3)
 
             val startIndex = currentPage * pageSize
             val endIndex = minOf(startIndex + pageSize, games.size)

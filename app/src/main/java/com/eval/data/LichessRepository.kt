@@ -110,28 +110,48 @@ class ChessRepository(
         return Result.Success(items)
     }
 
+    /** Readable message for a failed request; users don't see exception class names. */
+    private fun friendlyError(e: Exception): String = when (e) {
+        is java.net.UnknownHostException, is java.net.ConnectException ->
+            "No internet connection. Check your connection and try again."
+        is java.io.InterruptedIOException -> "Lichess did not respond in time. Please try again."
+        is com.google.gson.JsonParseException, is IllegalStateException ->
+            "Lichess sent data that Eval could not read. Please try again later."
+        is IllegalArgumentException -> "That name is not valid on Lichess."
+        is java.io.IOException -> "The connection to Lichess failed. Please try again."
+        else -> "Something went wrong: ${e.message ?: e.javaClass.simpleName}"
+    }
+
+    /** Readable message for an HTTP error status when fetching [what]. */
+    private fun httpError(code: Int, what: String): String = when (code) {
+        404 -> "Lichess could not find $what."
+        429 -> "Lichess is limiting requests. Please try again in a minute."
+        in 500..599 -> "Lichess is having problems right now (HTTP $code). Please try again later."
+        else -> "Could not fetch $what from Lichess (HTTP $code)."
+    }
+
     /**
      * Get recent games from Lichess.org
      */
     suspend fun getLichessGames(
         username: String,
-        maxGames: Int
+        maxGames: Int,
+        until: Long? = null
     ): Result<List<LichessGame>> = withContext(Dispatchers.IO) {
         try {
-            val response = lichessApi.getGames(username, max = maxGames)
+            val response = lichessApi.getGames(username, max = maxGames, until = until)
 
             if (!response.isSuccessful) {
                 return@withContext when (response.code()) {
                     404 -> Result.Error("User not found on Lichess")
-                    429 -> Result.Error("Lichess is limiting requests. Please try again later (HTTP 429).")
-                    else -> Result.Error("Failed to fetch games from Lichess (HTTP ${response.code()}). Please try again.")
+                    else -> Result.Error(httpError(response.code(), "games for this player"))
                 }
             }
 
             val body = response.body()
             processNdjsonResponse<LichessGame>(body, "No games found for this user on Lichess")
         } catch (e: Exception) {
-            Result.Error("${e.javaClass.simpleName}: ${e.message ?: "unknown"}")
+            Result.Error(friendlyError(e))
         }
     }
 
@@ -145,7 +165,7 @@ class ChessRepository(
             if (!response.isSuccessful) {
                 return@withContext when (response.code()) {
                     404 -> Result.Error("User not found on Lichess")
-                    else -> Result.Error("Failed to fetch user data from Lichess")
+                    else -> Result.Error(httpError(response.code(), "this player"))
                 }
             }
 
@@ -181,7 +201,7 @@ class ChessRepository(
                 isStreamer = user.streaming
             ))
         } catch (e: Exception) {
-            Result.Error("${e.javaClass.simpleName}: ${e.message ?: "unknown"}")
+            Result.Error(friendlyError(e))
         }
     }
 
@@ -203,7 +223,7 @@ class ChessRepository(
             val response = lichessApi.getLeaderboard()
 
             if (!response.isSuccessful) {
-                return@withContext Result.Error("Failed to fetch Lichess leaderboard")
+                return@withContext Result.Error(httpError(response.code(), "Lichess leaderboard"))
             }
 
             val leaderboard = response.body() ?: return@withContext Result.Error("No leaderboard data received")
@@ -254,7 +274,7 @@ class ChessRepository(
 
             Result.Success(result)
         } catch (e: Exception) {
-            Result.Error("${e.javaClass.simpleName}: ${e.message ?: "unknown"}")
+            Result.Error(friendlyError(e))
         }
     }
 
@@ -266,7 +286,7 @@ class ChessRepository(
             val response = lichessApi.getLiveStreamers()
 
             if (!response.isSuccessful) {
-                return@withContext Result.Error("Failed to fetch Lichess streamers")
+                return@withContext Result.Error(httpError(response.code(), "Lichess streamers"))
             }
 
             val responseBody = response.body() ?: return@withContext Result.Error("No streamer data received")
@@ -295,7 +315,7 @@ class ChessRepository(
 
             Result.Success(streamers)
         } catch (e: Exception) {
-            Result.Error("${e.javaClass.simpleName}: ${e.message ?: "unknown"}")
+            Result.Error(friendlyError(e))
         }
     }
 
@@ -307,7 +327,7 @@ class ChessRepository(
             val response = lichessApi.getTournaments()
 
             if (!response.isSuccessful) {
-                return@withContext Result.Error("Failed to fetch Lichess tournaments")
+                return@withContext Result.Error(httpError(response.code(), "Lichess tournaments"))
             }
 
             val tournamentList = response.body() ?: return@withContext Result.Error("No tournament data received")
@@ -358,7 +378,7 @@ class ChessRepository(
 
             Result.Success(result)
         } catch (e: Exception) {
-            Result.Error("${e.javaClass.simpleName}: ${e.message ?: "unknown"}")
+            Result.Error(friendlyError(e))
         }
     }
 
@@ -380,13 +400,13 @@ class ChessRepository(
             val response = lichessApi.getTournamentGames(tournamentId)
 
             if (!response.isSuccessful) {
-                return@withContext Result.Error("Failed to fetch tournament games")
+                return@withContext Result.Error(httpError(response.code(), "tournament games"))
             }
 
             val body = response.body()
             processNdjsonResponse<LichessGame>(body, "No games found in this tournament")
         } catch (e: Exception) {
-            Result.Error("${e.javaClass.simpleName}: ${e.message ?: "unknown"}")
+            Result.Error(friendlyError(e))
         }
     }
 
@@ -398,7 +418,7 @@ class ChessRepository(
             val response = lichessApi.getBroadcasts()
 
             if (!response.isSuccessful) {
-                return@withContext Result.Error("Failed to fetch Lichess broadcasts")
+                return@withContext Result.Error(httpError(response.code(), "Lichess broadcasts"))
             }
 
             val body = response.body()
@@ -438,7 +458,7 @@ class ChessRepository(
 
             Result.Success(result)
         } catch (e: Exception) {
-            Result.Error("${e.javaClass.simpleName}: ${e.message ?: "unknown"}")
+            Result.Error(friendlyError(e))
         }
     }
 
@@ -450,7 +470,7 @@ class ChessRepository(
             val response = lichessApi.getBroadcastRoundPgn(roundId)
 
             if (!response.isSuccessful) {
-                return@withContext Result.Error("Failed to fetch broadcast games: ${response.code()}")
+                return@withContext Result.Error(httpError(response.code(), "broadcast games"))
             }
 
             val body = response.body()
@@ -472,9 +492,9 @@ class ChessRepository(
                 return@withContext Result.Error("No games found in this broadcast")
             }
 
-            Result.Success(games)
+            Result.Success(withUniqueIds(games))
         } catch (e: Exception) {
-            Result.Error("${e.javaClass.simpleName}: ${e.message ?: "unknown"}")
+            Result.Error(friendlyError(e))
         }
     }
 
@@ -495,8 +515,8 @@ class ChessRepository(
             else -> null
         }
 
-        val gameUrl = headers["GameURL"]
-        val gameId = gameUrl?.substringAfterLast("/") ?: java.util.UUID.randomUUID().toString()
+        val gameId = headers["GameURL"]?.trimEnd('/')?.substringAfterLast("/")?.takeIf { it.isNotBlank() }
+            ?: java.util.UUID.randomUUID().toString()
 
         return LichessGame(
             id = gameId,
@@ -526,6 +546,15 @@ class ChessRepository(
         )
     }
 
+    /** Merged databases can repeat a GameURL; list keys must stay unique. */
+    private fun withUniqueIds(games: List<LichessGame>): List<LichessGame> {
+        val seenIds = HashSet<String>()
+        return games.map { game ->
+            if (seenIds.add(game.id)) game
+            else game.copy(id = "${game.id}-${java.util.UUID.randomUUID()}").also { seenIds.add(it.id) }
+        }
+    }
+
     /**
      * Parse multiple games from a PGN file content.
      * Uses PGN syntax rather than requiring a particular blank-line separator.
@@ -553,7 +582,7 @@ class ChessRepository(
             return Result.Error("Failed to parse any games from PGN file")
         }
 
-        return Result.Success(games)
+        return Result.Success(withUniqueIds(games))
     }
 
     /**
@@ -564,7 +593,7 @@ class ChessRepository(
             val response = lichessApi.getTvChannels()
 
             if (!response.isSuccessful) {
-                return@withContext Result.Error("Failed to fetch Lichess TV channels: ${response.code()}")
+                return@withContext Result.Error(httpError(response.code(), "Lichess TV channels"))
             }
 
             val body = response.body()
@@ -644,24 +673,12 @@ class ChessRepository(
                     ))
                 }
             }
-            channels.chess960?.let { game ->
-                if (game.gameId != null) {
-                    result.add(TvChannelInfo(
-                        channelName = "Chess960",
-                        gameId = game.gameId,
-                        playerName = game.user?.name ?: "Unknown",
-                        playerTitle = game.user?.title,
-                        rating = game.rating,
-                        server = ChessServer.LICHESS
-                    ))
-                }
-            }
 
             if (com.eval.BuildConfig.DEBUG) android.util.Log.d("ChessRepository", "getLichessTvChannels: returning ${result.size} channels")
             Result.Success(result)
         } catch (e: Exception) {
             android.util.Log.e("ChessRepository", "getLichessTvChannels: Exception: ${e.message}", e)
-            Result.Error("${e.javaClass.simpleName}: ${e.message ?: "unknown"}")
+            Result.Error(friendlyError(e))
         }
     }
 
@@ -673,7 +690,7 @@ class ChessRepository(
             val response = lichessApi.getGame(gameId)
 
             if (!response.isSuccessful) {
-                return@withContext Result.Error("Failed to fetch game")
+                return@withContext Result.Error(httpError(response.code(), "game"))
             }
 
             val body = response.body()
@@ -684,7 +701,7 @@ class ChessRepository(
             val game = gson.fromJson(body, LichessGame::class.java)
             Result.Success(game)
         } catch (e: Exception) {
-            Result.Error("${e.javaClass.simpleName}: ${e.message ?: "unknown"}")
+            Result.Error(friendlyError(e))
         }
     }
 
@@ -697,7 +714,7 @@ class ChessRepository(
             val response = lichessApi.streamGame(gameId)
 
             if (!response.isSuccessful) {
-                return@withContext Result.Error("Failed to stream game: ${response.code()}")
+                return@withContext Result.Error(httpError(response.code(), "the live game"))
             }
 
             val responseBody = response.body()
@@ -761,7 +778,12 @@ class ChessRepository(
                 ending?.status in setOf("draw", "stalemate") -> "1/2-1/2"
                 else -> "*"
             }
+            val variantKey = gameInfo.variant?.key ?: "standard"
+            if (variantKey != "standard" && variantKey != "fromPosition") {
+                return@withContext Result.Error("${gameInfo.variant?.name ?: variantKey} games are not supported; Eval analyses standard chess only")
+            }
             val pgn = buildPgnFromMoves(moves, gameInfo, result)
+                ?: return@withContext Result.Error("Could not replay the streamed moves")
 
             // Create LichessGame from streamed data
             val game = LichessGame(
@@ -797,7 +819,7 @@ class ChessRepository(
 
             Result.Success(game)
         } catch (e: Exception) {
-            Result.Error("${e.javaClass.simpleName}: ${e.message ?: "unknown"}")
+            Result.Error(friendlyError(e))
         }
     }
 
@@ -813,7 +835,7 @@ class ChessRepository(
             val response = lichessApi.streamGame(gameId)
 
             if (!response.isSuccessful) {
-                emit(LiveGameEvent.Error("Failed to connect: ${response.code()}"))
+                emit(LiveGameEvent.Error(httpError(response.code(), "the live game")))
                 emit(LiveGameEvent.Disconnected)
                 return@flow
             }
@@ -879,11 +901,19 @@ class ChessRepository(
     /**
      * Build a minimal PGN from UCI moves
      */
-    private fun buildPgnFromMoves(moves: List<String>, gameInfo: StreamGameInfo, result: String = "*"): String {
+    /**
+     * Rebuild a PGN from streamed UCI moves, starting from the stream's initial position.
+     * Returns null when a move cannot be replayed, so callers never load a silently truncated game.
+     */
+    private fun buildPgnFromMoves(moves: List<String>, gameInfo: StreamGameInfo, result: String = "*"): String? {
         val whiteName = gameInfo.players?.white?.user?.name ?: "White"
         val blackName = gameInfo.players?.black?.user?.name ?: "Black"
         val whiteRating = gameInfo.players?.white?.rating
         val blackRating = gameInfo.players?.black?.rating
+
+        val board = com.eval.chess.ChessBoard()
+        val startFen = gameInfo.initialFen?.takeIf { it.isNotBlank() && it != "startpos" && it != board.getFen() }
+        if (startFen != null && !board.setFen(startFen)) return null
 
         val headers = buildString {
             appendLine("[Event \"Live Game\"]")
@@ -893,83 +923,31 @@ class ChessRepository(
             whiteRating?.let { appendLine("[WhiteElo \"$it\"]") }
             blackRating?.let { appendLine("[BlackElo \"$it\"]") }
             appendLine("[Result \"$result\"]")
+            if (startFen != null) {
+                appendLine("[SetUp \"1\"]")
+                appendLine("[FEN \"$startFen\"]")
+            }
             appendLine()
         }
 
-        // Convert UCI → SAN by replaying on a ChessBoard so third-party PGN
-        // tools can read the output. We skip check/mate markers ('+', '#')
-        // since they are optional in the PGN spec and require a post-move
-        // legal-move check that's not worth the cost here.
-        val board = com.eval.chess.ChessBoard()
-        val sanMoves = mutableListOf<String>()
-        for (uci in moves) {
-            val san = uciToSan(board, uci) ?: break
-            sanMoves.add(san)
-            if (!board.makeUciMove(uci)) break
-        }
-
+        val firstMoveNumber = board.getFen().substringAfterLast(' ').toIntOrNull() ?: 1
+        val blackStarts = board.getTurn() == com.eval.chess.PieceColor.BLACK
         val moveText = buildString {
-            sanMoves.forEachIndexed { index, san ->
-                if (index % 2 == 0) append("${(index / 2) + 1}. ")
+            moves.forEachIndexed { index, uci ->
+                val san = board.sanForMove(uci) ?: return null
+                if (!board.makeUciMove(uci)) return null
+                val ply = index + if (blackStarts) 1 else 0
+                val number = firstMoveNumber + ply / 2
+                when {
+                    ply % 2 == 0 -> append("$number. ")
+                    index == 0 -> append("$number... ")
+                }
                 append("$san ")
             }
             append(result)
         }
 
         return headers + moveText
-    }
-
-    private fun uciToSan(board: com.eval.chess.ChessBoard, uci: String): String? {
-        if (uci.length < 4) return null
-        val from = com.eval.chess.Square.fromAlgebraic(uci.substring(0, 2)) ?: return null
-        val to = com.eval.chess.Square.fromAlgebraic(uci.substring(2, 4)) ?: return null
-        val piece = board.getPiece(from) ?: return null
-
-        // Castling: encode by king travel distance.
-        if (piece.type == com.eval.chess.PieceType.KING && kotlin.math.abs(to.file - from.file) == 2) {
-            return if (to.file == 6) "O-O" else "O-O-O"
-        }
-
-        val isCapture = board.getPiece(to) != null ||
-            (piece.type == com.eval.chess.PieceType.PAWN && from.file != to.file)
-
-        val promotion = if (uci.length == 5) {
-            when (uci[4].lowercaseChar()) {
-                'q' -> "=Q"; 'r' -> "=R"; 'b' -> "=B"; 'n' -> "=N"; else -> ""
-            }
-        } else ""
-
-        if (piece.type == com.eval.chess.PieceType.PAWN) {
-            val dest = to.toAlgebraic()
-            return if (isCapture) "${('a' + from.file)}x$dest$promotion" else "$dest$promotion"
-        }
-
-        val letter = when (piece.type) {
-            com.eval.chess.PieceType.KNIGHT -> "N"
-            com.eval.chess.PieceType.BISHOP -> "B"
-            com.eval.chess.PieceType.ROOK -> "R"
-            com.eval.chess.PieceType.QUEEN -> "Q"
-            com.eval.chess.PieceType.KING -> "K"
-            else -> ""
-        }
-
-        // Disambiguate if another piece of the same type could also legally reach `to`.
-        val others = mutableListOf<com.eval.chess.Square>()
-        for (r in 0..7) for (f in 0..7) {
-            val sq = com.eval.chess.Square(f, r)
-            if (sq == from) continue
-            val p = board.getPiece(sq) ?: continue
-            if (p.type != piece.type || p.color != piece.color) continue
-            if (board.isLegalMove(sq, to)) others.add(sq)
-        }
-        val disamb = when {
-            others.isEmpty() -> ""
-            others.none { it.file == from.file } -> "${('a' + from.file)}"
-            others.none { it.rank == from.rank } -> "${('1' + from.rank)}"
-            else -> from.toAlgebraic()
-        }
-
-        return letter + disamb + (if (isCapture) "x" else "") + to.toAlgebraic() + promotion
     }
 
     /**
@@ -980,11 +958,12 @@ class ChessRepository(
      * FEN with stray whitespace and reject an empty string up front — otherwise
      * the API returns a 400 that looks like an opaque network failure.
      */
-    suspend fun getOpeningExplorer(fen: String): Result<OpeningExplorerResponse> = withContext(Dispatchers.IO) {
+    suspend fun getOpeningExplorer(fen: String, token: String = ""): Result<OpeningExplorerResponse> = withContext(Dispatchers.IO) {
         val trimmed = fen.trim()
         if (trimmed.isEmpty()) return@withContext Result.Error("FEN is empty")
+        if (token.isBlank()) return@withContext Result.Error("Opening statistics need a Lichess access token (Settings > General).")
         try {
-            val response = openingExplorerApi.getLichessOpeningExplorer(trimmed)
+            val response = openingExplorerApi.getLichessOpeningExplorer(trimmed, "Bearer $token")
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body != null) {
@@ -994,19 +973,24 @@ class ChessRepository(
                 }
             } else {
                 Result.Error(when (response.code()) {
-                    401, 403 -> "Lichess requires authentication for opening statistics."
+                    401, 403 -> com.eval.ui.OpeningExplorerLoader.TOKEN_REJECTED
                     429 -> "Lichess opening statistics are temporarily rate limited. Try again later."
                     else -> "Could not load opening statistics (HTTP ${response.code()})."
                 })
             }
         } catch (e: Exception) {
-            Result.Error("${e.javaClass.simpleName}: ${e.message ?: "unknown"}")
+            Result.Error(friendlyError(e))
         }
     }
 
     companion object {
         private val openingExplorerApi: OpeningExplorerApi by lazy {
             val client = okhttp3.OkHttpClient.Builder()
+                .addInterceptor { chain ->
+                    chain.proceed(chain.request().newBuilder()
+                        .header("User-Agent", "Eval/${com.eval.BuildConfig.VERSION_NAME} (Android; ${com.eval.BuildConfig.APPLICATION_ID})")
+                        .build())
+                }
                 .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
                 .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
                 .build()
@@ -1097,6 +1081,7 @@ data class StreamerInfo(
 data class StreamGameInfo(
     val id: String?,
     val variant: StreamVariant?,
+    val initialFen: String?,
     val speed: String?,
     val perf: String?,
     val rated: Boolean?,

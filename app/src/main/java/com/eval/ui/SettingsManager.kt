@@ -6,9 +6,11 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.eval.stockfish.StockfishEngine
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 internal class SettingsManager(
     private val getUiState: () -> GameUiState,
@@ -43,35 +45,10 @@ internal class SettingsManager(
         updateUiState { copy(graphSettings = settings) }
     }
 
+    // Visibility only changes what is drawn; completed analysis and the running engine stay as they are.
     fun updateInterfaceVisibilitySettings(settings: InterfaceVisibilitySettings) {
-        val currentSettings = getUiState().interfaceVisibility
-        val previewChanged = currentSettings.previewStage != settings.previewStage
-        val analyseChanged = currentSettings.analyseStage != settings.analyseStage
-
         settingsPrefs.saveInterfaceVisibilitySettings(settings)
         updateUiState { copy(interfaceVisibility = settings) }
-
-        if ((previewChanged || analyseChanged) && getUiState().game != null) {
-            analysisOrchestrator.stop()
-
-            updateUiState {
-                copy(
-                    currentStage = AnalysisStage.PREVIEW,
-                    previewScores = emptyMap(),
-                    analyseScores = emptyMap(),
-                    autoAnalysisIndex = -1
-                )
-            }
-
-            viewModelScope.launch {
-                val ready = stockfish.restart()
-                updateUiState { copy(stockfishReady = ready) }
-                if (ready) {
-                    stockfish.newGame()
-                    analysisOrchestrator.startAnalysis()
-                }
-            }
-        }
     }
 
     fun updateGeneralSettings(settings: GeneralSettings) {
@@ -134,7 +111,10 @@ internal class SettingsManager(
             val json = settingsPrefs.exportAllSettings()
             val cacheDir = java.io.File(context.cacheDir, "settings_export")
             cacheDir.mkdirs()
-            val file = java.io.File(cacheDir, "eval_settings.json")
+            // Earlier exports aren't needed once shared; keep only the new one.
+            cacheDir.listFiles { file -> file.name.startsWith("eval_settings") }?.forEach { it.delete() }
+            val stamp = java.text.SimpleDateFormat("yyyy-MM-dd_HHmm", java.util.Locale.ROOT).format(java.util.Date())
+            val file = java.io.File(cacheDir, "eval_settings_$stamp.json")
             file.writeText(json)
 
             val uri = FileProvider.getUriForFile(
@@ -153,29 +133,57 @@ internal class SettingsManager(
         }
     }
 
+    /** Reads, validates and applies a settings file off the main thread, then reloads the UI state. */
     fun importSettings(
         context: Context,
         uri: Uri,
         reloadSettings: () -> Unit
-    ): Boolean {
-        return try {
-            val inputStream = context.contentResolver.openInputStream(uri)
-            val json = inputStream?.bufferedReader()?.use { it.readText() } ?: return false
-            val success = settingsPrefs.importAllSettings(json)
-            if (success) {
-                // Short delay ensures any async listeners settle before UI refresh.
-                viewModelScope.launch {
-                    delay(20)
+    ) {
+        val appContext = context.applicationContext
+        viewModelScope.launch {
+            val message = try {
+                val json = withContext(Dispatchers.IO) { readLimited(appContext, uri) }
+                val success = json != null && withContext(Dispatchers.IO) { settingsPrefs.importAllSettings(json) }
+                if (success) {
                     reloadSettings()
+                    "Settings imported"
+                } else if (json == null) {
+                    "Import failed: the file is larger than ${MAX_SETTINGS_FILE_BYTES / 1_000_000} MB"
+                } else {
+                    "Import failed: invalid file"
                 }
-                Toast.makeText(context, "Settings imported", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(context, "Import failed: invalid file", Toast.LENGTH_SHORT).show()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                "Import failed: ${e.message}"
             }
-            success
-        } catch (e: Exception) {
-            Toast.makeText(context, "Import failed: ${e.message}", Toast.LENGTH_SHORT).show()
-            false
+            Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
         }
+    }
+
+    /** The file's text, or null when it exceeds [MAX_SETTINGS_FILE_BYTES]. */
+    private fun readLimited(context: Context, uri: Uri): String? {
+        val input = context.contentResolver.openInputStream(uri) ?: throw java.io.IOException("Could not open the file")
+        input.use { stream ->
+            val bytes = stream.readNBytesCompat(MAX_SETTINGS_FILE_BYTES + 1)
+            if (bytes.size > MAX_SETTINGS_FILE_BYTES) return null
+            return String(bytes, Charsets.UTF_8)
+        }
+    }
+
+    private fun java.io.InputStream.readNBytesCompat(limit: Int): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        val buffer = ByteArray(16 * 1024)
+        while (out.size() < limit) {
+            val read = read(buffer, 0, minOf(buffer.size, limit - out.size()))
+            if (read < 0) break
+            out.write(buffer, 0, read)
+        }
+        return out.toByteArray()
+    }
+
+    companion object {
+        // Real exports are tens of kilobytes; this leaves ample room for large prompt catalogs.
+        private const val MAX_SETTINGS_FILE_BYTES = 2_000_000
     }
 }

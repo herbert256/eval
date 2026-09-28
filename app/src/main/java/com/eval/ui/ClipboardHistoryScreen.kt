@@ -53,6 +53,8 @@ internal fun ClipboardHistoryScreen(
                 Text("The last 10 entries captured by Eval, newest first.", modifier = Modifier.padding(top = 12.dp))
                 Text("Android provides the current clipboard item when you return to Eval and changes while Eval is open. Earlier keyboard clipboard history is not available here.",
                     style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp))
+                Text("Only chess content is saved: FEN, PGN, links to chess sites or .pgn files, images and documents. Other copied text is ignored.",
+                    style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     TextButton(onClick = history::captureCurrent) { Text("Refresh clipboard") }
                     TextButton(onClick = { history.clear() }, enabled = state.entries.isNotEmpty()) { Text("Clear history") }
@@ -62,7 +64,7 @@ internal fun ClipboardHistoryScreen(
                 else Text("${state.entries.size} of 10 entries", style = MaterialTheme.typography.labelMedium)
             }
             if (!state.loading && state.entries.isEmpty()) item {
-                Text("No clipboard entries yet. Copy text, a URL or an image, then return to Eval.")
+                Text("No clipboard entries yet. Copy a FEN, PGN, chess link, board image or document, then return to Eval.")
             }
             items(state.entries, key = { it.input.id }) { entry ->
                 Card(Modifier.fillMaxWidth().clickable { selectedId = entry.input.id },

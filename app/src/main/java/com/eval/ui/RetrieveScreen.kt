@@ -151,6 +151,7 @@ fun RetrieveScreen(
             hasMoreGames = uiState.playerGamesHasMore,
             onNextPage = { pageSize -> viewModel.nextPlayerGamesPage(pageSize) },
             onPreviousPage = { viewModel.previousPlayerGamesPage() },
+            onPageClamped = { page -> viewModel.setPlayerGamesPage(page) },
             onGameSelected = { game -> viewModel.selectGameFromPlayerInfo(game) },
             onAiReportsClick = {
                 uiState.playerInfo?.let { info ->
@@ -161,7 +162,7 @@ fun RetrieveScreen(
                     viewModel.requestPlayerAiReport(info.username, serverName)
                 }
             },
-            hasAiApiKeys = viewModel.isAiAppInstalled(context),
+            hasAiApiKeys = uiState.aiAppInstalled,
             onDismiss = {
                 viewModel.dismissPlayerInfo()
                 // Go back to the top rankings screen we came from
@@ -216,10 +217,6 @@ fun RetrieveScreen(
             onClipboardHistoryClick = { currentScreen = RetrieveSubScreen.CLIPBOARD_HISTORY },
             onCameraClick = { currentScreen = RetrieveSubScreen.CAMERA }
         )
-        RetrieveSubScreen.CAMERA -> CameraBoardScreen(
-            onStartFen = { fen -> viewModel.startFromFen(fen) },
-            onBack = { currentScreen = RetrieveSubScreen.MAIN }
-        )
         RetrieveSubScreen.BOARD_SETUP -> BoardSetupScreen(
             currentFen = uiState.currentBoard.getFen().takeIf { uiState.game != null },
             initiallyFlipped = uiState.flippedBoard,
@@ -243,8 +240,9 @@ fun RetrieveScreen(
             },
             onBack = { currentScreen = RetrieveSubScreen.MAIN }
         )
-        RetrieveSubScreen.URL_INPUT, RetrieveSubScreen.LOCAL_FILE -> UrlGameScreen(
+        RetrieveSubScreen.URL_INPUT, RetrieveSubScreen.LOCAL_FILE, RetrieveSubScreen.CAMERA -> UrlGameScreen(
             localFile = currentScreen == RetrieveSubScreen.LOCAL_FILE,
+            camera = currentScreen == RetrieveSubScreen.CAMERA,
             onStartFen = { fen -> viewModel.startFromFen(fen) },
             onStartPgn = { pgn ->
                 viewModel.loadGamesFromPgnContent(pgn) { multiple ->
@@ -340,8 +338,8 @@ fun RetrieveScreen(
                 val prefs = fenContext.getSharedPreferences(SettingsPreferences.PREFS_NAME, android.content.Context.MODE_PRIVATE)
                 SettingsPreferences(prefs)
             }
-            var fenInput by remember { mutableStateOf("") }
-            var fenError by remember { mutableStateOf<String?>(null) }
+            var fenInput by rememberSaveable { mutableStateOf("") }
+            var fenError by rememberSaveable { mutableStateOf<String?>(null) }
             var fenHistory by remember { mutableStateOf(fenSettingsPrefs.loadFenHistory()) }
             FenInputScreen(
                 fenInput = fenInput,
@@ -390,38 +388,8 @@ private fun RetrieveMainScreen(
     val pgnFileLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
-        uri?.let {
-            try {
-                val inputStream = context.contentResolver.openInputStream(it)
-                if (inputStream != null) {
-                    // Read first bytes to check if it's a ZIP file
-                    val bufferedStream = java.io.BufferedInputStream(inputStream)
-                    bufferedStream.mark(4)
-                    val header = ByteArray(4)
-                    bufferedStream.read(header)
-                    bufferedStream.reset()
-
-                    // ZIP files start with PK (0x50 0x4B)
-                    val isZip = header[0] == 0x50.toByte() && header[1] == 0x4B.toByte()
-
-                    val pgnContent = if (isZip) {
-                        // Extract PGN content from ZIP file
-                        extractPgnFromZip(bufferedStream)
-                    } else {
-                        // Read as plain text PGN
-                        bufferedStream.bufferedReader().use { reader -> reader.readText() }
-                    }
-
-                    bufferedStream.close()
-
-                    if (pgnContent != null && pgnContent.isNotBlank()) {
-                        viewModel.loadGamesFromPgnContent(pgnContent, onPgnFileLoaded)
-                    }
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("RetrieveScreen", "Error reading file: ${e.message}")
-            }
-        }
+        // Read, unzip and parse off the main thread with size limits; errors are shown in the app.
+        uri?.let { viewModel.loadPgnFile(it, onPgnFileLoaded) }
     }
 
     EvalScreen(
@@ -593,7 +561,7 @@ private fun RetrieveMainScreen(
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(containerColor = AppColors.BlueGrayAccent)
                 ) {
-                    Text("Camera")
+                    Text("Start from camera")
                 }
             }
 
@@ -633,7 +601,7 @@ private fun LichessRetrieveScreen(
     onTvClick: () -> Unit,
     onStreamersClick: () -> Unit
 ) {
-    var username by remember { mutableStateOf(viewModel.savedLichessUsername) }
+    var username by rememberSaveable { mutableStateOf(viewModel.savedLichessUsername) }
     val focusManager = LocalFocusManager.current
 
     // Handle back navigation
@@ -1733,7 +1701,7 @@ private fun LichessTvScreen(
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(uiState.tvChannels, key = { it.gameId }) { channel ->
+                    items(uiState.tvChannels, key = { it.channelName }) { channel ->
                         TvChannelRow(
                             channel = channel,
                             serverColor = serverColor,
@@ -1921,37 +1889,6 @@ private fun StreamerRow(
 }
 
 /**
- * Extract PGN content from a ZIP file.
- * Looks for .pgn files inside the ZIP and concatenates their content.
- */
-private fun extractPgnFromZip(inputStream: java.io.InputStream): String? {
-    val zipInputStream = java.util.zip.ZipInputStream(inputStream)
-    val pgnContent = StringBuilder()
-
-    try {
-        var entry = zipInputStream.nextEntry
-        while (entry != null) {
-            // Look for PGN files (case-insensitive)
-            if (!entry.isDirectory && entry.name.lowercase().endsWith(".pgn")) {
-                val content = zipInputStream.bufferedReader().readText()
-                if (pgnContent.isNotEmpty()) {
-                    pgnContent.append("\n\n")
-                }
-                pgnContent.append(content)
-            }
-            zipInputStream.closeEntry()
-            entry = zipInputStream.nextEntry
-        }
-    } catch (e: Exception) {
-        android.util.Log.e("RetrieveScreen", "Error extracting ZIP: ${e.message}")
-    } finally {
-        zipInputStream.close()
-    }
-
-    return if (pgnContent.isNotEmpty()) pgnContent.toString() else null
-}
-
-/**
  * Opening selection screen with search functionality.
  */
 @Composable
@@ -1960,7 +1897,7 @@ private fun OpeningSelectionScreen(
     uiState: GameUiState,
     onBack: () -> Unit
 ) {
-    var searchQuery by remember { mutableStateOf("") }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
 
     // Filter openings based on search query (searches in ECO code and name)
     val filteredOpenings = remember(searchQuery, uiState.ecoOpenings) {
@@ -2029,7 +1966,7 @@ private fun OpeningSelectionScreen(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                items(filteredOpenings, key = { it.eco }) { opening ->
+                items(filteredOpenings, key = { it.fen }) { opening ->
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()

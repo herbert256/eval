@@ -17,6 +17,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.eval.chess.PieceColor
@@ -37,17 +41,17 @@ private const val BLACK_KNIGHT = "♞"
 private const val BLACK_PAWN = "♟"
 
 /**
- * Get just the piece symbol from a SAN move (for use with separate coordinates).
+ * Get the piece symbol for a move (for use with separate coordinates). [pieceType] ("K", "Q", …,
+ * "P") comes from the move details and is preferred; SAN is only a fallback.
  */
-private fun getPieceSymbolFromSan(move: String, isWhite: Boolean): String {
-    if (move.isEmpty()) return ""
-
-    // Handle castling
-    if (move == "O-O" || move == "O-O-O") {
-        return if (isWhite) WHITE_KING else BLACK_KING
+private fun getPieceSymbolFromSan(move: String, isWhite: Boolean, pieceType: String? = null): String {
+    val san = move.trimEnd('+', '#', '!', '?')
+    val pieceChar = when {
+        pieceType != null -> pieceType.firstOrNull() ?: return ""
+        san.isEmpty() -> return ""
+        san.startsWith("O-O") || san.startsWith("0-0") -> 'K'
+        else -> san.first()
     }
-
-    val pieceChar = move.first()
     return when {
         pieceChar == 'K' -> if (isWhite) WHITE_KING else BLACK_KING
         pieceChar == 'Q' -> if (isWhite) WHITE_QUEEN else BLACK_QUEEN
@@ -121,13 +125,18 @@ fun GameContent(
         ?: "Anonymous"
     val whiteRating = game.players.white.rating
     val blackRating = game.players.black.rating
+    // Fallback labels ("Anonymous", "Stockfish 8", "White") are not accounts: don't look them up.
+    val isRealPlayer: (String) -> Boolean = { name ->
+        name.isNotBlank() && name !in setOf("White", "Black", "?", "Anonymous") &&
+            (name == game.players.white.user?.name || name == game.players.black.user?.name)
+    }
 
     // Result bar composable - shows move info, depth/nodes, and score
     val ResultBar: @Composable () -> Unit = {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(AppColors.DarkGray, RoundedCornerShape(8.dp))
+                .background(AppColors.ResultBarBackground, RoundedCornerShape(8.dp))
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -155,11 +164,13 @@ fun GameContent(
                 val completeMoveNumber = firstMoveNumber + (moveIndex + firstPly) / 2
                 val totalCompleteMoves = firstMoveNumber + (uiState.moves.size - 1 + firstPly) / 2
 
-                val pieceSymbol = getPieceSymbolFromSan(currentMove, isWhiteMove)
+                val currentMoveDetails = uiState.moveDetails.getOrNull(moveIndex)
+                val pieceSymbol = getPieceSymbolFromSan(currentMove, isWhiteMove, currentMoveDetails?.pieceType)
                 val fromSquare = lastMove?.from?.toAlgebraic() ?: ""
                 val toSquare = lastMove?.to?.toAlgebraic() ?: ""
-                val moveColor = if (isWhiteMove) Color.White else Color.Black
-                val currentMoveDetails = uiState.moveDetails.getOrNull(moveIndex)
+                // The chip shows whose move it is while keeping the text readable.
+                val moveColor = if (isWhiteMove) Color.Black else Color.White
+                val moveChipColor = if (isWhiteMove) Color(0xFFEEEEEE) else Color(0xFF0A0A0A)
                 val separator = if (currentMoveDetails?.isCapture == true) "x" else "-"
 
                 // LEFT section - move number
@@ -177,6 +188,12 @@ fun GameContent(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                  Row(
+                    modifier = Modifier
+                        .background(moveChipColor, RoundedCornerShape(6.dp))
+                        .padding(horizontal = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                  ) {
                     Text(
                         text = pieceSymbol,
                         fontWeight = FontWeight.SemiBold,
@@ -189,6 +206,7 @@ fun GameContent(
                         fontSize = 20.sp,
                         color = moveColor
                     )
+                  }
                 }
 
                 // RIGHT: Score (from player's perspective) + delta from previous move
@@ -221,9 +239,9 @@ fun GameContent(
                     val scoreText = displayScore.formatDisplay(decimals = 1)
                     val scoreColor = when {
                         displayScore.isPositiveMate -> AppColors.PositiveGreen
-                        displayScore.isMate -> AppColors.NegativeRed
+                        displayScore.isMate -> AppColors.ScoreNegativeText
                         displayScore.score > 0.1f -> AppColors.PositiveGreen  // Green for player better
-                        displayScore.score < -0.1f -> AppColors.NegativeRed  // Red for player worse
+                        displayScore.score < -0.1f -> AppColors.ScoreNegativeText  // Red for player worse
                         else -> Color(0xFF64B5F6)  // Bright blue for equal
                     }
 
@@ -235,7 +253,7 @@ fun GameContent(
                         deltaText = if (delta >= 0) "+%.1f".format(delta) else "%.1f".format(delta)
                         deltaColor = when {
                             delta > 0.1f -> AppColors.PositiveGreen  // Green - gained advantage
-                            delta < -0.1f -> AppColors.NegativeRed  // Red - lost advantage
+                            delta < -0.1f -> AppColors.ScoreNegativeText  // Red - lost advantage
                             else -> Color(0xFF64B5F6)  // Blue - neutral
                         }
                     } else {
@@ -340,55 +358,51 @@ fun GameContent(
                 // Line graph
                 if (showScoreLineGraph) {
                     val lineGraphHeight = (120 * uiState.graphSettings.lineGraphScale / 100).dp
-                    key(uiState.previewScores.size, uiState.analyseScores.size) {
-                        EvaluationGraph(
-                            previewScores = uiState.previewScores,
-                            analyseScores = uiState.analyseScores,
-                            moveQualities = uiState.moveQualities,
-                            totalMoves = uiState.moveDetails.size,
-                            currentMoveIndex = uiState.currentMoveIndex,
-                            currentStage = uiState.currentStage,
-                            userPlayedBlack = uiState.userPlayedBlack,
-                            graphSettings = uiState.graphSettings,
-                            onMoveSelected = { moveIndex ->
-                                when (uiState.currentStage) {
-                                    AnalysisStage.PREVIEW -> { /* Not interruptible - ignore clicks */ }
-                                    AnalysisStage.ANALYSE -> viewModel.enterManualStageAtMove(moveIndex)
-                                    AnalysisStage.MANUAL -> viewModel.restartAnalysisAtMove(moveIndex)
-                                }
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(lineGraphHeight)
-                        )
-                    }
+                    EvaluationGraph(
+                        previewScores = uiState.previewScores,
+                        analyseScores = uiState.analyseScores,
+                        moveQualities = uiState.moveQualities,
+                        totalMoves = uiState.moveDetails.size,
+                        currentMoveIndex = uiState.currentMoveIndex,
+                        currentStage = uiState.currentStage,
+                        userPlayedBlack = uiState.userPlayedBlack,
+                        graphSettings = uiState.graphSettings,
+                        onMoveSelected = { moveIndex ->
+                            when (uiState.currentStage) {
+                                AnalysisStage.PREVIEW -> { /* Not interruptible - ignore clicks */ }
+                                AnalysisStage.ANALYSE -> viewModel.enterManualStageAtMove(moveIndex)
+                                AnalysisStage.MANUAL -> viewModel.restartAnalysisAtMove(moveIndex)
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(lineGraphHeight)
+                    )
                 }
 
-                // Score difference graph (bars) - only show during Analyse and Manual stages when we have scores
-                if (showScoreBarsGraph && uiState.currentStage != AnalysisStage.PREVIEW) {
+                // Score difference graph (bars), when enabled for the current stage
+                if (showScoreBarsGraph) {
                     if (showScoreLineGraph) Spacer(modifier = Modifier.height(8.dp))
                     val barGraphHeight = (120 * uiState.graphSettings.barGraphScale / 100).dp
-                    key(uiState.previewScores.size, uiState.analyseScores.size) {
-                        ScoreDifferenceGraph(
-                            previewScores = uiState.previewScores,
-                            analyseScores = uiState.analyseScores,
-                            totalMoves = uiState.moveDetails.size,
-                            currentMoveIndex = uiState.currentMoveIndex,
-                            currentStage = uiState.currentStage,
-                            userPlayedBlack = uiState.userPlayedBlack,
-                            graphSettings = uiState.graphSettings,
-                            onMoveSelected = { moveIndex ->
-                                when (uiState.currentStage) {
-                                    AnalysisStage.PREVIEW -> { /* Not interruptible - ignore clicks */ }
-                                    AnalysisStage.ANALYSE -> viewModel.enterManualStageAtMove(moveIndex)
-                                    AnalysisStage.MANUAL -> viewModel.restartAnalysisAtMove(moveIndex)
-                                }
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(barGraphHeight)
-                        )
-                    }
+                    ScoreDifferenceGraph(
+                        previewScores = uiState.previewScores,
+                        analyseScores = uiState.analyseScores,
+                        totalMoves = uiState.moveDetails.size,
+                        currentMoveIndex = uiState.currentMoveIndex,
+                        currentStage = uiState.currentStage,
+                        userPlayedBlack = uiState.userPlayedBlack,
+                        graphSettings = uiState.graphSettings,
+                        onMoveSelected = { moveIndex ->
+                            when (uiState.currentStage) {
+                                AnalysisStage.PREVIEW -> { /* Not interruptible - ignore clicks */ }
+                                AnalysisStage.ANALYSE -> viewModel.enterManualStageAtMove(moveIndex)
+                                AnalysisStage.MANUAL -> viewModel.restartAnalysisAtMove(moveIndex)
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(barGraphHeight)
+                    )
                 }
 
                 // Time usage graph - only show in Manual stage when clock data is available
@@ -402,6 +416,7 @@ fun GameContent(
                         currentMoveIndex = uiState.currentMoveIndex,
                         currentStage = uiState.currentStage,
                         graphSettings = uiState.graphSettings,
+                        firstPly = firstPly,
                         onMoveSelected = { moveIndex ->
                             viewModel.restartAnalysisAtMove(moveIndex)
                         },
@@ -414,16 +429,13 @@ fun GameContent(
         }
     }
 
-    // Game info card - shows graph and result bar in analyse mode
+    // Game info card - shows the graphs in preview and analyse mode
     val GameInfoCard: @Composable () -> Unit = {
         // Add extra space before graphs in Analyse stage
         if (uiState.currentStage == AnalysisStage.ANALYSE) {
             Spacer(modifier = Modifier.height(8.dp))
         }
         ConditionalGraphContent()
-        if (uiState.currentStage == AnalysisStage.ANALYSE && showResultBar) {
-            ResultBar()
-        }
     }
 
     // Show game info card at top during preview and analyse stages
@@ -431,65 +443,10 @@ fun GameContent(
         GameInfoCard()
         Spacer(modifier = Modifier.height(8.dp))
     }
-
-    // Main line card during Analyse stage - shows best PV line for current position
-    if (uiState.currentStage == AnalysisStage.ANALYSE) {
-        val analysisResult = uiState.analysisResult
-        val bestLine = analysisResult?.bestLine
-        if (bestLine != null && bestLine.pv.isNotBlank()) {
-            val isWhiteTurn = uiState.currentBoard.getTurn() == PieceColor.WHITE
-            val formattedMoves = formatUciMovesWithCaptures(
-                bestLine.pv, uiState.currentBoard, isWhiteTurn
-            )
-            if (formattedMoves.isNotEmpty()) {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFF1A3A5A)
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .padding(horizontal = 12.dp, vertical = 8.dp)
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Score
-                        val whiteScore = MoveScore(if (isWhiteTurn) bestLine.score else -bestLine.score,
-                            bestLine.isMate, if (isWhiteTurn) bestLine.mateIn else -bestLine.mateIn)
-                        val scoreText = whiteScore.formatDisplay()
-                        val scoreColor = when {
-                            whiteScore.isPositiveMate -> AppColors.PositiveGreen
-                            whiteScore.isMate -> AppColors.NegativeRed
-                            whiteScore.score > 0.5f -> AppColors.PositiveGreen
-                            whiteScore.score < -0.5f -> AppColors.NegativeRed
-                            else -> Color(0xFF64B5F6)
-                        }
-                        Text(
-                            text = scoreText,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = scoreColor
-                        )
-                        Text(
-                            text = "│",
-                            fontSize = 14.sp,
-                            color = Color(0xFF37474F)
-                        )
-                        // Moves
-                        for (move in formattedMoves) {
-                            Text(
-                                text = move,
-                                fontSize = 14.sp,
-                                color = AppColors.LightGray
-                            )
-                        }
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-        }
+    // The result bar has its own setting; it doesn't depend on the graphs being shown.
+    if (uiState.currentStage != AnalysisStage.MANUAL && showResultBar) {
+        ResultBar()
+        Spacer(modifier = Modifier.height(8.dp))
     }
 
     // Result bar above board in manual stage
@@ -531,18 +488,18 @@ fun GameContent(
     if (showBoard) {
         // Calculate game results for each player
         // Don't show results for ongoing games (status "*", "started", "unknown", etc.)
-        val isOngoingGame = game.status == "*" || game.status == "started" ||
-            game.status == "unknown" || game.status.isBlank()
-        val whiteResult = if (isOngoingGame) null else when (game.winner) {
-            "white" -> "won"
-            "black" -> "lost"
-            null -> if (game.status == "draw" || game.status == "stalemate") "draw" else null
+        // One result source for bars, lists and exports (includes the PGN [Result] fallback).
+        val resultToken = gameResultToken(game)
+        val whiteResult = when (resultToken) {
+            "1-0" -> "won"
+            "0-1" -> "lost"
+            "1/2-1/2" -> "draw"
             else -> null
         }
-        val blackResult = if (isOngoingGame) null else when (game.winner) {
-            "black" -> "won"
-            "white" -> "lost"
-            null -> if (game.status == "draw" || game.status == "stalemate") "draw" else null
+        val blackResult = when (resultToken) {
+            "0-1" -> "won"
+            "1-0" -> "lost"
+            "1/2-1/2" -> "draw"
             else -> null
         }
 
@@ -558,7 +515,7 @@ fun GameContent(
                 blackResult = blackResult,
                 isWhiteTurn = isWhiteTurn,
                 showRedBorder = showRedBorderForPlayerToMove,
-                onPlayerClick = { playerName -> viewModel.showPlayerInfo(playerName) },
+                onPlayerClick = { playerName -> if (isRealPlayer(playerName)) viewModel.showPlayerInfo(playerName) },
                 modifier = Modifier
             )
         }
@@ -573,7 +530,7 @@ fun GameContent(
                 isToMove = if (topIsBlack) !isWhiteTurn else isWhiteTurn,
                 gameResult = if (topIsBlack) blackResult else whiteResult,
                 showRedBorder = showRedBorderForPlayerToMove,
-                onPlayerClick = { playerName -> viewModel.showPlayerInfo(playerName) },
+                onPlayerClick = { playerName -> if (isRealPlayer(playerName)) viewModel.showPlayerInfo(playerName) },
                 modifier = Modifier
             )
         }
@@ -630,8 +587,8 @@ fun GameContent(
                                 // Format score for display
                                 val scoreText = MoveScore(adjustedScore, line.isMate, adjustedMateIn).formatDisplay()
 
-                                // Gray color for multi-line arrows
-                                val arrowColor = Color(0xCC888888)
+                                // Colour chosen in Arrow settings
+                                val arrowColor = Color(uiState.stockfishSettings.manualStage.multiLinesArrowColor.toInt())
 
                                 MoveArrow(
                                     from = Square(fromFile, fromRank),
@@ -726,6 +683,17 @@ fun GameContent(
             }
         }
 
+        // Promotion choice for a manual move (inline, not a popup)
+        uiState.pendingPromotion?.let { (from, to) ->
+            if (uiState.currentBoard.needsPromotion(from, to)) {
+                PromotionPicker(
+                    isWhite = uiState.currentBoard.getTurn() == PieceColor.WHITE,
+                    onChoose = { piece -> viewModel.choosePromotion(piece) },
+                    onCancel = { viewModel.cancelPromotion() }
+                )
+            }
+        }
+
         // Show separate bottom bar if mode is BOTH
         if (showPlayersBarsFromVisibility && playerBarMode == PlayerBarMode.BOTH) {
             PlayerBar(
@@ -736,7 +704,7 @@ fun GameContent(
                 isToMove = if (topIsBlack) isWhiteTurn else !isWhiteTurn,
                 gameResult = if (topIsBlack) whiteResult else blackResult,
                 showRedBorder = showRedBorderForPlayerToMove,
-                onPlayerClick = { playerName -> viewModel.showPlayerInfo(playerName) },
+                onPlayerClick = { playerName -> if (isRealPlayer(playerName)) viewModel.showPlayerInfo(playerName) },
                 modifier = Modifier
             )
         }
@@ -750,7 +718,7 @@ fun GameContent(
                 blackResult = blackResult,
                 isWhiteTurn = isWhiteTurn,
                 showRedBorder = showRedBorderForPlayerToMove,
-                onPlayerClick = { playerName -> viewModel.showPlayerInfo(playerName) },
+                onPlayerClick = { playerName -> if (isRealPlayer(playerName)) viewModel.showPlayerInfo(playerName) },
                 modifier = Modifier
             )
         }
@@ -794,7 +762,7 @@ fun GameContent(
                 // Button 1: Go to start (hidden when exploring)
                 Box(modifier = Modifier.width(buttonWidth)) {
                     if (!uiState.isExploringLine) {
-                        ControlButton("⏮", enabled = !isAtStart) { viewModel.goToStart() }
+                        ControlButton("⏮", "Go to start", enabled = !isAtStart) { viewModel.goToStart() }
                     }
                 }
                 Spacer(modifier = Modifier.width(spacerWidth))
@@ -803,7 +771,7 @@ fun GameContent(
                 Box(modifier = Modifier.width(buttonWidth)) {
                     val showPrevButton = !uiState.isExploringLine || !isAtStart
                     if (showPrevButton) {
-                        ControlButton("◀", enabled = !isAtStart) { viewModel.prevMove() }
+                        ControlButton("◀", "Previous move", enabled = !isAtStart) { viewModel.prevMove() }
                     }
                 }
                 Spacer(modifier = Modifier.width(spacerWidth))
@@ -812,7 +780,7 @@ fun GameContent(
                 Box(modifier = Modifier.width(buttonWidth)) {
                     val showNextButton = !uiState.isExploringLine || !isAtEnd
                     if (showNextButton) {
-                        ControlButton("▶", enabled = !isAtEnd) { viewModel.nextMove() }
+                        ControlButton("▶", "Next move", enabled = !isAtEnd) { viewModel.nextMove() }
                     }
                 }
                 Spacer(modifier = Modifier.width(spacerWidth))
@@ -820,7 +788,7 @@ fun GameContent(
                 // Button 4: Go to end (hidden when exploring)
                 Box(modifier = Modifier.width(buttonWidth)) {
                     if (!uiState.isExploringLine) {
-                        ControlButton("⏭", enabled = !isAtEnd) { viewModel.goToEnd() }
+                        ControlButton("⏭", "Go to end", enabled = !isAtEnd) { viewModel.goToEnd() }
                     }
                 }
             }
@@ -867,34 +835,43 @@ fun GameContent(
                     // Share button - circular with bold icon
                     Box(
                         modifier = Modifier
+                            .minimumInteractiveComponentSize()
                             .size(36.dp)
                             .background(AppColors.Divider, CircleShape)
-                            .clickable { viewModel.showSharePositionDialog() },
+                            .clickable(role = Role.Button, onClickLabel = "Share or export") { viewModel.showSharePositionDialog() }
+                            .semantics { contentDescription = "Share or export" },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(text = "⤴", fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.offset(y = (-2).dp))
+                        Text(text = "⤴", fontSize = 22.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.offset(y = (-2).dp).clearAndSetSemantics { })
                     }
                     Spacer(modifier = Modifier.width(6.dp))
                     // Arrow mode toggle button - circular with bold icon
                     Box(
                         modifier = Modifier
+                            .minimumInteractiveComponentSize()
                             .size(36.dp)
                             .background(AppColors.Divider, CircleShape)
-                            .clickable { viewModel.cycleArrowMode() },
+                            .clickable(role = Role.Button, onClickLabel = "Change arrow mode") { viewModel.cycleArrowMode() }
+                            .semantics { contentDescription = "Change arrow mode" },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(text = "↗", fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.offset(y = (-2).dp))
+                        Text(text = "↗", fontSize = 22.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.offset(y = (-2).dp).clearAndSetSemantics { })
                     }
                     Spacer(modifier = Modifier.width(6.dp))
                     // Flip board button - circular with bold icon
                     Box(
                         modifier = Modifier
+                            .minimumInteractiveComponentSize()
                             .size(36.dp)
                             .background(AppColors.Divider, CircleShape)
-                            .clickable { viewModel.flipBoard() },
+                            .clickable(role = Role.Button, onClickLabel = "Flip board") { viewModel.flipBoard() }
+                            .semantics { contentDescription = "Flip board" },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(text = "↻", fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.offset(y = (-2).dp))
+                        Text(text = "↻", fontSize = 22.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.offset(y = (-2).dp).clearAndSetSemantics { })
                     }
                 }
             }
@@ -1035,8 +1012,10 @@ fun GameContent(
                 }
                 // Date
                 game.createdAt?.let { timestamp ->
-                    val date = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
-                        .format(java.util.Date(timestamp))
+                    val date = remember(timestamp) {
+                        java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+                            .format(java.util.Date(timestamp))
+                    }
                     Row(modifier = Modifier.fillMaxWidth()) {
                         Text("Date:", fontSize = 13.sp, color = AppColors.SubtleText, modifier = Modifier.width(labelWidth))
                         Text(date, fontSize = 13.sp, color = Color.White)
@@ -1083,10 +1062,9 @@ fun GameContent(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 game.pgn?.let { pgn ->
-                    // Format PGN with each move on a new line
-                    val formattedPgn = pgn.replace(Regex("(\\d+\\.)")) { match ->
-                        "\n${match.value}"
-                    }.trimStart()
+                    // Format PGN with each move on a new line; headers, dates and [%eval 0.17]
+                    // comments are left alone.
+                    val formattedPgn = remember(pgn) { formatPgnForDisplay(pgn) }
                     Text(
                         text = formattedPgn,
                         fontSize = 11.sp,
@@ -1115,7 +1093,9 @@ fun GameContent(
             titleColor = Color(0xFF90CAF9),
             scores = uiState.previewScores,
             moves = uiState.moves,
-            currentMoveIndex = uiState.currentMoveIndex
+            currentMoveIndex = uiState.currentMoveIndex,
+            firstPly = firstPly,
+            firstMoveNumber = firstMoveNumber
         )
     }
 
@@ -1127,7 +1107,9 @@ fun GameContent(
             titleColor = Color(0xFFFFD700),
             scores = uiState.analyseScores,
             moves = uiState.moves,
-            currentMoveIndex = uiState.currentMoveIndex
+            currentMoveIndex = uiState.currentMoveIndex,
+            firstPly = firstPly,
+            firstMoveNumber = firstMoveNumber
         )
     }
 }
@@ -1141,7 +1123,9 @@ private fun RawStockfishScoresCard(
     titleColor: Color,
     scores: Map<Int, MoveScore?>,
     moves: List<String>,
-    currentMoveIndex: Int
+    currentMoveIndex: Int,
+    firstPly: Int = 0,
+    firstMoveNumber: Int = 1
 ) {
     Card(
         colors = CardDefaults.cardColors(
@@ -1165,8 +1149,9 @@ private fun RawStockfishScoresCard(
 
             moves.forEachIndexed { index, move ->
                 val score = scores[index]
-                val isWhiteMove = index % 2 == 0
-                val moveNumber = (index / 2) + 1
+                // Games set up with Black to move start at ply 1 and their own move number.
+                val isWhiteMove = (index + firstPly) % 2 == 0
+                val moveNumber = firstMoveNumber + (index + firstPly) / 2
                 val moveNotation = if (isWhiteMove) "$moveNumber. $move" else "$moveNumber... $move"
 
                 val scoreText = score?.formatDisplay(decimals = 2) ?: "—"
@@ -1207,12 +1192,15 @@ private fun RawStockfishScoresCard(
 @Composable
 fun ControlButton(
     text: String,
+    description: String,
     enabled: Boolean = true,
     onClick: () -> Unit
 ) {
     Button(
         onClick = onClick,
         enabled = enabled,
+        // TalkBack reads the action instead of the Unicode glyph's name.
+        modifier = Modifier.semantics { contentDescription = description },
         colors = ButtonDefaults.buttonColors(
             containerColor = MaterialTheme.colorScheme.surface,
             disabledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.4f),
@@ -1220,7 +1208,7 @@ fun ControlButton(
         ),
         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
     ) {
-        Text(text = text, fontSize = 16.sp)
+        Text(text = text, fontSize = 16.sp, modifier = Modifier.clearAndSetSemantics { })
     }
 }
 
@@ -1608,12 +1596,12 @@ private fun StockfishAnalyseCard(uiState: GameUiState) {
             ) {
                 Text(
                     text = "Config: ${analyseSettings.secondsForMove}s/move",
-                    color = Color(0xFF607D8B),
+                    color = Color(0xFFB0BEC5),
                     fontSize = 11.sp
                 )
                 Text(
                     text = "${analyseSettings.threads} threads  ${analyseSettings.hashMb}MB hash",
-                    color = Color(0xFF607D8B),
+                    color = Color(0xFFB0BEC5),
                     fontSize = 11.sp
                 )
             }
@@ -1650,160 +1638,7 @@ private fun formatNps(nps: Long): String {
  * Returns "Abbreviation: Full Name" format, or original if no expansion found.
  */
 private fun expandOpeningAbbreviation(name: String): String {
-    val abbreviations = mapOf(
-        // Queen's Gambit variations
-        "QG" to "Queen's Gambit",
-        "QGA" to "Queen's Gambit Accepted",
-        "QGD" to "Queen's Gambit Declined",
-        "QGT" to "Queen's Gambit Tarrasch",
-
-        // Indian Defenses
-        "KID" to "King's Indian Defense",
-        "QID" to "Queen's Indian Defense",
-        "NID" to "Nimzo-Indian Defense",
-        "NI" to "Nimzo-Indian Defense",
-        "BID" to "Bogo-Indian Defense",
-        "OID" to "Old Indian Defense",
-        "GI" to "Grunfeld Indian",
-        "GR" to "Grunfeld Defense",
-        "GD" to "Grunfeld Defense",
-
-        // King's Pawn Openings
-        "KP" to "King's Pawn Opening",
-        "KPO" to "King's Pawn Opening",
-        "KGA" to "King's Gambit Accepted",
-        "KGD" to "King's Gambit Declined",
-        "KG" to "King's Gambit",
-        "KIA" to "King's Indian Attack",
-
-        // Queen's Pawn Openings
-        "QP" to "Queen's Pawn Opening",
-        "QPO" to "Queen's Pawn Opening",
-        "QPG" to "Queen's Pawn Game",
-
-        // Sicilian variations
-        "SC" to "Sicilian Defense",
-        "SIC" to "Sicilian Defense",
-        "SN" to "Sicilian Najdorf",
-        "SD" to "Sicilian Dragon",
-        "SS" to "Sicilian Scheveningen",
-        "SSV" to "Sicilian Sveshnikov",
-        "SKK" to "Sicilian Kan",
-        "STA" to "Sicilian Taimanov",
-        "SAC" to "Sicilian Accelerated Dragon",
-        "SMO" to "Sicilian Moscow",
-        "SRO" to "Sicilian Rossolimo",
-
-        // French Defense variations
-        "FD" to "French Defense",
-        "FR" to "French Defense",
-        "FT" to "French Tarrasch",
-        "FW" to "French Winawer",
-        "FC" to "French Classical",
-        "FA" to "French Advance",
-        "FE" to "French Exchange",
-
-        // Caro-Kann variations
-        "CK" to "Caro-Kann Defense",
-        "CD" to "Caro-Kann Defense",
-        "CKA" to "Caro-Kann Advance",
-        "CKC" to "Caro-Kann Classical",
-        "CKE" to "Caro-Kann Exchange",
-
-        // Ruy Lopez variations
-        "RL" to "Ruy Lopez",
-        "SP" to "Spanish Game (Ruy Lopez)",
-        "RLM" to "Ruy Lopez Marshall",
-        "RLB" to "Ruy Lopez Berlin",
-
-        // Italian Game
-        "IT" to "Italian Game",
-        "IG" to "Italian Game",
-        "GP" to "Giuoco Piano",
-        "EG" to "Evans Gambit",
-        "TK" to "Two Knights Defense",
-
-        // Other 1.e4 openings
-        "SCO" to "Scotch Game",
-        "PET" to "Petroff Defense",
-        "RD" to "Russian Defense (Petroff)",
-        "PH" to "Philidor Defense",
-        "AL" to "Alekhine Defense",
-        "AD" to "Alekhine Defense",
-        "PI" to "Pirc Defense",
-        "PK" to "Pirc Defense",
-        "MO" to "Modern Defense",
-        "MD" to "Modern Defense",
-        "SCD" to "Scandinavian Defense",
-        "CN" to "Center Game",
-        "VG" to "Vienna Game",
-        "BG" to "Bishop's Opening",
-
-        // Benoni variations
-        "BE" to "Benoni Defense",
-        "BD" to "Benoni Defense",
-        "MB" to "Modern Benoni",
-        "CB" to "Czech Benoni",
-
-        // Dutch Defense
-        "DU" to "Dutch Defense",
-        "DD" to "Dutch Defense",
-        "DR" to "Dutch Defense",
-        "DSW" to "Dutch Stonewall",
-        "DL" to "Dutch Leningrad",
-
-        // Slav variations
-        "SL" to "Slav Defense",
-        "SLA" to "Slav Defense",
-        "SSL" to "Semi-Slav Defense",
-        "SM" to "Slav Meran",
-
-        // English Opening
-        "EN" to "English Opening",
-        "ENG" to "English Opening",
-        "EO" to "English Opening",
-
-        // Catalan
-        "CAT" to "Catalan Opening",
-        "CA" to "Catalan Opening",
-
-        // London System
-        "LO" to "London System",
-        "LDN" to "London System",
-        "LS" to "London System",
-
-        // Other d4 openings
-        "TR" to "Trompowsky Attack",
-        "TRO" to "Trompowsky Attack",
-        "TO" to "Torre Attack",
-        "TA" to "Torre Attack",
-        "CO" to "Colle System",
-        "CS" to "Colle System",
-        "ZU" to "Zukertort Opening",
-        "BL" to "Blackmar-Diemer Gambit",
-        "BDG" to "Blackmar-Diemer Gambit",
-        "VE" to "Veresov Opening",
-        "VO" to "Veresov Opening",
-        "BA" to "Barry Attack",
-        "JO" to "Jobava London",
-
-        // Flank Openings
-        "RE" to "Reti Opening",
-        "BI" to "Bird's Opening",
-        "BO" to "Bird's Opening",
-        "LA" to "Larsen's Opening",
-        "NF" to "Nimzowitsch-Larsen Attack",
-        "SO" to "Sokolsky Opening (Polish)",
-        "PO" to "Polish Opening",
-
-        // Misc
-        "TN" to "Tarrasch Defense",
-        "TD" to "Tarrasch Defense",
-        "RG" to "Ragozin Defense",
-        "WA" to "Wade Defense",
-        "OW" to "Owen Defense",
-        "ST" to "Steinitz Defense"
-    )
+    val abbreviations = OPENING_ABBREVIATIONS
 
     val trimmed = name.trim()
     val fullName = abbreviations[trimmed.uppercase()]
@@ -1812,4 +1647,205 @@ private fun expandOpeningAbbreviation(name: String): String {
     } else {
         trimmed
     }
+}
+
+/** Inline row for choosing the promotion piece of a manual pawn move. */
+@Composable
+private fun PromotionPicker(
+    isWhite: Boolean,
+    onChoose: (com.eval.chess.PieceType) -> Unit,
+    onCancel: () -> Unit
+) {
+    val pieces = listOf(
+        com.eval.chess.PieceType.QUEEN to (if (isWhite) WHITE_QUEEN else BLACK_QUEEN) to "Queen",
+        com.eval.chess.PieceType.ROOK to (if (isWhite) WHITE_ROOK else BLACK_ROOK) to "Rook",
+        com.eval.chess.PieceType.BISHOP to (if (isWhite) WHITE_BISHOP else BLACK_BISHOP) to "Bishop",
+        com.eval.chess.PieceType.KNIGHT to (if (isWhite) WHITE_KNIGHT else BLACK_KNIGHT) to "Knight"
+    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(AppColors.ResultBarBackground, RoundedCornerShape(8.dp))
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text("Promote to", color = Color.White, fontSize = 14.sp, modifier = Modifier.weight(1f))
+        pieces.forEach { (pieceAndGlyph, name) ->
+            val (piece, glyph) = pieceAndGlyph
+            TextButton(
+                onClick = { onChoose(piece) },
+                modifier = Modifier.semantics { contentDescription = "Promote to $name" }
+            ) {
+                Text(glyph, fontSize = 26.sp, color = Color.White, modifier = Modifier.clearAndSetSemantics { })
+            }
+        }
+        TextButton(onClick = onCancel) { Text("Cancel") }
+    }
+}
+
+// Built once, not on every recomposition.
+private val OPENING_ABBREVIATIONS: Map<String, String> = mapOf(
+    // Queen's Gambit variations
+    "QG" to "Queen's Gambit",
+    "QGA" to "Queen's Gambit Accepted",
+    "QGD" to "Queen's Gambit Declined",
+    "QGT" to "Queen's Gambit Tarrasch",
+
+    // Indian Defenses
+    "KID" to "King's Indian Defense",
+    "QID" to "Queen's Indian Defense",
+    "NID" to "Nimzo-Indian Defense",
+    "NI" to "Nimzo-Indian Defense",
+    "BID" to "Bogo-Indian Defense",
+    "OID" to "Old Indian Defense",
+    "GI" to "Grunfeld Indian",
+    "GR" to "Grunfeld Defense",
+    "GD" to "Grunfeld Defense",
+
+    // King's Pawn Openings
+    "KP" to "King's Pawn Opening",
+    "KPO" to "King's Pawn Opening",
+    "KGA" to "King's Gambit Accepted",
+    "KGD" to "King's Gambit Declined",
+    "KG" to "King's Gambit",
+    "KIA" to "King's Indian Attack",
+
+    // Queen's Pawn Openings
+    "QP" to "Queen's Pawn Opening",
+    "QPO" to "Queen's Pawn Opening",
+    "QPG" to "Queen's Pawn Game",
+
+    // Sicilian variations
+    "SC" to "Sicilian Defense",
+    "SIC" to "Sicilian Defense",
+    "SN" to "Sicilian Najdorf",
+    "SD" to "Sicilian Dragon",
+    "SS" to "Sicilian Scheveningen",
+    "SSV" to "Sicilian Sveshnikov",
+    "SKK" to "Sicilian Kan",
+    "STA" to "Sicilian Taimanov",
+    "SAC" to "Sicilian Accelerated Dragon",
+    "SMO" to "Sicilian Moscow",
+    "SRO" to "Sicilian Rossolimo",
+
+    // French Defense variations
+    "FD" to "French Defense",
+    "FR" to "French Defense",
+    "FT" to "French Tarrasch",
+    "FW" to "French Winawer",
+    "FC" to "French Classical",
+    "FA" to "French Advance",
+    "FE" to "French Exchange",
+
+    // Caro-Kann variations
+    "CK" to "Caro-Kann Defense",
+    "CD" to "Caro-Kann Defense",
+    "CKA" to "Caro-Kann Advance",
+    "CKC" to "Caro-Kann Classical",
+    "CKE" to "Caro-Kann Exchange",
+
+    // Ruy Lopez variations
+    "RL" to "Ruy Lopez",
+    "SP" to "Spanish Game (Ruy Lopez)",
+    "RLM" to "Ruy Lopez Marshall",
+    "RLB" to "Ruy Lopez Berlin",
+
+    // Italian Game
+    "IT" to "Italian Game",
+    "IG" to "Italian Game",
+    "GP" to "Giuoco Piano",
+    "EG" to "Evans Gambit",
+    "TK" to "Two Knights Defense",
+
+    // Other 1.e4 openings
+    "SCO" to "Scotch Game",
+    "PET" to "Petroff Defense",
+    "RD" to "Russian Defense (Petroff)",
+    "PH" to "Philidor Defense",
+    "AL" to "Alekhine Defense",
+    "AD" to "Alekhine Defense",
+    "PI" to "Pirc Defense",
+    "PK" to "Pirc Defense",
+    "MO" to "Modern Defense",
+    "MD" to "Modern Defense",
+    "SCD" to "Scandinavian Defense",
+    "CN" to "Center Game",
+    "VG" to "Vienna Game",
+    "BG" to "Bishop's Opening",
+
+    // Benoni variations
+    "BE" to "Benoni Defense",
+    "BD" to "Benoni Defense",
+    "MB" to "Modern Benoni",
+    "CB" to "Czech Benoni",
+
+    // Dutch Defense
+    "DU" to "Dutch Defense",
+    "DD" to "Dutch Defense",
+    "DR" to "Dutch Defense",
+    "DSW" to "Dutch Stonewall",
+    "DL" to "Dutch Leningrad",
+
+    // Slav variations
+    "SL" to "Slav Defense",
+    "SLA" to "Slav Defense",
+    "SSL" to "Semi-Slav Defense",
+    "SM" to "Slav Meran",
+
+    // English Opening
+    "EN" to "English Opening",
+    "ENG" to "English Opening",
+    "EO" to "English Opening",
+
+    // Catalan
+    "CAT" to "Catalan Opening",
+    "CA" to "Catalan Opening",
+
+    // London System
+    "LO" to "London System",
+    "LDN" to "London System",
+    "LS" to "London System",
+
+    // Other d4 openings
+    "TR" to "Trompowsky Attack",
+    "TRO" to "Trompowsky Attack",
+    "TO" to "Torre Attack",
+    "TA" to "Torre Attack",
+    "CO" to "Colle System",
+    "CS" to "Colle System",
+    "ZU" to "Zukertort Opening",
+    "BL" to "Blackmar-Diemer Gambit",
+    "BDG" to "Blackmar-Diemer Gambit",
+    "VE" to "Veresov Opening",
+    "VO" to "Veresov Opening",
+    "BA" to "Barry Attack",
+    "JO" to "Jobava London",
+
+    // Flank Openings
+    "RE" to "Reti Opening",
+    "BI" to "Bird's Opening",
+    "BO" to "Bird's Opening",
+    "LA" to "Larsen's Opening",
+    "NF" to "Nimzowitsch-Larsen Attack",
+    "SO" to "Sokolsky Opening (Polish)",
+    "PO" to "Polish Opening",
+
+    // Misc
+    "TN" to "Tarrasch Defense",
+    "TD" to "Tarrasch Defense",
+    "RG" to "Ragozin Defense",
+    "WA" to "Wade Defense",
+    "OW" to "Owen Defense",
+    "ST" to "Steinitz Defense"
+)
+
+private val MOVE_NUMBER = Regex("(?:^|(?<=\\s))(\\d+\\.(?:\\.\\.)?)(?!\\d)")
+
+/** One move per line in the movetext; the tag section is kept as it is. */
+private fun formatPgnForDisplay(pgn: String): String {
+    val tagEnd = Regex("^\\[.*\\][ \\t]*$", RegexOption.MULTILINE).findAll(pgn).lastOrNull()?.range?.last?.plus(1) ?: 0
+    val tags = pgn.substring(0, tagEnd).trimEnd()
+    val movetext = pgn.substring(tagEnd).replace(MOVE_NUMBER) { "\n${it.value}" }.trim()
+    return if (tags.isEmpty()) movetext else "$tags\n\n$movetext"
 }

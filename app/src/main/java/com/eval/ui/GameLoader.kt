@@ -11,7 +11,9 @@ import com.eval.data.Players
 import com.eval.data.Result
 import com.eval.data.User
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Handles loading and parsing games from various sources.
@@ -28,7 +30,9 @@ internal class GameLoader(
     private val analysisOrchestrator: AnalysisOrchestrator,
     private val analyzeRestoredPosition: suspend (String) -> Unit = { },
     private val getAppVersionCode: () -> Long = { 0L },
-    private val stopLiveFollow: () -> Unit = {}
+    private val stopLiveFollow: () -> Unit = {},
+    // Clears per-game UI flows (such as a pending AI report) when a different game is committed.
+    private val onGameCommitted: () -> Unit = {}
 ) {
     // Temporary storage for server/username when showing game selection dialog
     private var pendingGameSelectionServer: ChessServer? = null
@@ -60,9 +64,11 @@ internal class GameLoader(
         // import, reload, or selection owns the screen even if startup finishes last.
         val generation = ++gameSelectionGeneration
         viewModelScope.launch {
-            if (!prepareEngine() || generation != gameSelectionGeneration) return@launch
+            val engineReady = prepareEngine()
+            if (generation != gameSelectionGeneration) return@launch
             val username = settingsPrefs.knownLichessUsername
-            if (username != null) {
+            // Without an engine, still show the saved game; it doesn't need analysis to be viewed.
+            if (engineReady && username != null) {
                 settingsPrefs.saveLastServerUser(username, "lichess.org")
                 updateUiState { copy(hasLastServerUser = true) }
                 fetchLastGameFromServer(ChessServer.LICHESS, username, generation)
@@ -124,7 +130,15 @@ internal class GameLoader(
                             gameSelectionUsername = username
                         )
                     }
-                    loadGame(games.first(), server, username)
+                    // The newest game is often the one already analysed: reopen that analysis
+                    // instead of spending minutes re-analysing it.
+                    val latest = games.first()
+                    val analysed = latest.pgn?.let { pgn ->
+                        withContext(Dispatchers.IO) { gameStorage.loadManualGamesList() }.firstOrNull { it.pgn == pgn }
+                    }
+                    if (generation != gameSelectionGeneration) return
+                    if (analysed != null) loadAnalysedGameDirectly(analysed)
+                    else loadGame(latest, server, username, userChosen = false)
                 } else {
                     updateUiState {
                         copy(
@@ -148,23 +162,16 @@ internal class GameLoader(
     fun fetchGames(server: ChessServer, username: String) {
         if (server != ChessServer.LICHESS) return
         val generation = ++gameSelectionGeneration
-        settingsPrefs.saveLichessUsername(username)
-        settingsPrefs.saveLastServerUser(username, "lichess.org")
-        updateUiState { copy(hasLastServerUser = true) }
-
-        settingsPrefs.setFirstGameRetrievedVersion(getAppVersionCode())
-
-        analysisOrchestrator.autoAnalysisJob?.cancel()
 
         val pageSize = 25
 
+        // The current game and its analysis stay until another game is actually chosen.
         viewModelScope.launch {
             if (generation != gameSelectionGeneration) return@launch
             updateUiState {
                 copy(
                     isLoading = true,
                     errorMessage = null,
-                    game = null,
                     gameList = emptyList(),
                     showGameSelection = false,
                     gameSelectionPage = 0,
@@ -178,6 +185,11 @@ internal class GameLoader(
 
             when (result) {
                 is Result.Success -> {
+                    // Only a name that Lichess accepted becomes the saved account.
+                    settingsPrefs.saveLichessUsername(username)
+                    settingsPrefs.saveLastServerUser(username, "lichess.org")
+                    settingsPrefs.setFirstGameRetrievedVersion(getAppVersionCode())
+                    updateUiState { copy(hasLastServerUser = true) }
                     val games = result.data
                     if (games.isNotEmpty()) {
                         storeRetrievedGames(games, username, server)
@@ -286,7 +298,11 @@ internal class GameLoader(
         }
     }
 
-    fun loadGame(game: LichessGame, server: ChessServer?, username: String?) {
+    /**
+     * [userChosen] is false for the automatic startup/reload load: it must not close flows the
+     * user already opened (such as a pending AI report) the way choosing a different game does.
+     */
+    fun loadGame(game: LichessGame, server: ChessServer?, username: String?, userChosen: Boolean = true) {
         val pgn = game.pgn
         if (pgn == null) {
             updateUiState {
@@ -299,6 +315,11 @@ internal class GameLoader(
         }
 
         val pgnHeaders = PgnParser.parseHeaders(pgn)
+        val variant = unsupportedVariant(game, pgnHeaders)
+        if (variant != null) {
+            updateUiState { copy(isLoading = false, errorMessage = "$variant games can't be analysed: Eval supports standard chess only") }
+            return
+        }
         val startingBoard = PgnParser.parseInitialBoard(pgn)
         if (startingBoard == null) {
             updateUiState { copy(isLoading = false, errorMessage = "Invalid PGN starting position") }
@@ -306,9 +327,11 @@ internal class GameLoader(
         }
         invalidatePendingRetrieval()
         analysisOrchestrator.stop()
-        gameStorage.clearManualStageGame()
+        if (userChosen) onGameCommitted()
         stopLiveFollow()
-        val openingName = pgnHeaders["Opening"] ?: pgnHeaders["ECO"]
+        // The previous save stays as the startup fallback until this game reaches Manual and is saved.
+        // An ECO code is not an opening name; without one the name is derived from the moves.
+        val openingName = pgnHeaders["Opening"]
 
         val parsedMoves = PgnParser.parseMovesWithClock(pgn)
         val moveDetailsList = mutableListOf<MoveDetails>()
@@ -492,7 +515,7 @@ internal class GameLoader(
                 analysisResult = null,
                 analysisResultFen = null,
                 moveQualities = analysisOrchestrator.calculateMoveQualities(
-                    analysedGame.previewScores + analysedGame.analyseScores),
+                    analysedGame.previewScores, analysedGame.analyseScores),
                 showRetrieveScreen = false,
                 previewScores = analysedGame.previewScores,
                 analyseScores = analysedGame.analyseScores,
@@ -517,6 +540,14 @@ internal class GameLoader(
         }
     }
 
+    /** The variant's name when it isn't standard chess (Lichess game field or PGN [Variant] tag), else null. */
+    private fun unsupportedVariant(game: LichessGame, headers: Map<String, String>): String? {
+        val lichess = game.variant.trim()
+        if (lichess.isNotEmpty() && !PgnParser.isStandardVariant(lichess)) return lichess.replaceFirstChar { it.uppercase() }
+        val tag = headers["Variant"]?.trim().orEmpty()
+        return tag.takeIf { it.isNotEmpty() && !PgnParser.isStandardVariant(it) }
+    }
+
     private fun buildMoveDetails(
         boardAfterMove: ChessBoard,
         boardBeforeMove: ChessBoard,
@@ -527,6 +558,7 @@ internal class GameLoader(
         val fromSquare = lastMove.from.toAlgebraic()
         val toSquare = lastMove.to.toAlgebraic()
         val capturedPiece = boardBeforeMove.getPiece(lastMove.to)
+        // After a promotion this is the new piece, so the move list shows what the pawn became.
         val movedPiece = boardAfterMove.getPiece(lastMove.to)
         val pieceType = when (movedPiece?.type) {
             PieceType.KING -> "K"
@@ -714,7 +746,14 @@ internal class GameLoader(
 
             viewModelScope.launch {
                 val newCount = nextPageEndIndex
-                val gamesResult = repository.getLichessGames(entry.accountName, newCount)
+                // Fetch only the games after the ones already loaded when their time is known.
+                val until = currentGames.lastOrNull()?.createdAt
+                val gamesResult = if (until != null) {
+                    when (val more = repository.getLichessGames(entry.accountName, newCount - currentGames.size, until - 1)) {
+                        is Result.Success -> Result.Success((currentGames + more.data).distinctBy { it.id })
+                        is Result.Error -> more
+                    }
+                } else repository.getLichessGames(entry.accountName, newCount)
                 if (generation != gameSelectionGeneration) return@launch
                 when (gamesResult) {
                     is Result.Success -> {
@@ -755,7 +794,33 @@ internal class GameLoader(
 
     // PGN file loading
     fun loadGamesFromPgnContent(pgnContent: String, onMultipleEvents: ((Boolean) -> Unit)? = null) {
-        when (val result = repository.parseGamesFromPgnContent(pgnContent)) {
+        showParsedPgn(repository.parseGamesFromPgnContent(pgnContent), onMultipleEvents)
+    }
+
+    /**
+     * Read and parse a PGN file off the main thread: [readText] is bounded (size, archive limits)
+     * and cancellable, and failures are shown instead of being dropped.
+     */
+    fun loadPgnFile(readText: suspend () -> String, onMultipleEvents: ((Boolean) -> Unit)? = null) {
+        viewModelScope.launch {
+            updateUiState { copy(isLoading = true, errorMessage = null) }
+            val result = try {
+                val text = readText()
+                withContext(Dispatchers.Default) { repository.parseGamesFromPgnContent(text) }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Result.Error(e.message ?: "This file could not be read.")
+            } catch (e: OutOfMemoryError) {
+                Result.Error("This file is too large to open.")
+            }
+            updateUiState { copy(isLoading = false) }
+            showParsedPgn(result, onMultipleEvents)
+        }
+    }
+
+    private fun showParsedPgn(result: Result<List<LichessGame>>, onMultipleEvents: ((Boolean) -> Unit)?) {
+        when (result) {
             is Result.Success -> {
                 invalidatePendingRetrieval()
                 val games = result.data

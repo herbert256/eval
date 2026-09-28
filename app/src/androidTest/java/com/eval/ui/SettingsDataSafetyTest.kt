@@ -114,6 +114,9 @@ class SettingsDataSafetyTest {
                 settings.saveGeneralSettings(GeneralSettings(moveSoundsEnabled = false, lichessUsername = "LocalUser"))
                 settings.saveAiInstructions(listOf(AiInstructionEntry("local", "Local coach", "Keep this instruction")))
                 settings.saveFenToHistory("4k3/4p3/8/8/8/8/4P3/4K3 b - - 0 17")
+                val games = context.getSharedPreferences(GameStorageManager.PREFS_NAME, Context.MODE_PRIVATE)
+                games.edit().remove(SettingsPreferences.KEY_LIST_MANUAL_GAMES).commit()
+                // Older versions kept games in the settings file; startup moves them, never drops them.
                 prefs.edit().putString(SettingsPreferences.KEY_LIST_MANUAL_GAMES, "[]").commit()
                 ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                     scenario.onActivity { activity ->
@@ -121,7 +124,8 @@ class SettingsDataSafetyTest {
                         assertFalse("Startup reset move sounds for version $savedVersion", vm.uiState.value.generalSettings.moveSoundsEnabled)
                         assertEquals("Local coach", vm.uiState.value.aiInstructions.single().name)
                         assertEquals(1, settings.loadFenHistory().size)
-                        assertTrue(prefs.contains(SettingsPreferences.KEY_LIST_MANUAL_GAMES))
+                        assertTrue(games.contains(SettingsPreferences.KEY_LIST_MANUAL_GAMES))
+                        assertFalse(prefs.contains(SettingsPreferences.KEY_LIST_MANUAL_GAMES))
                     }
                 }
             }

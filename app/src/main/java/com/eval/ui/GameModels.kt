@@ -10,6 +10,7 @@ import com.eval.data.LichessGame
 import com.eval.data.PlayerInfo
 import androidx.compose.ui.graphics.Color
 import com.eval.stockfish.AnalysisResult
+import kotlin.math.pow
 
 // ECO Opening entry from eco_codes.json
 data class EcoOpening(
@@ -129,6 +130,9 @@ object AppColors {
     val ButtonGreen = Color(0xFF6B8E23)
     val PositiveGreen = Color(0xFF00E676)
     val NegativeRed = Color(0xFFFF5252)
+    // Result bar: dark enough for red/green score text to stay readable (WCAG AA).
+    val ResultBarBackground = Color(0xFF262626)
+    val ScoreNegativeText = Color(0xFFFF6E6E)
     // Game result background colors
     val ResultWinBackground = Color(0xFF2A4A2A)
     val ResultLossBackground = Color(0xFF4A2A2A)
@@ -255,13 +259,22 @@ enum class MoveQuality(val symbol: String, val color: Long) {
     NORMAL("", 0x00000000)         // No symbol - neutral move
 }
 
-// Thresholds for move quality assessment (in pawns)
+// Thresholds for move quality assessment, as changes in the mover's winning chances
+// (-1 = lost, 0 = equal, +1 = won; Lichess' scale). Using winning chances instead of raw
+// pawns keeps "mate in 4 → +9.5" from being a blunder and a big edge from looking fragile.
 object MoveQualityThresholds {
-    const val BLUNDER = 2.0f      // Loss >= 2 pawns
-    const val MISTAKE = 1.0f      // Loss 1-2 pawns
-    const val DUBIOUS = 0.5f      // Loss 0.5-1 pawn
-    const val GOOD = 0.3f         // Found improvement >= 0.3 pawns
-    const val BRILLIANT = 1.0f    // Found very strong move with gain >= 1 pawn
+    const val BLUNDER = 0.30f     // Loss of 0.3 (about 2 pawns from an equal position)
+    const val MISTAKE = 0.20f     // Loss of 0.2 (about 1 pawn)
+    const val DUBIOUS = 0.10f     // Loss of 0.1 (about half a pawn)
+    const val GOOD = 0.055f       // Gain of about 0.3 pawns from an equal position
+    const val BRILLIANT = 0.18f   // Gain of about 1 pawn from an equal position
+
+    /** White's winning chances for a White-perspective score, in -1..1. */
+    fun winningChances(score: MoveScore): Float {
+        if (score.isMate) return if (score.isPositiveMate) 1f else -1f
+        val centipawns = (score.score * 100f).coerceIn(-1000f, 1000f)
+        return (2.0 / (1.0 + kotlin.math.exp(-0.00368208 * centipawns)) - 1.0).toFloat()
+    }
 }
 
 data class MoveScore(
@@ -293,7 +306,12 @@ data class MoveScore(
             return (if (isPositiveMate) "+M" else "-M") + kotlin.math.abs(mateIn)
         }
         val fmt = "%.${decimals}f"
-        return if (score >= 0) "+" + fmt.format(score) else fmt.format(score)
+        // Round first: a score that shows as zero (including -0.0 from flipping the side to move)
+        // is written "+0.0", never "+-0.0" or "-0.0".
+        val factor = 10.0.pow(decimals)
+        val rounded = kotlin.math.round(score * factor) / factor
+        val value = if (rounded == 0.0) 0.0 else rounded
+        return if (value >= 0) "+" + fmt.format(value) else fmt.format(value)
     }
 }
 
@@ -353,6 +371,10 @@ data class GameUiState(
     val analysisResult: AnalysisResult? = null,
     val analysisResultFen: String? = null,  // FEN for which analysisResult is valid
     val stockfishReady: Boolean = false,
+    val engineSupportsNnueOption: Boolean = false,  // Stockfish 16+ removed "Use NNUE"
+    val untrustedAppPackage: String? = null,  // Installed app whose signer changed; awaiting user confirmation
+    val pendingPromotion: Pair<com.eval.chess.Square, com.eval.chess.Square>? = null,
+    val hasLichessToken: Boolean = false,  // Opening statistics are only requested with a token  // Manual pawn move awaiting a piece choice
     val stockfishName: String = "Stockfish",
     val flippedBoard: Boolean = false,
     val userPlayedBlack: Boolean = false,  // True if active player played black (for score perspective)

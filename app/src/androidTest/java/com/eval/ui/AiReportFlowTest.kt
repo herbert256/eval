@@ -21,9 +21,12 @@ import java.util.concurrent.CopyOnWriteArrayList
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.Before
 
 @RunWith(AndroidJUnit4::class)
 class AiReportFlowTest {
+    @Before fun requireStockfish() = TestEnvironment.assumeStockfishInstalled()
+
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private fun nodes(node: AccessibilityNodeInfo?): List<AccessibilityNodeInfo> = if (node == null) emptyList()
@@ -119,9 +122,9 @@ class AiReportFlowTest {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             val vm = show(scenario, receiver)
             scenario.onActivity { vm.requestGameAiReport() }
-            click("Select System prompts", true); click("Flow coach")
-            click("Select Prompts", true); click("Flow question")
-            click("Select AI instructions", true); click("Flow options")
+            click("Flow coach")
+            click("Flow question")
+            click("Flow options")
             assertEquals(choice, settings.loadAiReportSelection())
             screenshot("ai-report-select.png")
             click("Next")
@@ -175,8 +178,8 @@ class AiReportFlowTest {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             val vm = show(scenario, context)
             scenario.onActivity { vm.requestPlayerAiReport("Test player") }
-            click("Select System prompts", true); click("Flow coach")
-            click("Select System prompts", true); click("None")
+            click("Flow coach")
+            click("System prompts: None", true)
             assertEquals(AiReportSelection(), settings.loadAiReportSelection())
             click("Next")
             assertEquals(AiReportDraft(), vm.uiState.value.aiReportDraft)
@@ -185,7 +188,7 @@ class AiReportFlowTest {
             setText("Prompt", "Temporary question")
             hideKeyboard(scenario)
             systemBack()
-            click("Select Prompts", true); click("Flow question")
+            click("Flow question")
             click("Next")
             assertEquals(prompts.single().text, vm.uiState.value.aiReportDraft!!.prompt)
             scenario.onActivity {

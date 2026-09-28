@@ -53,10 +53,13 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         clipboard.addPrimaryClipChangedListener(clipboardListener)
+        if (::gameViewModel.isInitialized) gameViewModel.onAppForegrounded()
     }
 
     override fun onStop() {
         clipboard.removePrimaryClipChangedListener(clipboardListener)
+        // A rotation stops and restarts the activity; only pause analysis when Eval leaves the screen.
+        if (!isChangingConfigurations) gameViewModel.onAppBackgrounded()
         super.onStop()
     }
 
@@ -133,6 +136,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun receiveShare(intent: Intent) {
+        // Reopening Eval from Recents redelivers the original share; it was already handled.
+        if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
         val input = SharedChessInput.fromIntent(intent) ?: return
         // A launcher intent must not discard the payload needed to restore a pending share.
         setIntent(intent)

@@ -53,7 +53,8 @@ com.eval/
 │   ├── OpeningBook.kt / OpeningExplorerApi.kt - Local opening names; Lichess explorer (needs a token)
 │   ├── ChessDocumentReader.kt, RtfChessText.kt - Bounded PDF/Office/EPUB/RTF/ZIP/PGN readers
 │   ├── ChessWebExtractor.kt, SharedChessText.kt, SharedChessInput.kt - FEN/PGN/link extraction, share intake
-│   └── ClipboardHistory.kt - Chess-only clipboard history (10 entries)
+│   ├── ClipboardHistory.kt - Chess-only clipboard history (10 entries)
+│   └── AppSignerTrust.kt - Trust-on-first-use signer pinning of com.stockfish141 and com.ai
 ├── stockfish/
 │   ├── StockfishEngine.kt - Engine process lifecycle, options, searches (history, lastError)
 │   ├── UciSession.kt - Reader thread, write lock, stop/drain/isready search protocol
@@ -70,7 +71,6 @@ com.eval/
     ├── LiveGameManager.kt - Live following (not wired to the UI; kept with its tests)
     ├── GameStorageManager.kt - Games in `eval_games` preferences (migrated from `eval_prefs`)
     ├── SettingsPreferences.kt, SettingsImportValidation.kt, SettingsManager.kt - Settings, export/import
-    ├── AppSignerTrust.kt - Trust-on-first-use signer pinning of com.stockfish141 and com.ai
     ├── AiAppLauncher.kt, AiMovesList.kt, AiEngineLines.kt, AiSettingsModels.kt, BundledAiPrompts.kt - AI handoff
     ├── AiReportScreens.kt, AiSetupScreen.kt, AiInterfaceEditor.kt, AiInterfaceCompletion.kt - AI UI
     ├── ExportShareManager.kt - Share/export actions (share intents emitted to the foreground UI)

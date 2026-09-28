@@ -8,36 +8,22 @@
 -keepattributes InnerClasses
 -keepattributes EnclosingMethod
 
-# Kotlin metadata (required for reflection / coroutines / data classes)
--keep class kotlin.Metadata { *; }
--keep class kotlin.reflect.** { *; }
--keepclassmembers class kotlinx.coroutines.** { *; }
-
-# Gson — all serialized data classes must be kept so reflection finds the fields
--keep class com.eval.data.** { *; }
--keep class com.eval.ui.GameUiState { *; }
--keep class com.eval.ui.MoveDetails { *; }
--keep class com.eval.ui.MoveScore { *; }
--keep class com.eval.ui.AnalysedGame { *; }
--keep class com.eval.ui.AiPromptEntry { *; }
--keep class com.eval.ui.AiInstructionEntry { *; }
--keep class com.eval.ui.AiReportSelection { *; }
--keep class com.eval.ui.SettingsSnapshotV5 { *; }
--keep class com.eval.ui.StockfishSettings { *; }
--keep class com.eval.ui.BoardLayoutSettings { *; }
--keep class com.eval.ui.GraphSettings { *; }
--keep class com.eval.ui.GeneralSettings { *; }
--keep class com.eval.ui.AnalysisStage { *; }
--keep class com.eval.ui.ArrowMode { *; }
--keep class com.eval.ui.PlayerBarMode { *; }
--keep class com.eval.ui.EvalBarPosition { *; }
--keep class com.eval.ui.MoveQuality { *; }
--keep class com.eval.chess.** { *; }
--keep class com.eval.stockfish.** { *; }
-
-# Gson internals reflection
--keep class com.google.gson.** { *; }
--keep class com.google.gson.reflect.TypeToken { *; }
+# Gson: field names are the JSON keys of API responses, exported settings and stored games,
+# so every class Gson reads or writes keeps its field names (renaming them in release breaks
+# settings import/export and makes stored games unreadable after an update).
+-keep class com.eval.data.** { <fields>; <init>(...); }
+-keep class com.eval.ui.SettingsSnapshotV5 { <fields>; <init>(...); }
+-keep class com.eval.ui.*Settings { <fields>; <init>(...); }
+-keep class com.eval.ui.*StageVisibility { <fields>; <init>(...); }
+-keep class com.eval.ui.AiPromptEntry { <fields>; <init>(...); }
+-keep class com.eval.ui.AiInstructionEntry { <fields>; <init>(...); }
+-keep class com.eval.ui.AiReportSelection { <fields>; <init>(...); }
+-keep class com.eval.ui.RetrievedGamesEntry { <fields>; <init>(...); }
+-keep class com.eval.ui.AnalysedGame { <fields>; <init>(...); }
+-keep class com.eval.ui.MoveDetails { <fields>; <init>(...); }
+-keep class com.eval.ui.MoveScore { <fields>; <init>(...); }
+# Enums are written by name.
+-keepclassmembers enum com.eval.** { <fields>; }
 -keep class * extends com.google.gson.reflect.TypeToken
 -keepclassmembers,allowobfuscation class * {
     @com.google.gson.annotations.SerializedName <fields>;
@@ -50,6 +36,7 @@
 }
 -keep,allowobfuscation,allowshrinking interface retrofit2.Call
 -keep,allowobfuscation,allowshrinking class retrofit2.Response
+-keep,allowobfuscation,allowshrinking class kotlin.coroutines.Continuation
 -dontwarn org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement
 -dontwarn javax.annotation.**
 -dontwarn kotlin.Unit
@@ -61,6 +48,12 @@
 -dontwarn okio.**
 -dontwarn org.conscrypt.**
 
-# Compose keeps most things via its own rules; keep our composables readable in stacks
--keep class androidx.compose.** { *; }
--dontwarn androidx.compose.**
+# pdfbox-android references the optional JPEG 2000 decoder, which the app doesn't ship.
+-dontwarn com.gemalto.jp2.JP2Decoder
+
+# Debug and info logging is stripped from release builds (it can include player names and paths).
+-assumenosideeffects class android.util.Log {
+    public static int v(...);
+    public static int d(...);
+    public static int i(...);
+}

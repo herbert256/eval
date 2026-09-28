@@ -113,6 +113,11 @@ internal class BoardNavigationManager(
     }
 
     fun goToMove(index: Int) {
+        // In Analyse a tapped move opens Manual at that move, not at the move being analysed.
+        if (getUiState().currentStage == AnalysisStage.ANALYSE) {
+            analysisOrchestrator.enterManualStageAtMove(index)
+            return
+        }
         if (!handleNavigationInterrupt()) return
 
         val state = getUiState()
@@ -232,7 +237,7 @@ internal class BoardNavigationManager(
     /**
      * Make a manual move on the board (from user drag-and-drop).
      */
-    fun makeManualMove(from: Square, to: Square) {
+    fun makeManualMove(from: Square, to: Square, promotionChoice: PieceType? = null) {
         val state = getUiState()
         if (state.currentStage != AnalysisStage.MANUAL) return
 
@@ -242,8 +247,14 @@ internal class BoardNavigationManager(
         if (!currentBoard.isLegalMove(from, to)) return
 
         val promotion = if (currentBoard.needsPromotion(from, to)) {
-            PieceType.QUEEN
+            // Ask which piece; underpromotions matter in analysis (stalemate tricks, knight forks).
+            if (promotionChoice == null) {
+                updateUiState { copy(pendingPromotion = from to to) }
+                return
+            }
+            promotionChoice
         } else null
+        if (state.pendingPromotion != null) updateUiState { copy(pendingPromotion = null) }
 
         val newBoard = currentBoard.copy()
         if (!newBoard.makeMoveFromSquares(from, to, promotion)) return
@@ -286,6 +297,15 @@ internal class BoardNavigationManager(
         analysisOrchestrator.restartAnalysisForExploringLine()
     }
 
+    fun choosePromotion(piece: PieceType) {
+        val (from, to) = getUiState().pendingPromotion ?: return
+        makeManualMove(from, to, piece)
+    }
+
+    fun cancelPromotion() {
+        updateUiState { copy(pendingPromotion = null) }
+    }
+
     /**
      * Convert a promotion piece type to its UCI suffix character.
      */
@@ -312,9 +332,11 @@ internal class BoardNavigationManager(
         if (moveDetails != null) {
             val isCastle = moveDetails.pieceType == "K" &&
                 kotlin.math.abs(moveDetails.from[0] - moveDetails.to[0]) > 1
-            moveSoundPlayer.playMove(
+            val after = getBoardHistory().getOrNull(moveIndex + 1)
+            moveSoundPlayer.playSanMove(
+                san = moveDetails.san,
                 isCapture = moveDetails.isCapture,
-                isCheck = false,
+                isCheck = after != null && after.isKingInCheck(after.getTurn()),
                 isCastle = isCastle
             )
         } else {

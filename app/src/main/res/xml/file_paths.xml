@@ -1,9 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <cache-path name="gif_exports" path="gif_exports/" />
-    <cache-path name="ai_analysis" path="ai_analysis/" />
-    <cache-path name="shared_traces" path="shared_traces/" />
     <cache-path name="settings_export" path="settings_export/" />
-    <files-path name="ai_history" path="ai-history/" />
+    <cache-path name="camera_photos" path="camera_photos/" />
     <files-path name="clipboard_history" path="clipboard-history/attachments/" />
 </paths>

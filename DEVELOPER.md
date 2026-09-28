@@ -111,7 +111,7 @@ Stockfish 16 and later have no "Use NNUE" option; the NNUE toggles are shown and
 `StockfishEngine.kt` manages an external process:
 - Requires `com.stockfish141` package installed on device
 - Locates the binary in that package's `nativeLibraryDir` (`lib_sf*.so`, e.g. `lib_sf19.so`), trying the next candidate when a handshake fails
-- Trusts the package's signing certificate on first use (`AppSignerTrust`); a later install signed by someone else is only used after the user confirms
+- Trusts the package's signing certificate on first use (`AppSignerTrust`); a later install signed by someone else is only used after the user confirms. The check runs in `StockfishEngine` on every start and restart (including the dedicated AI engines), and `signerChanged` asks the user
 - Communicates via UCI protocol over stdin/stdout (`ProcessBuilder`)
 - Safety caps: max 256 MB hash, max 4 threads (`StockfishEngine.MAX_SAFE_HASH_MB`, `maxUsableThreads()`); the settings steppers offer only these values
 - Thread-safe with `Mutex` for serialization, `synchronized` for PV lines

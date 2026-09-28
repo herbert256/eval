@@ -218,7 +218,9 @@ interface LichessApi {
         @Path("username") username: String,
         @Query("max") max: Int = 10,
         @Query("pgnInJson") pgnInJson: Boolean = true,
-        @Query("clocks") clocks: Boolean = true
+        @Query("clocks") clocks: Boolean = true,
+        // Only games played before this time (ms); used to fetch the next page without re-downloading.
+        @Query("until") until: Long? = null
     ): Response<String>
 
     @GET("api/player")
@@ -252,7 +254,8 @@ interface LichessApi {
     @Headers("Accept: application/json")
     suspend fun getTvChannels(): Response<String>
 
-    @GET("api/game/{gameId}")
+    // game/export includes the PGN, also for ongoing games (api/game/{id} never does).
+    @GET("game/export/{gameId}")
     @Headers("Accept: application/json")
     suspend fun getGame(
         @Path("gameId") gameId: String,
@@ -281,9 +284,12 @@ interface LichessApi {
     companion object {
         private const val BASE_URL = "https://lichess.org/"
 
-        fun create(): LichessApi {
+        fun create(baseUrl: String = BASE_URL): LichessApi {
+            // Never log bodies: BODY buffers the whole response before returning, which
+            // blocks the NDJSON game stream until the game ends, and leaks data to logcat.
             val loggingInterceptor = HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BODY
+                level = if (com.eval.BuildConfig.DEBUG) HttpLoggingInterceptor.Level.HEADERS
+                else HttpLoggingInterceptor.Level.NONE
             }
 
             val okHttpClient = OkHttpClient.Builder()
@@ -300,7 +306,7 @@ interface LichessApi {
                 .build()
 
             return Retrofit.Builder()
-                .baseUrl(BASE_URL)
+                .baseUrl(baseUrl)
                 .client(okHttpClient)
                 .addConverterFactory(ScalarsConverterFactory.create())
                 .addConverterFactory(GsonConverterFactory.create())

@@ -107,7 +107,8 @@ class BoardSetupPositionTest {
             "k7/8/8/3pP3/8/5n2/8/4K3 w - - 0 2", // EP cannot answer the knight check.
             "k7/8/8/3pP3/8/8/8/R3K3 w - - 0 2" // Last mover is still in check.
         )) {
-            assertTrue(fen, BoardSetupPosition.fromFen(fen).enPassantLastMoves().isEmpty())
+            // A draft, because the last position is illegal and FEN import now rejects it.
+            assertTrue(fen, requireNotNull(BoardSetupPosition.fromDraftFen(fen)).enPassantLastMoves().isEmpty())
         }
         // White was already checked before the claimed last move; Black could not have been on move.
         val invalidBefore = BoardSetupPosition.fromFen("7k/8/2K5/3pP3/8/8/8/8 w - - 0 2")

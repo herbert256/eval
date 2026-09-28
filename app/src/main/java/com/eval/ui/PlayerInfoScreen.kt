@@ -41,6 +41,7 @@ fun PlayerInfoScreen(
     hasMoreGames: Boolean,
     onNextPage: (Int) -> Unit,
     onPreviousPage: () -> Unit,
+    onPageClamped: (Int) -> Unit = {},
     onGameSelected: (com.eval.data.LichessGame) -> Unit,
     onAiReportsClick: () -> Unit,
     hasAiApiKeys: Boolean,
@@ -377,11 +378,15 @@ fun PlayerInfoScreen(
                         } else {
                             // Games table - compute page size from screen height
                             val screenHeightDp = LocalConfiguration.current.screenHeightDp
-                            val pageSize = (screenHeightDp / 40).coerceAtLeast(5)
-                            val startIndex = currentPage * pageSize
+                            val pageSize = rowsThatFit(screenHeightDp.dp, rowHeight = 48.dp, minimum = 5)
+                            val totalPages = (games.size + pageSize - 1) / pageSize
+                            // The page lives in the ViewModel but the page size follows the screen,
+                            // so a rotation can leave the stored page past the end of the list.
+                            val page = currentPage.coerceIn(0, (totalPages - 1).coerceAtLeast(0))
+                            LaunchedEffect(page, currentPage) { if (page != currentPage) onPageClamped(page) }
+                            val startIndex = page * pageSize
                             val endIndex = minOf(startIndex + pageSize, games.size)
                             val currentGames = games.subList(startIndex, endIndex)
-                            val totalPages = (games.size + pageSize - 1) / pageSize
 
                             // Table header
                             Row(
@@ -434,9 +439,9 @@ fun PlayerInfoScreen(
                             }
 
                             // Pagination controls - show if we have more than one page or there might be more to fetch
-                            val nextPageStartIndex = (currentPage + 1) * pageSize
+                            val nextPageStartIndex = (page + 1) * pageSize
                             val canGoNext = nextPageStartIndex < games.size || hasMoreGames
-                            val showPagination = games.size > pageSize || hasMoreGames || currentPage > 0
+                            val showPagination = games.size > pageSize || hasMoreGames || page > 0
 
                             if (showPagination) {
                                 Spacer(modifier = Modifier.height(12.dp))
@@ -446,7 +451,7 @@ fun PlayerInfoScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     // Previous button
-                                    if (currentPage > 0) {
+                                    if (page > 0) {
                                         TextButton(onClick = onPreviousPage) {
                                             Text(
                                                 text = "← Previous",
@@ -460,7 +465,7 @@ fun PlayerInfoScreen(
 
                                     // Page indicator
                                     Text(
-                                        text = if (hasMoreGames) "Page ${currentPage + 1}" else "Page ${currentPage + 1} of $totalPages",
+                                        text = if (hasMoreGames) "Page ${page + 1}" else "Page ${page + 1} of $totalPages",
                                         color = AppColors.SubtleText,
                                         fontSize = 12.sp
                                     )

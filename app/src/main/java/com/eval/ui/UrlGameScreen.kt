@@ -1,11 +1,18 @@
 package com.eval.ui
 
+import android.app.Activity
+import android.app.Application
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.ContextWrapper
 import android.net.Uri
+import android.view.ViewGroup
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -13,6 +20,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalContext
@@ -24,10 +32,17 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.FileProvider
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.eval.data.WebChessCandidate
 import com.eval.data.WebChessKind
 import com.eval.data.SharedChessInput
 import kotlinx.coroutines.CoroutineScope
+import java.io.File
 
 private val ReviewCandidateSaver = listSaver<WebChessCandidate?, String>(
     save = { candidate -> candidate?.let {
@@ -35,6 +50,31 @@ private val ReviewCandidateSaver = listSaver<WebChessCandidate?, String>(
     } ?: emptyList() },
     restore = { if (it.isEmpty()) null else WebChessCandidate(WebChessKind.valueOf(it[0]), it[1], it[2], it[3], it[4].toBoolean(), it[5].ifEmpty { null }) }
 )
+
+/** Camera app photos in Eval's private cache, shared with the camera app through FileProvider. */
+private object CameraPhotos {
+    private fun directory(context: Context) = File(context.cacheDir, "camera_photos")
+    fun create(context: Context) = File(directory(context).apply { mkdirs() }, "board-${System.currentTimeMillis()}.jpg")
+    fun uri(context: Context, photo: File): Uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", photo)
+    fun keepOnly(context: Context, photo: File?) { directory(context).listFiles()?.forEach { if (it != photo) it.delete() } }
+}
+
+/** Keeps a running scan, its results and its rendered page across configuration changes. */
+internal class UrlScanModel(application: Application) : AndroidViewModel(application) {
+    private var scanner: UrlGameScanner? = null
+    fun scanner(create: (CoroutineScope) -> UrlGameScanner): UrlGameScanner = scanner ?: create(viewModelScope).also { scanner = it }
+    fun release() { scanner?.close(); scanner = null }
+    override fun onCleared() = release()
+}
+
+private fun Context.activity(): Activity? {
+    var current: Context? = this
+    while (current is ContextWrapper) {
+        if (current is Activity) return current
+        current = current.baseContext
+    }
+    return null
+}
 
 @Composable
 internal fun UrlGameScreen(
@@ -44,12 +84,32 @@ internal fun UrlGameScreen(
     sharedInput: SharedChessInput? = null,
     localFile: Boolean = false,
     clipboardEntry: Boolean = false,
+    camera: Boolean = false,
     scannerFactory: (android.content.Context, CoroutineScope) -> UrlGameScanner = { context, scope -> UrlGameScanner(context, scope) }
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val scanner = remember { scannerFactory(context, scope) }
-    DisposableEffect(scanner) { onDispose { scanner.close() } }
+    val activity = remember(context) { context.activity() }
+    val model: UrlScanModel = viewModel(key = "url-scan:" + when {
+        localFile -> "local"
+        camera -> "camera"
+        sharedInput != null -> (if (clipboardEntry) "clipboard:" else "shared:") + sharedInput.id
+        else -> "url"
+    })
+    val scanner = remember(model) { model.scanner { scope -> scannerFactory(context, scope) } }
+    DisposableEffect(scanner, activity) {
+        scanner.attach(activity ?: context.applicationContext)
+        onDispose {
+            // Recreation (rotation, or the system reclaiming a background Activity) restores this screen;
+            // otherwise the user has left it, so stop the scan and delete camera photos.
+            val recreating = activity != null && !activity.isFinishing &&
+                (activity as? LifecycleOwner)?.lifecycle?.currentState == Lifecycle.State.DESTROYED
+            if (recreating) scanner.attach(context.applicationContext)
+            else {
+                model.release()
+                if (camera) CameraPhotos.keepOnly(context, null)
+            }
+        }
+    }
     val state by scanner.uiState.collectAsState()
     var url by rememberSaveable { mutableStateOf("") }
     var selected by rememberSaveable(stateSaver = ReviewCandidateSaver) { mutableStateOf<WebChessCandidate?>(null) }
@@ -67,25 +127,59 @@ internal fun UrlGameScreen(
         }
     }
     val chooseFile = { pickerOpened = true; filePicker.launch(arrayOf("*/*")) }
+    // The camera app writes to a new file; the previous photo stays until a new one is taken.
+    var photoPath by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingPhotoPath by rememberSaveable { mutableStateOf<String?>(null) }
+    var cameraOpened by rememberSaveable { mutableStateOf(false) }
+    var cameraError by rememberSaveable { mutableStateOf<String?>(null) }
+    val takePicture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { taken ->
+        val pending = pendingPhotoPath?.let(::File)
+        pendingPhotoPath = null
+        if (taken && pending != null && pending.length() > 0) {
+            selected = null
+            photoPath = pending.path
+            CameraPhotos.keepOnly(context, pending)
+            scanner.openCameraPhoto(CameraPhotos.uri(context, pending))
+        } else pending?.delete()
+    }
+    val takePhoto = {
+        cameraOpened = true
+        cameraError = null
+        val photo = CameraPhotos.create(context)
+        pendingPhotoPath = photo.path
+        try { takePicture.launch(CameraPhotos.uri(context, photo)) }
+        catch (_: ActivityNotFoundException) {
+            pendingPhotoPath = null
+            cameraError = "No camera app is available. Take a photo with another app and use Start from a local file."
+        }
+    }
+    val leave = { if (camera) CameraPhotos.keepOnly(context, null); onBack() }
     val focus = LocalFocusManager.current
     val scan = { focus.clearFocus(); selected = null; scannedUrl = url; scanner.open(url) }
     fun scanContent() { sharedInput?.let { if (clipboardEntry) scanner.openClipboard(it) else scanner.openShared(it) } }
-    // Preserve the selected result and editor draft across recreation. Rebuild
-    // results only on returning to the scanner, without replacing edited pieces.
+    // Shares from other apps are not read, and nothing is downloaded, until the user taps Scan.
+    val awaitingScan = sharedInput != null && !clipboardEntry && state == UrlScanState()
+    // The scanner keeps results across recreation. After process death, restart the saved
+    // input on returning to the scanner, without replacing pieces edited in Board setup.
     LaunchedEffect(scanner, sharedInput?.id, selected != null) {
-        if (selected == null && !state.busy && state.results.isEmpty()) {
+        if (selected == null && scanner.uiState.value == UrlScanState()) {
             when {
                 localFile -> {
                     val uri = localUri
                     if (uri != null) scanner.openLocalFile(Uri.parse(uri))
                     else if (!pickerOpened) chooseFile()
                 }
-                sharedInput != null -> scanContent()
+                camera -> {
+                    val photo = photoPath
+                    if (photo != null) scanner.openCameraPhoto(CameraPhotos.uri(context, File(photo)))
+                    else if (!cameraOpened) { CameraPhotos.keepOnly(context, null); takePhoto() }
+                }
+                sharedInput != null -> if (clipboardEntry) scanContent()
                 scannedUrl != null -> scanner.open(scannedUrl!!)
             }
         }
     }
-    BackHandler { if (selected != null) selected = null else onBack() }
+    BackHandler { if (selected != null) selected = null else leave() }
     val candidate = selected
     if (candidate != null) {
         key(candidate) {
@@ -96,7 +190,12 @@ internal fun UrlGameScreen(
                 initialFen = candidate.content,
                 importWarning = candidate.warning,
                 imagePosition = candidate.kind == WebChessKind.IMAGE,
-                onStart = { fen -> onStartFen(fen).also { if (it) settings.saveFenToHistory(fen) } },
+                onStart = { fen ->
+                    onStartFen(fen).also { started ->
+                        if (started) settings.saveFenToHistory(fen)
+                        if (started && camera) { CameraPhotos.keepOnly(context, null); photoPath = null }
+                    }
+                },
                 onBack = { selected = null }
             )
         }
@@ -107,14 +206,26 @@ internal fun UrlGameScreen(
         topBar = {
             EvalTitleBar(title = when {
                 localFile -> "Start from a local file"
+                camera -> "Start from camera"
                 clipboardEntry -> "Start from clipboard history"
                 sharedInput != null -> "Shared content"
                 else -> "Start from url"
-            }, onBackClick = { if (selected != null) selected = null else onBack() }, onEvalClick = onBack)
+            }, onBackClick = { if (selected != null) selected = null else leave() }, onEvalClick = leave)
         }
     ) {
         Spacer(Modifier.height(12.dp))
-        if (localFile) {
+        if (camera) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = takePhoto, modifier = Modifier.weight(1f)) {
+                    Text(if (photoPath == null) "Take photo" else "Take another photo")
+                }
+                if (state.busy) OutlinedButton(onClick = scanner::cancel) { Text("Stop") }
+                else if (photoPath != null) OutlinedButton(onClick = {
+                    scanner.openCameraPhoto(CameraPhotos.uri(context, File(photoPath!!)))
+                }) { Text("Scan again") }
+            }
+            cameraError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        } else if (localFile) {
             if (state.fileName.isNotBlank()) Text(state.fileName, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = chooseFile, modifier = Modifier.weight(1f)) {
@@ -136,7 +247,7 @@ internal fun UrlGameScreen(
             }
         } else {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { scanContent() }, enabled = !state.busy) { Text("Scan again") }
+                Button(onClick = { scanContent() }, enabled = !state.busy) { Text(if (awaitingScan) "Scan" else "Scan again") }
                 if (state.busy) OutlinedButton(onClick = scanner::cancel) { Text("Stop") }
             }
         }
@@ -145,16 +256,26 @@ internal fun UrlGameScreen(
         state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item {
-                Text(if (localFile) "Choose text, PGN, PDF, Word (.docx), RTF, OpenDocument, EPUB, Excel/PowerPoint, ZIP or an image (up to 16 MB). Review image positions before starting. See Help for document limits."
-                    else "Scans FEN, PGN, Lichess links and 2D board images. Image positions must be checked before starting.",
-                    style = MaterialTheme.typography.bodySmall)
+                Text(when {
+                    camera -> "Take a photo of a 2D chess diagram in a book or on a screen. Hold the phone straight above it so the whole board fills most of the photo. " +
+                        "The photo is recognized on your device; review the position before starting. Angled photos of physical boards are not supported."
+                    localFile -> "Choose text, PGN, PDF, Word (.docx), RTF, OpenDocument, EPUB, Excel/PowerPoint, ZIP or an image (up to 16 MB). Review image positions before starting. See Help for document limits."
+                    awaitingScan -> "Another app shared ${sharedSummary(sharedInput!!)} with Eval. Nothing is read or downloaded until you tap Scan. " +
+                        "Links to chess sites and .pgn files are then followed; other links are listed for you to choose."
+                    else -> "Scans FEN, PGN, Lichess links and 2D board images. Image positions must be checked before starting."
+                }, style = MaterialTheme.typography.bodySmall)
+                if (awaitingScan) (sharedInput!!.texts + sharedInput.html).firstOrNull()?.let {
+                    Text(it.take(300), maxLines = 4, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
+                }
             }
             if (state.hasPage) {
                 item {
                     // Keep rendered pages attached for CSS/canvas board capture.
                     // Chess sites often size their board from the viewport height;
                     // a thumbnail-height viewport can collapse their board to zero.
-                    AndroidView(factory = { scanner.pageView }, modifier = Modifier.fillMaxWidth().height(520.dp).clipToBounds())
+                    // A retained page view may still sit in the previous Activity's layout.
+                    AndroidView(factory = { scanner.pageView.also { (it.parent as? ViewGroup)?.removeView(it) } },
+                        modifier = Modifier.fillMaxWidth().height(520.dp).clipToBounds())
                     TextButton(onClick = scanner::rescan, enabled = !state.busy) { Text("Scan page again") }
                     Text("Scroll the page to reveal more boards, then scan again.", style = MaterialTheme.typography.bodySmall)
                 }
@@ -176,7 +297,29 @@ internal fun UrlGameScreen(
                     }
                 }
             }
+            if (state.links.isNotEmpty()) {
+                item {
+                    Text("Other links", fontWeight = FontWeight.Bold)
+                    Text("Only chess sites and .pgn files are opened automatically. Scan a link to look for positions and games there.",
+                        style = MaterialTheme.typography.bodySmall)
+                }
+                items(state.links.distinct(), key = { it }) { link ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(link, Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+                        TextButton(onClick = { scanner.scanLink(link) }, enabled = !state.busy) { Text("Scan link") }
+                    }
+                }
+            }
             state.warnings.forEach { warning -> item { Text(warning, style = MaterialTheme.typography.bodySmall) } }
         }
     }
+}
+
+private fun sharedSummary(input: SharedChessInput): String {
+    val texts = input.texts.size + input.html.size
+    val files = input.streams.size
+    return listOfNotNull(
+        if (texts > 0) "$texts ${if (texts == 1) "text" else "texts"}" else null,
+        if (files > 0) "$files ${if (files == 1) "file" else "files"}" else null
+    ).joinToString(" and ").ifEmpty { "content" }
 }

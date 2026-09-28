@@ -1,7 +1,6 @@
 package com.eval.ui
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
@@ -10,6 +9,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
@@ -21,6 +21,11 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import com.eval.chess.*
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.drag
 
 // Default board colors (used as fallback)
 val BoardLightDefault = Color(0xFFF0D9B5)
@@ -174,48 +179,26 @@ fun ChessBoardView(
                             )
                         }
                         .pointerInput(board, board.getFen(), flipped) {
-                            var gestureStart: Offset? = null
-                            fun clearDrag() {
-                                gestureStart = null
-                                dragFromSquare = null
-                                dragPosition = null
-                                legalMoves = emptySet()
-                            }
-                            detectDragGestures(
+                            // Swipe navigation claims only horizontal movement, so a vertical swipe
+                            // that starts on the board still scrolls the page.
+                            var swipeStart: Offset? = null
+                            var swipeEnd: Offset? = null
+                            detectHorizontalDragGestures(
                                 onDragStart = { offset ->
-                                    clearDrag()
-                                    selectedSquare = null
-                                    gestureStart = offset
-                                    dragPosition = offset
-                                    squareSize = size.width / 8f
-                                    val square = positionToSquare(offset.x, offset.y, squareSize)
-                                    if (square != null) {
-                                        val piece = board.getPiece(square)
-                                        // Piece drags take priority, including cancelled/illegal drops.
-                                        if (currentOnMove != null && piece != null && piece.color == board.getTurn()) {
-                                            dragFromSquare = square
-                                            dragPosition = offset
-                                            legalMoves = board.getLegalMoves(square).toSet()
-                                        }
-                                    }
+                                    swipeStart = offset
+                                    swipeEnd = offset
                                 },
-                                onDrag = { change, _ ->
+                                onHorizontalDrag = { change, _ ->
                                     change.consume()
-                                    dragPosition = change.position
+                                    swipeEnd = change.position
                                 },
                                 onDragEnd = {
-                                    val from = dragFromSquare
-                                    val pos = dragPosition
-                                    val start = gestureStart
-                                    val targets = legalMoves
-                                    clearDrag()
-                                    if (from != null && pos != null && squareSize > 0) {
-                                        val to = positionToSquare(pos.x, pos.y, squareSize)
-                                        if (to != null && targets.contains(to)) {
-                                            currentOnMove?.invoke(from, to)
-                                        }
-                                    } else if (start != null && pos != null) {
-                                        val delta = pos - start
+                                    val start = swipeStart
+                                    val end = swipeEnd
+                                    swipeStart = null
+                                    swipeEnd = null
+                                    if (start != null && end != null) {
+                                        val delta = end - start
                                         val minimumDistance = maxOf(48.dp.toPx(), size.width * 0.15f)
                                         if (kotlin.math.abs(delta.x) >= minimumDistance &&
                                             kotlin.math.abs(delta.x) > kotlin.math.abs(delta.y) * 1.5f) {
@@ -225,9 +208,45 @@ fun ChessBoardView(
                                     }
                                 },
                                 onDragCancel = {
-                                    clearDrag()
+                                    swipeStart = null
+                                    swipeEnd = null
                                 }
                             )
+                        }
+                        .pointerInput(board, board.getFen(), flipped) {
+                            // Piece drags only start on a piece of the side to move. Being later in
+                            // the chain, this handler sees events before the swipe handler.
+                            awaitEachGesture {
+                                val down = awaitFirstDown(requireUnconsumed = false)
+                                squareSize = size.width / 8f
+                                val square = positionToSquare(down.position.x, down.position.y, squareSize)
+                                    ?: return@awaitEachGesture
+                                val piece = board.getPiece(square)
+                                if (currentOnMove == null || piece == null || piece.color != board.getTurn()) return@awaitEachGesture
+                                val start = awaitTouchSlopOrCancellation(down.id) { change, _ -> change.consume() }
+                                    ?: return@awaitEachGesture
+                                selectedSquare = null
+                                dragFromSquare = square
+                                dragPosition = start.position
+                                legalMoves = board.getLegalMoves(square).toSet()
+                                val completed = drag(start.id) { change ->
+                                    change.consume()
+                                    dragPosition = change.position
+                                }
+                                val from = dragFromSquare
+                                val pos = dragPosition
+                                val targets = legalMoves
+                                dragFromSquare = null
+                                dragPosition = null
+                                legalMoves = emptySet()
+                                // Cancelled and illegal drops leave the position unchanged.
+                                if (completed && from != null && pos != null && squareSize > 0) {
+                                    val to = positionToSquare(pos.x, pos.y, squareSize)
+                                    if (to != null && targets.contains(to)) {
+                                        currentOnMove?.invoke(from, to)
+                                    }
+                                }
+                            }
                         }
                 } else Modifier
             )
@@ -280,7 +299,9 @@ fun ChessBoardView(
         drawCoordinates(
             squareSize = squareSize,
             flipped = flipped,
-            showCoordinates = showCoordinates
+            showCoordinates = showCoordinates,
+            whiteSquareColor = whiteSquareColor,
+            blackSquareColor = blackSquareColor
         )
     }
 }
@@ -524,20 +545,9 @@ private fun DrawScope.drawArrows(
     if (showArrowNumbers || isMultiLinesMode) {
         val drawnNumberPositions = mutableSetOf<String>()
         drawContext.canvas.nativeCanvas.apply {
-            val textPaint = android.graphics.Paint().apply {
+            val textPaint = arrowTextPaint.apply { textSize = squareSize * 0.35f }
+            val outlinePaint = arrowOutlinePaint.apply {
                 textSize = squareSize * 0.35f
-                isAntiAlias = true
-                isFakeBoldText = true
-                textAlign = android.graphics.Paint.Align.CENTER
-                color = android.graphics.Color.WHITE
-            }
-            val outlinePaint = android.graphics.Paint().apply {
-                textSize = squareSize * 0.35f
-                isAntiAlias = true
-                isFakeBoldText = true
-                textAlign = android.graphics.Paint.Align.CENTER
-                color = android.graphics.Color.BLACK
-                style = android.graphics.Paint.Style.STROKE
                 strokeWidth = squareSize * 0.03f
             }
 
@@ -668,17 +678,22 @@ private fun DrawScope.drawDraggedPiece(
 private fun DrawScope.drawCoordinates(
     squareSize: Float,
     flipped: Boolean,
-    showCoordinates: Boolean
+    showCoordinates: Boolean,
+    whiteSquareColor: Color = Color.White,
+    blackSquareColor: Color = Color.Black
 ) {
     if (!showCoordinates) return
 
+    // Labels contrast with the square they are drawn on (display column/row, row 0 at the top),
+    // so they stay visible with dark custom board colours.
+    fun labelColor(displayFile: Int, displayRow: Int): Int {
+        val square = if ((displayFile + displayRow) % 2 == 0) whiteSquareColor else blackSquareColor
+        return if (square.luminance() > 0.4f) android.graphics.Color.BLACK else android.graphics.Color.WHITE
+    }
+
     val labelSize = squareSize * 0.22f
     drawContext.canvas.nativeCanvas.apply {
-        val paint = android.graphics.Paint().apply {
-            textSize = labelSize
-            isAntiAlias = true
-            isFakeBoldText = true
-        }
+        val paint = coordinatePaint.apply { textSize = labelSize }
 
         // File labels (a-h) at bottom of each column
         for (file in 0..7) {
@@ -687,8 +702,7 @@ private fun DrawScope.drawCoordinates(
             val x = file * squareSize + squareSize - labelSize * 0.7f
             val y = size.height - labelSize * 0.25f
 
-            // Use black color for coordinates
-            paint.color = android.graphics.Color.BLACK
+            paint.color = labelColor(file, 7)
 
             drawText(label, x, y, paint)
         }
@@ -700,10 +714,29 @@ private fun DrawScope.drawCoordinates(
             val x = labelSize * 0.25f
             val y = rank * squareSize + labelSize * 1.0f
 
-            // Use black color for coordinates
-            paint.color = android.graphics.Color.BLACK
+            paint.color = labelColor(0, rank)
 
             drawText(label, x, y, paint)
         }
     }
+}
+
+// Board drawing runs on the main thread, one frame at a time: reuse these instead of
+// allocating new Paint objects on every frame (and every drag frame).
+private val arrowTextPaint = android.graphics.Paint().apply {
+    isAntiAlias = true
+    isFakeBoldText = true
+    textAlign = android.graphics.Paint.Align.CENTER
+    color = android.graphics.Color.WHITE
+}
+private val arrowOutlinePaint = android.graphics.Paint().apply {
+    isAntiAlias = true
+    isFakeBoldText = true
+    textAlign = android.graphics.Paint.Align.CENTER
+    color = android.graphics.Color.BLACK
+    style = android.graphics.Paint.Style.STROKE
+}
+private val coordinatePaint = android.graphics.Paint().apply {
+    isAntiAlias = true
+    isFakeBoldText = true
 }

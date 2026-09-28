@@ -1,4 +1,5 @@
 import java.util.Calendar
+import java.util.Locale
 import java.util.Properties
 
 plugins {
@@ -8,10 +9,14 @@ plugins {
 
 // Generate version from timestamp: yy.DDD.minutes (year.dayOfYear.minutesInDay)
 val now = Calendar.getInstance()
-val versionFromTimestamp: String = String.format("%02d.%d.%d",
+val versionFromTimestamp: String = String.format(Locale.ROOT, "%02d.%d.%d",
     now.get(Calendar.YEAR) % 100,
     now.get(Calendar.DAY_OF_YEAR),
     now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE))
+// Same timestamp as a monotonically increasing code, so a newer build always has a higher
+// versionCode (Android refuses to install an older code over a newer one).
+val versionCodeFromTimestamp: Int = ((now.get(Calendar.YEAR) % 100) * 1000 + now.get(Calendar.DAY_OF_YEAR)) * 1440 +
+    now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
 
 // Load keystore properties from local.properties
 val keystoreProperties = Properties()
@@ -43,7 +48,7 @@ android {
         applicationId = "com.eval"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
+        versionCode = versionCodeFromTimestamp
         versionName = versionFromTimestamp
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -74,15 +79,19 @@ android {
         compose = true
         buildConfig = true
     }
+    testOptions {
+        // JVM tests exercise repository code that logs through android.util.Log.
+        unitTests.isReturnDefaultValues = true
+    }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.8"
     }
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
-        }
-        jniLibs {
-            useLegacyPackaging = true
+            // BouncyCastle (via pdfbox-android, only used to decrypt PDFs) ships ~8 MB of
+            // post-quantum parameter tables the app never uses.
+            excludes += "org/bouncycastle/pqc/**"
         }
     }
 }
@@ -94,7 +103,6 @@ dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.graphics)
-    implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
 
@@ -109,25 +117,20 @@ dependencies {
     implementation(libs.coroutines.core)
     implementation(libs.coroutines.android)
 
-    // Markdown rendering
-    implementation(libs.compose.markdown)
-
     // Navigation
     implementation(libs.navigation.compose)
 
     // PDF text extraction on all supported Android versions. Page images use Android's renderer.
     implementation(libs.pdfbox.android)
 
-    // Camera board scanning
-    implementation(libs.androidx.camera.core)
-    implementation(libs.androidx.camera.camera2)
-    implementation(libs.androidx.camera.lifecycle)
-    implementation(libs.androidx.camera.view)
+    // Retrofit's converter pulls Gson 2.8.5 (CVE-2022-25647); use a current release.
+    implementation(libs.gson)
 
-    testImplementation("junit:junit:4.13.2")
-    androidTestImplementation("androidx.test.ext:junit:1.1.5")
-    androidTestImplementation("androidx.test:core:1.5.0")
-    androidTestImplementation("androidx.test:runner:1.5.2")
+    testImplementation(libs.junit)
+    testImplementation(libs.okhttp.mockwebserver)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.core)
+    androidTestImplementation(libs.androidx.test.runner)
 
     debugImplementation(libs.androidx.ui.tooling)
 }
@@ -135,6 +138,9 @@ dependencies {
 val validateBundledPrompts by tasks.registering {
     val promptDirectories = listOf("assets/system_prompts", "assets/prompts")
     promptDirectories.forEach { inputs.dir(rootProject.file(it)) }
+    // A marker output lets Gradle skip the check while the prompts are unchanged.
+    val marker = layout.buildDirectory.file("validateBundledPrompts/ok")
+    outputs.file(marker)
     doLast {
         promptDirectories.forEach { directory ->
             val promptFiles = rootProject.fileTree(directory) { include("*.json") }
@@ -147,6 +153,7 @@ val validateBundledPrompts by tasks.registering {
                 }
             }
         }
+        marker.get().asFile.apply { parentFile.mkdirs(); writeText("ok") }
     }
 }
 tasks.named("preBuild").configure { dependsOn(validateBundledPrompts) }

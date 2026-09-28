@@ -14,9 +14,12 @@ import kotlinx.coroutines.cancel
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.Before
 
 @RunWith(AndroidJUnit4::class)
 class BoardExplorationRegressionTest {
+    @Before fun requireStockfish() = TestEnvironment.assumeStockfishInstalled()
+
     private class Harness {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val scope = CoroutineScope(Job().apply { cancel() } + Dispatchers.Main)

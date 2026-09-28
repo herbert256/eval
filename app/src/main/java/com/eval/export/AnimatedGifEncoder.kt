@@ -8,6 +8,11 @@ import java.io.OutputStream
  * Based on the Java implementation by Kevin Weiner.
  */
 class AnimatedGifEncoder {
+    private companion object {
+        const val PALETTE_CACHE_BITS = 15
+        const val PALETTE_CACHE_SIZE = 1 shl PALETTE_CACHE_BITS
+    }
+
     private var width: Int = 0
     private var height: Int = 0
     private var transparent: Int? = null
@@ -16,16 +21,22 @@ class AnimatedGifEncoder {
     private var delay: Int = 0 // frame delay in hundredths of a second
     private var started: Boolean = false
     private var out: OutputStream? = null
-    private var image: Bitmap? = null
-    private var pixels: ByteArray? = null
     private var indexedPixels: ByteArray? = null
     private var colorDepth: Int = 0
     private var colorTab: ByteArray? = null
     /** When true, the palette from the first frame is reused for every subsequent
      *  frame. For inputs where the palette changes little frame-to-frame (chess
      *  boards with a fixed piece/square colour set are a perfect fit) this skips
-     *  per-frame NeuQuant training and makes export ~5-10x faster. */
+     *  per-frame NeuQuant training, and later frames refer to the global colour
+     *  table instead of repeating it as a local one. */
     var reusePalette: Boolean = false
+    /** Whether the current frame carries its own local colour table. */
+    private var localPalette: Boolean = false
+    // Direct-mapped cache of exact RGB -> palette index for the reused palette.
+    // Chess frames hold only a few hundred distinct colours, so almost every
+    // pixel becomes a lookup instead of a 256-entry scan. A key of -1 is empty.
+    private val paletteCacheKeys = IntArray(PALETTE_CACHE_SIZE) { -1 }
+    private val paletteCacheValues = ByteArray(PALETTE_CACHE_SIZE)
     private var usedEntry = BooleanArray(256)
     private var palSize: Int = 7 // color table size (bits - 1)
     private var dispose: Int = -1 // disposal code (-1 = use default)
@@ -85,33 +96,51 @@ class AnimatedGifEncoder {
         if (im == null || !started) {
             return false
         }
-        var ok = true
-        try {
+        return try {
             if (!sizeSet) {
                 // use first frame's size
                 setSize(im.width, im.height)
             }
-            image = im
-            if (!getImagePixels()) return false // convert to correct format if necessary
-            if (!analyzePixels()) return false // build color table & map pixels
-            if (firstFrame) {
-                writeLSD() // logical screen descriptor
-                writePalette() // global color table
-                if (repeat >= 0) {
-                    writeNetscapeExt() // use NS app extension to indicate reps
-                }
-            }
-            writeGraphicCtrlExt() // write graphic control extension
-            writeImageDesc() // image descriptor
-            if (!firstFrame) {
-                writePalette() // local color table
-            }
-            writePixels() // encode and write pixel data
-            firstFrame = false
+            writeFrame(getImagePixels(im)) // convert to correct size if necessary
+            true
         } catch (e: Exception) {
-            ok = false
+            false
         }
-        return ok
+    }
+
+    /**
+     * Adds a frame from packed ARGB pixels (row-major, [w] x [h]). Frames must all
+     * have the first frame's size. This entry point needs no Bitmap, so JVM unit
+     * tests can exercise the encoder.
+     */
+    internal fun addFrame(argb: IntArray, w: Int, h: Int): Boolean {
+        if (!started) return false
+        return try {
+            if (!sizeSet) setSize(w, h)
+            require(w == width && h == height && argb.size == w * h) { "Frame size differs from the first frame" }
+            writeFrame(argb)
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun writeFrame(argb: IntArray) {
+        analyzePixels(argb) // build color table & map pixels
+        if (firstFrame) {
+            writeLSD() // logical screen descriptor
+            writePalette() // global color table
+            if (repeat >= 0) {
+                writeNetscapeExt() // use NS app extension to indicate reps
+            }
+        }
+        writeGraphicCtrlExt() // write graphic control extension
+        writeImageDesc() // image descriptor
+        if (localPalette) {
+            writePalette() // local color table
+        }
+        writePixels() // encode and write pixel data
+        firstFrame = false
     }
 
     /**
@@ -152,8 +181,6 @@ class AnimatedGifEncoder {
         // reset for subsequent use
         transIndex = 0
         out = null
-        image = null
-        pixels = null
         indexedPixels = null
         colorTab = null
         closeStream = false
@@ -198,91 +225,72 @@ class AnimatedGifEncoder {
     }
 
     /**
-     * Extracts image pixels into byte array "pixels"
-     * @return true if successful, false if image is null
+     * Extracts the frame's ARGB pixels at the logical screen size. A frame of a
+     * different size is scaled; the caller keeps ownership of [img], and only
+     * the temporary scaled copy is recycled here.
      */
-    private fun getImagePixels(): Boolean {
-        val img = image ?: return false
-        val w = img.width
-        val h = img.height
-        val scaledImg = if (w != width || h != height) {
-            // create new image with right size/format
-            val scaled = Bitmap.createScaledBitmap(img, width, height, true)
-            img.recycle()
-            image = scaled
-            scaled
+    private fun getImagePixels(img: Bitmap): IntArray {
+        val source = if (img.width != width || img.height != height) {
+            Bitmap.createScaledBitmap(img, width, height, true)
         } else {
             img
         }
-        val pixelsInt = IntArray(width * height)
-        scaledImg.getPixels(pixelsInt, 0, width, 0, 0, width, height)
-
-        // convert to RGB bytes
-        val pixelBytes = ByteArray(width * height * 3)
-        var idx = 0
-        for (pixel in pixelsInt) {
-            pixelBytes[idx++] = ((pixel shr 16) and 0xff).toByte() // R
-            pixelBytes[idx++] = ((pixel shr 8) and 0xff).toByte()  // G
-            pixelBytes[idx++] = (pixel and 0xff).toByte()          // B
+        try {
+            val pixelsInt = IntArray(width * height)
+            source.getPixels(pixelsInt, 0, width, 0, 0, width, height)
+            return pixelsInt
+        } finally {
+            if (source !== img) source.recycle()
         }
-        pixels = pixelBytes
-        return true
     }
 
     /**
-     * Analyzes image colors and creates color map.
-     * @return true if successful, false if pixels is null
+     * Analyzes image colors, creates the color map if needed and maps pixels to it.
      */
-    private fun analyzePixels(): Boolean {
-        val pix = pixels ?: return false
-        val len = pix.size
-        val nPix = len / 3
+    private fun analyzePixels(argb: IntArray) {
+        val nPix = argb.size
         val indexed = ByteArray(nPix)
 
         val existingTab = colorTab
         if (reusePalette && !firstFrame && existingTab != null) {
-            // Reuse the existing palette: map each pixel to the closest entry.
-            // 3-byte palette with 256 entries is small enough that a linear
-            // scan is still faster than running NeuQuant per frame.
-            var k = 0
+            // Reuse the global palette: map each pixel to its closest entry.
             for (i in 0 until nPix) {
-                val r = pix[k++].toInt() and 0xff
-                val g = pix[k++].toInt() and 0xff
-                val b = pix[k++].toInt() and 0xff
-                var best = 0
-                var bestDist = Int.MAX_VALUE
-                var j = 0
-                while (j < existingTab.size) {
-                    val dr = r - (existingTab[j].toInt() and 0xff)
-                    val dg = g - (existingTab[j + 1].toInt() and 0xff)
-                    val db = b - (existingTab[j + 2].toInt() and 0xff)
-                    val d = dr * dr + dg * dg + db * db
-                    if (d < bestDist) {
-                        bestDist = d
-                        best = j / 3
-                    }
-                    j += 3
-                }
-                usedEntry[best] = true
-                indexed[i] = best.toByte()
-            }
-        } else {
-            // First frame, or caller wants per-frame palettes: run NeuQuant.
-            val nq = NeuQuant(pix, len, sample)
-            colorTab = nq.process()
-            var k = 0
-            for (i in 0 until nPix) {
-                val index = nq.map(
-                    pix[k++].toInt() and 0xff,
-                    pix[k++].toInt() and 0xff,
-                    pix[k++].toInt() and 0xff
-                )
+                val index = closestCached(argb[i] and 0xffffff, existingTab)
                 usedEntry[index] = true
                 indexed[i] = index.toByte()
             }
+            localPalette = false
+        } else {
+            // First frame, or caller wants per-frame palettes: run NeuQuant.
+            val pix = ByteArray(nPix * 3)
+            var k = 0
+            for (pixel in argb) {
+                pix[k++] = ((pixel shr 16) and 0xff).toByte() // R
+                pix[k++] = ((pixel shr 8) and 0xff).toByte()  // G
+                pix[k++] = (pixel and 0xff).toByte()          // B
+            }
+            val nq = NeuQuant(pix, pix.size, sample)
+            val tab = nq.process()
+            colorTab = tab
+            paletteCacheKeys.fill(-1)
+            for (i in 0 until nPix) {
+                // A reused palette maps every frame with the same closest-colour
+                // rule, so unchanged squares keep their index from frame to frame.
+                val index = if (reusePalette) {
+                    closestCached(argb[i] and 0xffffff, tab)
+                } else {
+                    nq.map(
+                        pix[3 * i].toInt() and 0xff,
+                        pix[3 * i + 1].toInt() and 0xff,
+                        pix[3 * i + 2].toInt() and 0xff
+                    )
+                }
+                usedEntry[index] = true
+                indexed[i] = index.toByte()
+            }
+            localPalette = !firstFrame
         }
         indexedPixels = indexed
-        pixels = null
         colorDepth = 8
         palSize = 7
 
@@ -291,7 +299,32 @@ class AnimatedGifEncoder {
         if (trans != null) {
             transIndex = findClosest(trans)
         }
-        return true
+    }
+
+    /** Palette index closest to [rgb] (0xRRGGBB), memoised per exact colour. */
+    private fun closestCached(rgb: Int, tab: ByteArray): Int {
+        val slot = (rgb * -0x61c88647) ushr (32 - PALETTE_CACHE_BITS) // Fibonacci hash
+        if (paletteCacheKeys[slot] == rgb) return paletteCacheValues[slot].toInt() and 0xff
+        val r = (rgb shr 16) and 0xff
+        val g = (rgb shr 8) and 0xff
+        val b = rgb and 0xff
+        var best = 0
+        var bestDist = Int.MAX_VALUE
+        var j = 0
+        while (j < tab.size) {
+            val dr = r - (tab[j].toInt() and 0xff)
+            val dg = g - (tab[j + 1].toInt() and 0xff)
+            val db = b - (tab[j + 2].toInt() and 0xff)
+            val d = dr * dr + dg * dg + db * db
+            if (d < bestDist) {
+                bestDist = d
+                best = j / 3
+            }
+            j += 3
+        }
+        paletteCacheKeys[slot] = rgb
+        paletteCacheValues[slot] = best.toByte()
+        return best
     }
 
     /**
@@ -365,8 +398,8 @@ class AnimatedGifEncoder {
         writeShort(width) // image size
         writeShort(height)
         // packed fields
-        if (firstFrame) {
-            // no LCT - GCT is used for first (or only) frame
+        if (!localPalette) {
+            // no LCT - GCT is used for the first frame and a reused palette
             out?.write(0)
         } else {
             // specify normal LCT

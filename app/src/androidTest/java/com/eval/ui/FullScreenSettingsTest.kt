@@ -12,9 +12,12 @@ import com.eval.MainActivity
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.Before
 
 @RunWith(AndroidJUnit4::class)
 class FullScreenSettingsTest {
+    @Before fun requireStockfish() = TestEnvironment.assumeStockfishInstalled()
+
     private val context = ApplicationProvider.getApplicationContext<Context>()
 
     @Test fun older_settings_default_to_windowed_and_full_screen_survives_export_import() {
