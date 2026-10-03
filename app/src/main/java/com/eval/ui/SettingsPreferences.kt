@@ -255,6 +255,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         return InterfaceVisibilitySettings(
             previewStage = PreviewStageVisibility(
                 showScoreBarsGraph = prefs.getBoolean(KEY_PREVIEW_VIS_SCOREBARSGRAPH, false),
+                showScoreCombiGraph = prefs.getBoolean(KEY_PREVIEW_VIS_SCORECOMBIGRAPH, false),
                 showResultBar = prefs.getBoolean(KEY_PREVIEW_VIS_RESULTBAR, false),
                 showBoard = prefs.getBoolean(KEY_PREVIEW_VIS_BOARD, false),
                 showMoveList = prefs.getBoolean(KEY_PREVIEW_VIS_MOVELIST, false),
@@ -263,6 +264,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             analyseStage = AnalyseStageVisibility(
                 showScoreLineGraph = prefs.getBoolean(KEY_ANALYSE_VIS_SCORELINEGRAPH, true),
                 showScoreBarsGraph = prefs.getBoolean(KEY_ANALYSE_VIS_SCOREBARSGRAPH, true),
+                showScoreCombiGraph = prefs.getBoolean(KEY_ANALYSE_VIS_SCORECOMBIGRAPH, false),
                 showBoard = prefs.getBoolean(KEY_ANALYSE_VIS_BOARD, true),
                 showStockfishAnalyse = prefs.getBoolean(KEY_ANALYSE_VIS_STOCKFISHANALYSE, true),
                 showResultBar = prefs.getBoolean(KEY_ANALYSE_VIS_RESULTBAR, false),
@@ -272,8 +274,9 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             ),
             manualStage = ManualStageVisibility(
                 showResultBar = prefs.getBoolean(KEY_MANUAL_VIS_RESULTBAR, true),
-                showScoreLineGraph = prefs.getBoolean(KEY_MANUAL_VIS_SCORELINEGRAPH, true),
-                showScoreBarsGraph = prefs.getBoolean(KEY_MANUAL_VIS_SCOREBARSGRAPH, true),
+                showScoreLineGraph = prefs.getBoolean(KEY_MANUAL_VIS_SCORELINEGRAPH, false),
+                showScoreBarsGraph = prefs.getBoolean(KEY_MANUAL_VIS_SCOREBARSGRAPH, false),
+                showScoreCombiGraph = prefs.getBoolean(KEY_MANUAL_VIS_SCORECOMBIGRAPH, true),
                 showTimeGraph = prefs.getBoolean(KEY_MANUAL_VIS_TIMEGRAPH, false),
                 showOpeningExplorer = prefs.getBoolean(KEY_MANUAL_VIS_OPENINGEXPLORER, false),
                 showOpeningName = prefs.getBoolean(KEY_MANUAL_VIS_OPENINGNAME, false),
@@ -289,6 +292,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         prefs.edit()
             // Preview stage
             .putBoolean(KEY_PREVIEW_VIS_SCOREBARSGRAPH, settings.previewStage.showScoreBarsGraph)
+            .putBoolean(KEY_PREVIEW_VIS_SCORECOMBIGRAPH, settings.previewStage.showScoreCombiGraph)
             .putBoolean(KEY_PREVIEW_VIS_RESULTBAR, settings.previewStage.showResultBar)
             .putBoolean(KEY_PREVIEW_VIS_BOARD, settings.previewStage.showBoard)
             .putBoolean(KEY_PREVIEW_VIS_MOVELIST, settings.previewStage.showMoveList)
@@ -296,6 +300,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             // Analyse stage
             .putBoolean(KEY_ANALYSE_VIS_SCORELINEGRAPH, settings.analyseStage.showScoreLineGraph)
             .putBoolean(KEY_ANALYSE_VIS_SCOREBARSGRAPH, settings.analyseStage.showScoreBarsGraph)
+            .putBoolean(KEY_ANALYSE_VIS_SCORECOMBIGRAPH, settings.analyseStage.showScoreCombiGraph)
             .putBoolean(KEY_ANALYSE_VIS_BOARD, settings.analyseStage.showBoard)
             .putBoolean(KEY_ANALYSE_VIS_STOCKFISHANALYSE, settings.analyseStage.showStockfishAnalyse)
             .putBoolean(KEY_ANALYSE_VIS_RESULTBAR, settings.analyseStage.showResultBar)
@@ -306,6 +311,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             .putBoolean(KEY_MANUAL_VIS_RESULTBAR, settings.manualStage.showResultBar)
             .putBoolean(KEY_MANUAL_VIS_SCORELINEGRAPH, settings.manualStage.showScoreLineGraph)
             .putBoolean(KEY_MANUAL_VIS_SCOREBARSGRAPH, settings.manualStage.showScoreBarsGraph)
+            .putBoolean(KEY_MANUAL_VIS_SCORECOMBIGRAPH, settings.manualStage.showScoreCombiGraph)
             .putBoolean(KEY_MANUAL_VIS_TIMEGRAPH, settings.manualStage.showTimeGraph)
             .putBoolean(KEY_MANUAL_VIS_OPENINGEXPLORER, settings.manualStage.showOpeningExplorer)
             .putBoolean(KEY_MANUAL_VIS_OPENINGNAME, settings.manualStage.showOpeningName)
@@ -729,12 +735,14 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
     private fun putInterfaceVisibilitySettings(editor: SharedPreferences.Editor, settings: InterfaceVisibilitySettings) {
         editor
             .putBoolean(KEY_PREVIEW_VIS_SCOREBARSGRAPH, settings.previewStage.showScoreBarsGraph)
+            .putBoolean(KEY_PREVIEW_VIS_SCORECOMBIGRAPH, settings.previewStage.showScoreCombiGraph)
             .putBoolean(KEY_PREVIEW_VIS_RESULTBAR, settings.previewStage.showResultBar)
             .putBoolean(KEY_PREVIEW_VIS_BOARD, settings.previewStage.showBoard)
             .putBoolean(KEY_PREVIEW_VIS_MOVELIST, settings.previewStage.showMoveList)
             .putBoolean(KEY_PREVIEW_VIS_PGN, settings.previewStage.showPgn)
             .putBoolean(KEY_ANALYSE_VIS_SCORELINEGRAPH, settings.analyseStage.showScoreLineGraph)
             .putBoolean(KEY_ANALYSE_VIS_SCOREBARSGRAPH, settings.analyseStage.showScoreBarsGraph)
+            .putBoolean(KEY_ANALYSE_VIS_SCORECOMBIGRAPH, settings.analyseStage.showScoreCombiGraph)
             .putBoolean(KEY_ANALYSE_VIS_BOARD, settings.analyseStage.showBoard)
             .putBoolean(KEY_ANALYSE_VIS_STOCKFISHANALYSE, settings.analyseStage.showStockfishAnalyse)
             .putBoolean(KEY_ANALYSE_VIS_RESULTBAR, settings.analyseStage.showResultBar)
@@ -744,6 +752,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
             .putBoolean(KEY_MANUAL_VIS_RESULTBAR, settings.manualStage.showResultBar)
             .putBoolean(KEY_MANUAL_VIS_SCORELINEGRAPH, settings.manualStage.showScoreLineGraph)
             .putBoolean(KEY_MANUAL_VIS_SCOREBARSGRAPH, settings.manualStage.showScoreBarsGraph)
+            .putBoolean(KEY_MANUAL_VIS_SCORECOMBIGRAPH, settings.manualStage.showScoreCombiGraph)
             .putBoolean(KEY_MANUAL_VIS_TIMEGRAPH, settings.manualStage.showTimeGraph)
             .putBoolean(KEY_MANUAL_VIS_OPENINGEXPLORER, settings.manualStage.showOpeningExplorer)
             .putBoolean(KEY_MANUAL_VIS_OPENINGNAME, settings.manualStage.showOpeningName)
@@ -846,6 +855,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
 
         // Interface visibility settings - Preview stage
         private const val KEY_PREVIEW_VIS_SCOREBARSGRAPH = "preview_vis_scorebarsgraph"
+        private const val KEY_PREVIEW_VIS_SCORECOMBIGRAPH = "preview_vis_scorecombigraph"
         private const val KEY_PREVIEW_VIS_RESULTBAR = "preview_vis_resultbar"
         private const val KEY_PREVIEW_VIS_BOARD = "preview_vis_board"
         private const val KEY_PREVIEW_VIS_MOVELIST = "preview_vis_movelist"
@@ -854,6 +864,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         // Interface visibility settings - Analyse stage
         private const val KEY_ANALYSE_VIS_SCORELINEGRAPH = "analyse_vis_scorelinegraph"
         private const val KEY_ANALYSE_VIS_SCOREBARSGRAPH = "analyse_vis_scorebarsgraph"
+        private const val KEY_ANALYSE_VIS_SCORECOMBIGRAPH = "analyse_vis_scorecombigraph"
         private const val KEY_ANALYSE_VIS_BOARD = "analyse_vis_board"
         private const val KEY_ANALYSE_VIS_STOCKFISHANALYSE = "analyse_vis_stockfishanalyse"
         private const val KEY_ANALYSE_VIS_RESULTBAR = "analyse_vis_resultbar"
@@ -865,6 +876,7 @@ class SettingsPreferences(private val prefs: SharedPreferences) {
         private const val KEY_MANUAL_VIS_RESULTBAR = "manual_vis_resultbar"
         private const val KEY_MANUAL_VIS_SCORELINEGRAPH = "manual_vis_scorelinegraph"
         private const val KEY_MANUAL_VIS_SCOREBARSGRAPH = "manual_vis_scorebarsgraph"
+        private const val KEY_MANUAL_VIS_SCORECOMBIGRAPH = "manual_vis_scorecombigraph"
         private const val KEY_MANUAL_VIS_TIMEGRAPH = "manual_vis_timegraph"
         private const val KEY_MANUAL_VIS_OPENINGEXPLORER = "manual_vis_openingexplorer"
         private const val KEY_MANUAL_VIS_OPENINGNAME = "manual_vis_openingname"

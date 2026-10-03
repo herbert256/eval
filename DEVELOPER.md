@@ -6,21 +6,23 @@ Technical documentation for developers working on the Eval Android app.
 
 | Requirement | Version |
 |-------------|---------|
-| Java | 17 (OpenJDK) |
-| Android SDK | compileSdk 34, targetSdk 34, minSdk 26 |
-| Kotlin | 1.9.22 |
-| AGP | 8.2.2 |
-| Compose Compiler | 1.5.8 |
-| Compose BOM | 2024.02.00 |
+| Java | 25 (OpenJDK), also the bytecode target |
+| Android SDK | compileSdk 37 (minor 2), build tools 37.0.0, targetSdk 37, minSdk 26 |
+| Gradle | 9.8.0 (checksummed wrapper) |
+| AGP | 9.4.1 (built-in Kotlin support) |
+| Kotlin | 2.4.20, with the Compose compiler plugin |
+| Compose BOM | 2026.09.00 |
+
+These match the AI app (`com.ai`); upgrade both together (`gradle/libs.versions.toml`). Only minSdk differs: Eval still supports Android 8.0.
 
 ### Build Commands
 
 ```bash
 # Debug build
-JAVA_HOME=/opt/homebrew/opt/openjdk@17 ./gradlew assembleDebug
+JAVA_HOME=/opt/homebrew/opt/openjdk@25 ./gradlew assembleDebug
 
 # Release build (needs keystore in local.properties)
-JAVA_HOME=/opt/homebrew/opt/openjdk@17 ./gradlew assembleRelease
+JAVA_HOME=/opt/homebrew/opt/openjdk@25 ./gradlew assembleRelease
 
 # Clean
 ./gradlew clean
@@ -49,30 +51,30 @@ KEY_PASSWORD=...
 ### Core
 | Library | Version | Purpose |
 |---------|---------|---------|
-| `androidx.core:core-ktx` | 1.12.0 | Kotlin extensions for Android |
-| `androidx.lifecycle:lifecycle-runtime-ktx` | 2.7.0 | Lifecycle-aware coroutines |
-| `androidx.activity:activity-compose` | 1.8.2 | Compose Activity integration |
-| `androidx.lifecycle:lifecycle-viewmodel-compose` | 2.7.0 | ViewModel for Compose |
-| `androidx.navigation:navigation-compose` | 2.7.7 | Navigation framework |
+| `androidx.core:core-ktx` | 1.19.1 | Kotlin extensions for Android |
+| `androidx.lifecycle:lifecycle-runtime-ktx` | 2.11.0 | Lifecycle-aware coroutines |
+| `androidx.activity:activity-compose` | 1.13.0 | Compose Activity integration |
+| `androidx.lifecycle:lifecycle-viewmodel-compose` | 2.11.0 | ViewModel for Compose |
+| `androidx.navigation:navigation-compose` | 2.10.2 | Navigation framework |
 
-### Compose (BOM 2024.02.00)
+### Compose (BOM 2026.09.00)
 `ui`, `ui-graphics`, `material3` (`ui-tooling` in debug builds only)
 
 ### Networking
 | Library | Version | Purpose |
 |---------|---------|---------|
-| `com.squareup.retrofit2:retrofit` | 2.9.0 | HTTP client |
-| `com.squareup.retrofit2:converter-gson` | 2.9.0 | JSON serialization |
-| `com.squareup.retrofit2:converter-scalars` | 2.9.0 | Plain text responses (NDJSON) |
-| `com.squareup.okhttp3:okhttp` | 4.12.0 | HTTP transport |
-| `com.squareup.okhttp3:logging-interceptor` | 4.12.0 | Header logging in debug builds only (never bodies: that would buffer the live game stream) |
-| `com.google.code.gson:gson` | 2.11.0 | JSON (pinned; Retrofit's converter would pull 2.8.5) |
+| `com.squareup.retrofit2:retrofit` | 3.0.0 | HTTP client |
+| `com.squareup.retrofit2:converter-gson` | 3.0.0 | JSON serialization |
+| `com.squareup.retrofit2:converter-scalars` | 3.0.0 | Plain text responses (NDJSON) |
+| `com.squareup.okhttp3:okhttp` | 5.5.0 | HTTP transport |
+| `com.squareup.okhttp3:logging-interceptor` | 5.5.0 | Header logging in debug builds only (never bodies: that would buffer the live game stream) |
+| `com.google.code.gson:gson` | 2.14.0 | JSON (declared directly; used outside Retrofit too) |
 
 ### Other
 | Library | Version | Purpose |
 |---------|---------|---------|
-| `kotlinx-coroutines-core` | 1.7.3 | Coroutines |
-| `kotlinx-coroutines-android` | 1.7.3 | Android coroutine dispatchers |
+| `kotlinx-coroutines-core` | 1.11.0 | Coroutines |
+| `kotlinx-coroutines-android` | 1.11.0 | Android coroutine dispatchers |
 | `com.tom-roush:pdfbox-android` | 2.0.27.0 | Text extraction from PDF imports (BouncyCastle post-quantum tables are excluded from the APK) |
 
 ## Architecture
@@ -157,7 +159,7 @@ Key preference groups:
 - Stockfish per-stage (3 groups of engine parameters)
 - Board layout (colors, toggles, eval bar)
 - Graph (5 colors, 2 ranges, 2 scales)
-- Interface visibility (23 toggles across 3 stages)
+- Interface visibility (26 toggles across 3 stages)
 - General (sounds, full screen, username)
 - AI setup (system prompts, prompts, instructions, last choices)
 - FEN history

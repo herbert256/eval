@@ -16,9 +16,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.eval.chess.ChessBoard
@@ -42,6 +50,307 @@ private const val BLACK_KNIGHT = "♞"
 private const val BLACK_PAWN = "♟"
 
 /**
+ * Horizontal centre of a move's slot. All move graphs use it, so their current-move lines stay
+ * vertically aligned with each other and with the bars of the score difference graph.
+ */
+internal fun moveSlotCenterX(moveIndex: Int, totalMoves: Int, width: Float): Float =
+    (moveIndex + 0.5f) * width / totalMoves
+
+/** The move whose slot contains [x]; the inverse of [moveSlotCenterX]. */
+internal fun moveIndexAtX(x: Float, totalMoves: Int, width: Float): Int =
+    if (width <= 0f) 0 else (x / width * totalMoves).toInt().coerceIn(0, totalMoves - 1)
+
+/**
+ * Background and move selection shared by the move graphs: tap a move in the Analyse and Manual
+ * stages, drag across the moves in the Manual stage.
+ */
+private fun Modifier.moveGraph(
+    graphSettings: GraphSettings,
+    totalMoves: Int,
+    currentStage: AnalysisStage,
+    onMoveSelected: (Int) -> Unit
+): Modifier = this
+    .background(Color(graphSettings.backgroundColor.toInt()), RoundedCornerShape(8.dp))
+    .padding(8.dp)
+    .pointerInput(totalMoves, currentStage) {
+        if (totalMoves > 0 && currentStage == AnalysisStage.MANUAL) {
+            // Only act when the selected move changes; every pointer event would restart the engine.
+            var lastIndex = -1
+            detectHorizontalDragGestures(onDragStart = { lastIndex = -1 }) { change, _ ->
+                change.consume()
+                val moveIndex = moveIndexAtX(change.position.x, totalMoves, size.width.toFloat())
+                if (moveIndex != lastIndex) {
+                    lastIndex = moveIndex
+                    onMoveSelected(moveIndex)
+                }
+            }
+        }
+    }
+    .pointerInput(totalMoves, currentStage) {
+        // Taps select a move in the Analyse and Manual stages (Preview is not interruptible)
+        if (totalMoves > 0 && currentStage != AnalysisStage.PREVIEW) {
+            detectTapGestures(
+                onTap = { offset -> onMoveSelected(moveIndexAtX(offset.x, totalMoves, size.width.toFloat())) }
+            )
+        }
+    }
+
+/** The x-axis of the score graphs. */
+private fun DrawScope.drawScoreAxis() {
+    val centerY = size.height / 2
+    drawLine(AppColors.DimGray, Offset(0f, centerY), Offset(size.width, centerY), strokeWidth = 1f)
+}
+
+/** The current move's vertical line, shown in the Manual stage only. */
+private fun DrawScope.drawCurrentMoveLine(
+    currentMoveIndex: Int,
+    totalMoves: Int,
+    currentStage: AnalysisStage,
+    color: Color,
+    strokeWidth: Float
+) {
+    if (currentStage != AnalysisStage.MANUAL || currentMoveIndex !in 0 until totalMoves) return
+    val x = moveSlotCenterX(currentMoveIndex, totalMoves, size.width)
+    drawLine(color, Offset(x, 0f), Offset(x, size.height), strokeWidth = strokeWidth)
+}
+
+/** A move's point on the score line; [score] is unclamped, from White's perspective. */
+private class ScorePoint(val x: Float, val y: Float, val score: Float)
+
+private fun DrawScope.scorePoints(scores: Map<Int, MoveScore>, totalMoves: Int, maxScore: Float): List<ScorePoint> {
+    val centerY = size.height / 2
+    return (0 until totalMoves).mapNotNull { moveIndex ->
+        scores[moveIndex]?.let { score ->
+            // Raw Stockfish score; a mate counts as the edge of the range
+            val rawScore = score.graphValue(maxScore)
+            val y = centerY - (rawScore.coerceIn(-maxScore, maxScore) / maxScore) * (centerY - 4)
+            ScorePoint(moveSlotCenterX(moveIndex, totalMoves, size.width), y, rawScore)
+        }
+    }
+}
+
+/**
+ * Fills between the score line and the x-axis ([positive] above, [negative] below) and draws the
+ * line on top. [path] is a scratch Path reused for every segment, so a long game doesn't allocate
+ * hundreds of Paths per frame.
+ */
+private fun DrawScope.drawScoreArea(points: List<ScorePoint>, positive: Color, negative: Color, path: Path) {
+    val centerY = size.height / 2
+    // Slight overlap (1px) with the neighbouring segments prevents anti-aliasing gaps
+    val overlap = 1f
+
+    for (i in 0 until points.size - 1) {
+        val p1 = points[i]
+        val p2 = points[i + 1]
+        val leftX = if (i == 0) p1.x else p1.x - overlap
+        val rightX = if (i == points.size - 2) p2.x else p2.x + overlap
+        val color1 = if (p1.score >= 0) positive else negative
+        val color2 = if (p2.score >= 0) positive else negative
+
+        if ((p1.score >= 0) != (p2.score >= 0)) {
+            // The line crosses the x-axis: split the segment where it does
+            val t = kotlin.math.abs(p1.score) / (kotlin.math.abs(p1.score) + kotlin.math.abs(p2.score))
+            val crossX = p1.x + (p2.x - p1.x) * t
+
+            path.reset()
+            path.moveTo(leftX, p1.y)
+            path.lineTo(crossX, centerY)
+            path.lineTo(leftX, centerY)
+            path.close()
+            drawPath(path, color1)
+
+            path.reset()
+            path.moveTo(crossX, centerY)
+            path.lineTo(rightX, p2.y)
+            path.lineTo(rightX, centerY)
+            path.close()
+            drawPath(path, color2)
+
+            drawLine(color1, Offset(p1.x, p1.y), Offset(crossX, centerY), strokeWidth = 2f)
+            drawLine(color2, Offset(crossX, centerY), Offset(p2.x, p2.y), strokeWidth = 2f)
+        } else {
+            path.reset()
+            path.moveTo(leftX, p1.y)
+            path.lineTo(rightX, p2.y)
+            path.lineTo(rightX, centerY)
+            path.lineTo(leftX, centerY)
+            path.close()
+            drawPath(path, color1)
+
+            drawLine(color1, Offset(p1.x, p1.y), Offset(p2.x, p2.y), strokeWidth = 2f)
+        }
+    }
+}
+
+/**
+ * The score line graph's areas: the preview scores and, in the Manual stage, the analyse scores on
+ * top. In the other stages the analyse scores are a progress line instead ([drawAnalyseProgressLine]).
+ */
+private fun DrawScope.drawScoreLineAreas(
+    previewScores: Map<Int, MoveScore>,
+    analyseScores: Map<Int, MoveScore>,
+    totalMoves: Int,
+    currentStage: AnalysisStage,
+    maxScore: Float,
+    positive: Color,
+    negative: Color,
+    path: Path
+) {
+    drawScoreArea(scorePoints(previewScores, totalMoves, maxScore), positive, negative, path)
+    if (currentStage == AnalysisStage.MANUAL) {
+        drawScoreArea(scorePoints(analyseScores, totalMoves, maxScore), positive, negative, path)
+    }
+}
+
+/** Outside the Manual stage, the analyse scores so far as a line over the preview scores. */
+private fun DrawScope.drawAnalyseProgressLine(
+    analyseScores: Map<Int, MoveScore>,
+    totalMoves: Int,
+    currentStage: AnalysisStage,
+    maxScore: Float,
+    color: Color
+) {
+    if (currentStage == AnalysisStage.MANUAL) return
+    val points = scorePoints(analyseScores, totalMoves, maxScore)
+    for (i in 0 until points.size - 1) {
+        drawLine(color, Offset(points[i].x, points[i].y), Offset(points[i + 1].x, points[i + 1].y), strokeWidth = 7f)
+    }
+}
+
+/**
+ * Change of a move's score against the previous move of the SAME COLOR (2 plies back, not 1), from
+ * White's perspective, limited to [maxDiff]; null while either score is missing. This shows how much
+ * the position changed after the opponent's move and the reply.
+ */
+private fun scoreDifference(
+    moveIndex: Int,
+    previewScores: Map<Int, MoveScore>,
+    analyseScores: Map<Int, MoveScore>,
+    currentStage: AnalysisStage,
+    maxDiff: Float
+): Float? {
+    val currentScore: MoveScore?
+    val prevSameColorScore: MoveScore?
+
+    // Previous move of same color is 2 plies back
+    val prevSameColorIndex = moveIndex - 2
+
+    if (currentStage == AnalysisStage.ANALYSE) {
+        // During Analyse stage: use analyse scores if BOTH are available,
+        // otherwise fall back to preview scores
+        val hasAnalyseCurrent = analyseScores.containsKey(moveIndex)
+        val hasAnalysePrev = prevSameColorIndex < 0 || analyseScores.containsKey(prevSameColorIndex)
+
+        if (hasAnalyseCurrent && hasAnalysePrev) {
+            // Both analyse scores available - use them
+            currentScore = analyseScores[moveIndex]
+            prevSameColorScore = if (prevSameColorIndex >= 0) analyseScores[prevSameColorIndex] else null
+        } else {
+            // Fall back to preview scores
+            currentScore = previewScores[moveIndex]
+            prevSameColorScore = if (prevSameColorIndex >= 0) previewScores[prevSameColorIndex] else null
+        }
+    } else {
+        // Preview/Manual stage: prefer analyse scores, fall back to preview
+        currentScore = analyseScores[moveIndex] ?: previewScores[moveIndex]
+        prevSameColorScore = if (prevSameColorIndex >= 0) {
+            analyseScores[prevSameColorIndex] ?: previewScores[prevSameColorIndex]
+        } else null
+    }
+
+    if (currentScore == null || prevSameColorScore == null) return null
+
+    // Calculate difference based on mate handling rules
+    val prevIsMate = prevSameColorScore.isMate
+    val currIsMate = currentScore.isMate
+
+    // M value is the absolute value of mateIn (ignoring sign)
+    val prevMValue = kotlin.math.abs(prevSameColorScore.mateIn)
+    val currMValue = kotlin.math.abs(currentScore.mateIn)
+
+    // Check if winning (+M*) or losing (-M*) mate
+    val prevIsPositiveMate = prevSameColorScore.isPositiveMate
+    val prevIsNegativeMate = prevIsMate && !prevIsPositiveMate
+    val currIsPositiveMate = currentScore.isPositiveMate
+    val currIsNegativeMate = currIsMate && !currIsPositiveMate
+
+    val rawDiff: Float = when {
+        // Both +M* (winning mate for both)
+        prevIsPositiveMate && currIsPositiveMate -> when {
+            currMValue == prevMValue -> 0f
+            currMValue == prevMValue - 1 -> 0f
+            currMValue > prevMValue -> -(1 + (currMValue - prevMValue)).toFloat().coerceAtMost(maxDiff)
+            currMValue < prevMValue -> ((prevMValue - currMValue) + 1).toFloat().coerceAtMost(3f)
+            else -> 0f
+        }
+
+        // Both -M* (losing mate for both)
+        prevIsNegativeMate && currIsNegativeMate -> when {
+            currMValue == prevMValue -> 0f
+            currMValue == prevMValue - 1 -> 0f
+            currMValue > prevMValue -> (1 + (currMValue - prevMValue)).toFloat().coerceAtMost(maxDiff)
+            currMValue < prevMValue -> -((prevMValue - currMValue) + 1).toFloat().coerceAtLeast(-maxDiff)
+            else -> 0f
+        }
+
+        // +M* to -M* (lost winning mate, now losing)
+        prevIsPositiveMate && currIsNegativeMate -> -maxDiff
+
+        // -M* to +M* (escaped losing mate, now winning)
+        prevIsNegativeMate && currIsPositiveMate -> maxDiff
+
+        // Previous normal, current +M*
+        !prevIsMate && currIsPositiveMate -> maxDiff
+
+        // Previous normal, current -M*
+        !prevIsMate && currIsNegativeMate -> -maxDiff
+
+        // Previous +M*, current normal
+        prevIsPositiveMate && !currIsMate -> -maxDiff
+
+        // Previous -M*, current normal
+        prevIsNegativeMate && !currIsMate -> maxDiff
+
+        // Both normal scores
+        !prevIsMate && !currIsMate -> when {
+            currentScore.score == prevSameColorScore.score -> 0f
+            currentScore.score > prevSameColorScore.score ->
+                (currentScore.score - prevSameColorScore.score).coerceAtMost(maxDiff)
+            else ->
+                (currentScore.score - prevSameColorScore.score).coerceAtLeast(-maxDiff)
+        }
+
+        else -> 0f
+    }
+    return rawDiff.coerceIn(-maxDiff, maxDiff)
+}
+
+/** One bar per move with its [scoreDifference]: up in [positive], down in [negative]. */
+private fun DrawScope.drawScoreBars(
+    previewScores: Map<Int, MoveScore>,
+    analyseScores: Map<Int, MoveScore>,
+    totalMoves: Int,
+    currentStage: AnalysisStage,
+    maxDiff: Float,
+    positive: Color,
+    negative: Color
+) {
+    val centerY = size.height / 2
+    val barWidth = (size.width / totalMoves) * 0.8f
+    for (moveIndex in 0 until totalMoves) {
+        val diff = scoreDifference(moveIndex, previewScores, analyseScores, currentStage, maxDiff) ?: continue
+        val barHeight = kotlin.math.abs(diff / maxDiff) * (centerY - 4)
+        val barX = moveSlotCenterX(moveIndex, totalMoves, size.width) - barWidth / 2
+        drawRect(
+            color = if (diff >= 0) positive else negative,
+            // Up from the axis for a gain, down for a loss
+            topLeft = Offset(barX, if (diff >= 0) centerY - barHeight else centerY),
+            size = Size(barWidth, barHeight)
+        )
+    }
+}
+
+/**
  * Evaluation graph showing position scores over time.
  */
 @Composable
@@ -60,238 +369,16 @@ fun EvaluationGraph(
     // Always show scores from WHITE's perspective (positive = good for white)
     val greenColor = Color(graphSettings.plusScoreColor.toInt())
     val redColor = Color(graphSettings.negativeScoreColor.toInt())
-    val lineColor = AppColors.DimGray
-    val currentMoveColor = Color(graphSettings.verticalLineColor.toInt())
-    val analyseColor = Color(graphSettings.analyseLineColor.toInt())
+    val scratchPath = remember { Path() }
 
-    // Track the graph width for calculating move index from drag position
-    var graphWidth by remember { mutableStateOf(0f) }
-    val isManualStage = currentStage == AnalysisStage.MANUAL
-
-    // Scratch Path reused across draws so the tight filled-area loop doesn't
-    // allocate a fresh Path object for every segment (previously 2 Paths per
-    // pair, sometimes >100 allocations per frame on a long game).
-    val scratchPath = remember { androidx.compose.ui.graphics.Path() }
-
-    Canvas(
-        modifier = modifier
-            .background(Color(graphSettings.backgroundColor.toInt()), RoundedCornerShape(8.dp))
-            .padding(8.dp)
-            .pointerInput(totalMoves, currentStage) {
-                // Only allow horizontal drag navigation in manual stage
-                if (totalMoves > 0 && isManualStage) {
-                    // Only act when the selected move changes; every pointer event would restart the engine.
-                    var lastIndex = -1
-                    detectHorizontalDragGestures(onDragStart = { lastIndex = -1 }) { change, _ ->
-                        change.consume()
-                        val x = change.position.x.coerceIn(0f, graphWidth)
-                        val moveIndex = if (totalMoves > 1) {
-                            ((x / graphWidth) * (totalMoves - 1) + 0.5f).toInt().coerceIn(0, totalMoves - 1)
-                        } else {
-                            0
-                        }
-                        if (moveIndex != lastIndex) {
-                            lastIndex = moveIndex
-                            onMoveSelected(moveIndex)
-                        }
-                    }
-                }
-            }
-            .pointerInput(totalMoves, currentStage) {
-                // Allow taps in Analyse and Manual stages (not Preview)
-                if (totalMoves > 0 && currentStage != AnalysisStage.PREVIEW) {
-                    detectTapGestures(
-                        onTap = { offset ->
-                            val x = offset.x.coerceIn(0f, graphWidth)
-                            val moveIndex = if (totalMoves > 1) {
-                                ((x / graphWidth) * (totalMoves - 1) + 0.5f).toInt().coerceIn(0, totalMoves - 1)
-                            } else {
-                                0
-                            }
-                            onMoveSelected(moveIndex)
-                        }
-                    )
-                }
-            }
-    ) {
+    Canvas(modifier = modifier.moveGraph(graphSettings, totalMoves, currentStage, onMoveSelected)) {
         if (totalMoves == 0) return@Canvas
-
-        val width = size.width
-        val height = size.height
-        graphWidth = width
-        val centerY = height / 2
         val maxScore = graphSettings.lineGraphRange.toFloat() // Range from settings
 
-        // Draw center line (x-axis)
-        drawLine(
-            color = lineColor,
-            start = Offset(0f, centerY),
-            end = Offset(width, centerY),
-            strokeWidth = 1f
-        )
-
-        // Calculate point spacing
-        val pointSpacing = if (totalMoves > 1) width / (totalMoves - 1) else width / 2
-
-        // Build list of points with their scores
-        data class GraphPoint(val x: Float, val y: Float, val score: Float)
-        val points = mutableListOf<GraphPoint>()
-
-        for (moveIndex in 0 until totalMoves) {
-            val score = previewScores[moveIndex]
-            if (score != null) {
-                val x = if (totalMoves > 1) moveIndex * pointSpacing else width / 2
-                // Use raw Stockfish score, but for mate use +/- lineGraphRange
-                val rawScore = score.graphValue(maxScore)
-                val clampedScore = rawScore.coerceIn(-maxScore, maxScore)
-                val y = centerY - (clampedScore / maxScore) * (height / 2 - 4)
-                points.add(GraphPoint(x, y, rawScore))
-            }
-        }
-
-        // Draw filled areas between consecutive points
-        // Use slight overlap (1px) to prevent anti-aliasing gaps
-        val overlap = 1f
-
-        for (i in 0 until points.size - 1) {
-            val p1 = points[i]
-            val p2 = points[i + 1]
-
-            // Extend left edge back and right edge forward to overlap with neighbors
-            val leftX = if (i == 0) p1.x else p1.x - overlap
-            val rightX = if (i == points.size - 2) p2.x else p2.x + overlap
-
-            // Check if the line crosses the x-axis (scores have different signs)
-            val crossesAxis = (p1.score >= 0 && p2.score < 0) || (p1.score < 0 && p2.score >= 0)
-
-            if (crossesAxis) {
-                // Find the x-coordinate where the line crosses the x-axis
-                val t = kotlin.math.abs(p1.score) / (kotlin.math.abs(p1.score) + kotlin.math.abs(p2.score))
-                val crossX = p1.x + (p2.x - p1.x) * t
-
-                // Draw first segment (from p1 to crossing point)
-                val color1 = if (p1.score >= 0) greenColor else redColor
-                scratchPath.reset()
-                scratchPath.moveTo(leftX, p1.y)
-                scratchPath.lineTo(crossX, centerY)
-                scratchPath.lineTo(leftX, centerY)
-                scratchPath.close()
-                drawPath(scratchPath, color1)
-
-                // Draw second segment (from crossing point to p2)
-                val color2 = if (p2.score >= 0) greenColor else redColor
-                scratchPath.reset()
-                scratchPath.moveTo(crossX, centerY)
-                scratchPath.lineTo(rightX, p2.y)
-                scratchPath.lineTo(rightX, centerY)
-                scratchPath.close()
-                drawPath(scratchPath, color2)
-
-                // Draw solid line on top (two segments with different colors)
-                drawLine(color1, Offset(p1.x, p1.y), Offset(crossX, centerY), strokeWidth = 2f)
-                drawLine(color2, Offset(crossX, centerY), Offset(p2.x, p2.y), strokeWidth = 2f)
-            } else {
-                // No crossing - draw single colored area
-                val color = if (p1.score >= 0) greenColor else redColor
-
-                scratchPath.reset()
-                scratchPath.moveTo(leftX, p1.y)
-                scratchPath.lineTo(rightX, p2.y)
-                scratchPath.lineTo(rightX, centerY)
-                scratchPath.lineTo(leftX, centerY)
-                scratchPath.close()
-                drawPath(scratchPath, color)
-
-                // Draw solid line on top
-                drawLine(color, Offset(p1.x, p1.y), Offset(p2.x, p2.y), strokeWidth = 2f)
-            }
-        }
-
-        // Build list of points for analyse stage scores
-        val pointsAnalyse = mutableListOf<GraphPoint>()
-        for (moveIndex in 0 until totalMoves) {
-            val score = analyseScores[moveIndex]
-            if (score != null) {
-                val x = if (totalMoves > 1) moveIndex * pointSpacing else width / 2
-                // Use raw Stockfish score, but for mate use +/- lineGraphRange
-                val rawScore = score.graphValue(maxScore)
-                val clampedScore = rawScore.coerceIn(-maxScore, maxScore)
-                val y = centerY - (clampedScore / maxScore) * (height / 2 - 4)
-                pointsAnalyse.add(GraphPoint(x, y, rawScore))
-            }
-        }
-
-        // Draw analyse stage: filled areas in Manual stage, white line otherwise
-        if (isManualStage) {
-            for (i in 0 until pointsAnalyse.size - 1) {
-                val p1 = pointsAnalyse[i]
-                val p2 = pointsAnalyse[i + 1]
-
-                val leftX = if (i == 0) p1.x else p1.x - overlap
-                val rightX = if (i == pointsAnalyse.size - 2) p2.x else p2.x + overlap
-
-                val crossesAxis = (p1.score >= 0 && p2.score < 0) || (p1.score < 0 && p2.score >= 0)
-
-                if (crossesAxis) {
-                    val t = kotlin.math.abs(p1.score) / (kotlin.math.abs(p1.score) + kotlin.math.abs(p2.score))
-                    val crossX = p1.x + (p2.x - p1.x) * t
-
-                    val color1 = if (p1.score >= 0) greenColor else redColor
-                    val path1 = scratchPath.apply {
-                        reset()
-                        moveTo(leftX, p1.y)
-                        lineTo(crossX, centerY)
-                        lineTo(leftX, centerY)
-                        close()
-                    }
-                    drawPath(path1, color1)
-
-                    val color2 = if (p2.score >= 0) greenColor else redColor
-                    val path2 = scratchPath.apply {
-                        reset()
-                        moveTo(crossX, centerY)
-                        lineTo(rightX, p2.y)
-                        lineTo(rightX, centerY)
-                        close()
-                    }
-                    drawPath(path2, color2)
-
-                    drawLine(color1, Offset(p1.x, p1.y), Offset(crossX, centerY), strokeWidth = 2f)
-                    drawLine(color2, Offset(crossX, centerY), Offset(p2.x, p2.y), strokeWidth = 2f)
-                } else {
-                    val color = if (p1.score >= 0) greenColor else redColor
-
-                    val path = scratchPath.apply {
-                        reset()
-                        moveTo(leftX, p1.y)
-                        lineTo(rightX, p2.y)
-                        lineTo(rightX, centerY)
-                        lineTo(leftX, centerY)
-                        close()
-                    }
-                    drawPath(path, color)
-
-                    drawLine(color, Offset(p1.x, p1.y), Offset(p2.x, p2.y), strokeWidth = 2f)
-                }
-            }
-        } else {
-            for (i in 0 until pointsAnalyse.size - 1) {
-                val p1 = pointsAnalyse[i]
-                val p2 = pointsAnalyse[i + 1]
-                drawLine(analyseColor, Offset(p1.x, p1.y), Offset(p2.x, p2.y), strokeWidth = 7f)
-            }
-        }
-
-        // Draw current move indicator (only in manual stage)
-        if (isManualStage && currentMoveIndex >= 0 && currentMoveIndex < totalMoves) {
-            val x = if (totalMoves > 1) currentMoveIndex * pointSpacing else width / 2
-            drawLine(
-                color = currentMoveColor,
-                start = Offset(x, 0f),
-                end = Offset(x, height),
-                strokeWidth = 5f
-            )
-        }
+        drawScoreAxis()
+        drawScoreLineAreas(previewScores, analyseScores, totalMoves, currentStage, maxScore, greenColor, redColor, scratchPath)
+        drawAnalyseProgressLine(analyseScores, totalMoves, currentStage, maxScore, Color(graphSettings.analyseLineColor.toInt()))
+        drawCurrentMoveLine(currentMoveIndex, totalMoves, currentStage, Color(graphSettings.verticalLineColor.toInt()), 5f)
     }
 }
 
@@ -313,9 +400,6 @@ fun TimeUsageGraph(
     val blackTimeColor = AppColors.MediumGray  // Gray for black's time
     val lineColor = Color(0xFF444444)
     val currentMoveColor = Color(graphSettings.verticalLineColor.toInt())
-
-    var graphWidth by remember { mutableStateOf(0f) }
-    val isManualStage = currentStage == AnalysisStage.MANUAL
 
     // Parse clock times to seconds
     val whiteTimes = mutableListOf<Pair<Int, Int>>()  // (moveIndex, seconds)
@@ -342,46 +426,11 @@ fun TimeUsageGraph(
         blackTimes.maxOfOrNull { it.second } ?: 0
     ).toFloat().coerceAtLeast(60f)
 
-    Canvas(
-        modifier = modifier
-            .background(Color(graphSettings.backgroundColor.toInt()), RoundedCornerShape(8.dp))
-            .padding(8.dp)
-            .pointerInput(moveDetails.size, currentStage) {
-                if (moveDetails.isNotEmpty() && isManualStage) {
-                    // Only act when the selected move changes; every pointer event would restart the engine.
-                    var lastIndex = -1
-                    detectHorizontalDragGestures(onDragStart = { lastIndex = -1 }) { change, _ ->
-                        change.consume()
-                        val x = change.position.x.coerceIn(0f, graphWidth)
-                        val moveIndex = ((x / graphWidth) * (moveDetails.size - 1) + 0.5f)
-                            .toInt().coerceIn(0, moveDetails.size - 1)
-                        if (moveIndex != lastIndex) {
-                            lastIndex = moveIndex
-                            onMoveSelected(moveIndex)
-                        }
-                    }
-                }
-            }
-            .pointerInput(moveDetails.size, currentStage) {
-                if (moveDetails.isNotEmpty() && currentStage != AnalysisStage.PREVIEW) {
-                    detectTapGestures(
-                        onTap = { offset ->
-                            val x = offset.x.coerceIn(0f, graphWidth)
-                            val moveIndex = ((x / graphWidth) * (moveDetails.size - 1) + 0.5f)
-                                .toInt().coerceIn(0, moveDetails.size - 1)
-                            onMoveSelected(moveIndex)
-                        }
-                    )
-                }
-            }
-    ) {
+    Canvas(modifier = modifier.moveGraph(graphSettings, moveDetails.size, currentStage, onMoveSelected)) {
         val width = size.width
         val height = size.height
-        graphWidth = width
         val totalMoves = moveDetails.size
         if (totalMoves == 0) return@Canvas
-
-        val pointSpacing = if (totalMoves > 1) width / (totalMoves - 1) else width / 2
 
         // Draw horizontal grid lines
         for (i in 1..3) {
@@ -394,8 +443,8 @@ fun TimeUsageGraph(
             for (i in 0 until whiteTimes.size - 1) {
                 val (idx1, t1) = whiteTimes[i]
                 val (idx2, t2) = whiteTimes[i + 1]
-                val x1 = idx1 * pointSpacing
-                val x2 = idx2 * pointSpacing
+                val x1 = moveSlotCenterX(idx1, totalMoves, width)
+                val x2 = moveSlotCenterX(idx2, totalMoves, width)
                 val y1 = height - (t1 / maxTime) * height
                 val y2 = height - (t2 / maxTime) * height
                 drawLine(whiteTimeColor, Offset(x1, y1), Offset(x2, y2), strokeWidth = 2f)
@@ -407,24 +456,15 @@ fun TimeUsageGraph(
             for (i in 0 until blackTimes.size - 1) {
                 val (idx1, t1) = blackTimes[i]
                 val (idx2, t2) = blackTimes[i + 1]
-                val x1 = idx1 * pointSpacing
-                val x2 = idx2 * pointSpacing
+                val x1 = moveSlotCenterX(idx1, totalMoves, width)
+                val x2 = moveSlotCenterX(idx2, totalMoves, width)
                 val y1 = height - (t1 / maxTime) * height
                 val y2 = height - (t2 / maxTime) * height
                 drawLine(blackTimeColor, Offset(x1, y1), Offset(x2, y2), strokeWidth = 2f)
             }
         }
 
-        // Draw current move indicator (only in manual stage)
-        if (isManualStage && currentMoveIndex >= 0 && currentMoveIndex < totalMoves) {
-            val x = currentMoveIndex * pointSpacing
-            drawLine(
-                color = currentMoveColor,
-                start = Offset(x, 0f),
-                end = Offset(x, height),
-                strokeWidth = 3f
-            )
-        }
+        drawCurrentMoveLine(currentMoveIndex, totalMoves, currentStage, currentMoveColor, 3f)
     }
 }
 
@@ -468,204 +508,48 @@ fun ScoreDifferenceGraph(
     // Always show scores from WHITE's perspective (positive = good for white)
     val goodMoveColor = Color(graphSettings.plusScoreColor.toInt())
     val blunderColor = Color(graphSettings.negativeScoreColor.toInt())
-    val lineColor = AppColors.DimGray
-    val currentMoveColor = Color(graphSettings.verticalLineColor.toInt())
 
-    var graphWidth by remember { mutableStateOf(0f) }
-    val isManualStage = currentStage == AnalysisStage.MANUAL
-
-    Canvas(
-        modifier = modifier
-            .background(Color(graphSettings.backgroundColor.toInt()), RoundedCornerShape(8.dp))
-            .padding(8.dp)
-            .pointerInput(totalMoves, currentStage) {
-                if (totalMoves > 0 && isManualStage) {
-                    // Only act when the selected move changes; every pointer event would restart the engine.
-                    var lastIndex = -1
-                    detectHorizontalDragGestures(onDragStart = { lastIndex = -1 }) { change, _ ->
-                        change.consume()
-                        val x = change.position.x.coerceIn(0f, graphWidth)
-                        val moveIndex = if (totalMoves > 0) {
-                            ((x / graphWidth) * totalMoves).toInt().coerceIn(0, totalMoves - 1)
-                        } else {
-                            0
-                        }
-                        if (moveIndex != lastIndex) {
-                            lastIndex = moveIndex
-                            onMoveSelected(moveIndex)
-                        }
-                    }
-                }
-            }
-            .pointerInput(totalMoves, currentStage) {
-                if (totalMoves > 0 && currentStage != AnalysisStage.PREVIEW) {
-                    detectTapGestures(
-                        onTap = { offset ->
-                            val x = offset.x.coerceIn(0f, graphWidth)
-                            val moveIndex = if (totalMoves > 0) {
-                                ((x / graphWidth) * totalMoves).toInt().coerceIn(0, totalMoves - 1)
-                            } else {
-                                0
-                            }
-                            onMoveSelected(moveIndex)
-                        }
-                    )
-                }
-            }
-    ) {
+    Canvas(modifier = modifier.moveGraph(graphSettings, totalMoves, currentStage, onMoveSelected)) {
         if (totalMoves == 0) return@Canvas
-
-        val width = size.width
-        val height = size.height
-        graphWidth = width
-        val centerY = height / 2
         val maxDiff = graphSettings.barGraphRange.toFloat() // Range from settings
 
-        // Draw center line (x-axis at 0 difference)
-        drawLine(
-            color = lineColor,
-            start = Offset(0f, centerY),
-            end = Offset(width, centerY),
-            strokeWidth = 1f
-        )
+        drawScoreAxis()
+        drawScoreBars(previewScores, analyseScores, totalMoves, currentStage, maxDiff, goodMoveColor, blunderColor)
+        drawCurrentMoveLine(currentMoveIndex, totalMoves, currentStage, Color(graphSettings.verticalLineColor.toInt()), 3f)
+    }
+}
 
-        // Calculate bar width based on number of moves
-        val barWidth = if (totalMoves > 0) (width / totalMoves) * 0.8f else width * 0.1f
-        val barSpacing = if (totalMoves > 0) width / totalMoves else width
+/**
+ * Score combi graph: the score line graph and the score bars graph in one. The line's areas use light
+ * versions of the score colours; the bars, drawn on top, use the bars graph's colours. Each keeps
+ * its own range.
+ */
+@Composable
+fun CombinedScoreGraph(
+    previewScores: Map<Int, MoveScore>,
+    analyseScores: Map<Int, MoveScore>,
+    totalMoves: Int,
+    currentMoveIndex: Int,
+    currentStage: AnalysisStage,
+    graphSettings: GraphSettings,
+    onMoveSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val positive = Color(graphSettings.plusScoreColor.toInt())
+    val negative = Color(graphSettings.negativeScoreColor.toInt())
+    val lightPositive = lerp(positive, Color.White, 0.5f)
+    val lightNegative = lerp(negative, Color.White, 0.5f)
+    val scratchPath = remember { Path() }
 
-        val isAnalyseStage = currentStage == AnalysisStage.ANALYSE
+    Canvas(modifier = modifier.moveGraph(graphSettings, totalMoves, currentStage, onMoveSelected)) {
+        if (totalMoves == 0) return@Canvas
+        val maxScore = graphSettings.lineGraphRange.toFloat()
 
-        // Draw bars for each move
-        // Compare with the previous move of the SAME COLOR (2 plies back, not 1)
-        // This shows how much the position changed after opponent's move and your response
-        for (moveIndex in 0 until totalMoves) {
-            val currentScore: MoveScore?
-            val prevSameColorScore: MoveScore?
-
-            // Previous move of same color is 2 plies back
-            val prevSameColorIndex = moveIndex - 2
-
-            if (isAnalyseStage) {
-                // During Analyse stage: use analyse scores if BOTH are available,
-                // otherwise fall back to preview scores
-                val hasAnalyseCurrent = analyseScores.containsKey(moveIndex)
-                val hasAnalysePrev = prevSameColorIndex < 0 || analyseScores.containsKey(prevSameColorIndex)
-
-                if (hasAnalyseCurrent && hasAnalysePrev) {
-                    // Both analyse scores available - use them
-                    currentScore = analyseScores[moveIndex]
-                    prevSameColorScore = if (prevSameColorIndex >= 0) analyseScores[prevSameColorIndex] else null
-                } else {
-                    // Fall back to preview scores
-                    currentScore = previewScores[moveIndex]
-                    prevSameColorScore = if (prevSameColorIndex >= 0) previewScores[prevSameColorIndex] else null
-                }
-            } else {
-                // Preview/Manual stage: prefer analyse scores, fall back to preview
-                currentScore = analyseScores[moveIndex] ?: previewScores[moveIndex]
-                prevSameColorScore = if (prevSameColorIndex >= 0) {
-                    analyseScores[prevSameColorIndex] ?: previewScores[prevSameColorIndex]
-                } else null
-            }
-
-            if (currentScore != null && prevSameColorScore != null) {
-                // Calculate difference based on mate handling rules
-                val prevIsMate = prevSameColorScore.isMate
-                val currIsMate = currentScore.isMate
-
-                // M value is the absolute value of mateIn (ignoring sign)
-                val prevMValue = kotlin.math.abs(prevSameColorScore.mateIn)
-                val currMValue = kotlin.math.abs(currentScore.mateIn)
-
-                // Check if winning (+M*) or losing (-M*) mate
-                val prevIsPositiveMate = prevSameColorScore.isPositiveMate
-                val prevIsNegativeMate = prevIsMate && !prevIsPositiveMate
-                val currIsPositiveMate = currentScore.isPositiveMate
-                val currIsNegativeMate = currIsMate && !currIsPositiveMate
-
-                val rawDiff: Float = when {
-                    // Both +M* (winning mate for both)
-                    prevIsPositiveMate && currIsPositiveMate -> when {
-                        currMValue == prevMValue -> 0f
-                        currMValue == prevMValue - 1 -> 0f
-                        currMValue > prevMValue -> -(1 + (currMValue - prevMValue)).toFloat().coerceAtMost(maxDiff)
-                        currMValue < prevMValue -> ((prevMValue - currMValue) + 1).toFloat().coerceAtMost(3f)
-                        else -> 0f
-                    }
-
-                    // Both -M* (losing mate for both)
-                    prevIsNegativeMate && currIsNegativeMate -> when {
-                        currMValue == prevMValue -> 0f
-                        currMValue == prevMValue - 1 -> 0f
-                        currMValue > prevMValue -> (1 + (currMValue - prevMValue)).toFloat().coerceAtMost(maxDiff)
-                        currMValue < prevMValue -> -((prevMValue - currMValue) + 1).toFloat().coerceAtLeast(-maxDiff)
-                        else -> 0f
-                    }
-
-                    // +M* to -M* (lost winning mate, now losing)
-                    prevIsPositiveMate && currIsNegativeMate -> -maxDiff
-
-                    // -M* to +M* (escaped losing mate, now winning)
-                    prevIsNegativeMate && currIsPositiveMate -> maxDiff
-
-                    // Previous normal, current +M*
-                    !prevIsMate && currIsPositiveMate -> maxDiff
-
-                    // Previous normal, current -M*
-                    !prevIsMate && currIsNegativeMate -> -maxDiff
-
-                    // Previous +M*, current normal
-                    prevIsPositiveMate && !currIsMate -> -maxDiff
-
-                    // Previous -M*, current normal
-                    prevIsNegativeMate && !currIsMate -> maxDiff
-
-                    // Both normal scores
-                    !prevIsMate && !currIsMate -> when {
-                        currentScore.score == prevSameColorScore.score -> 0f
-                        currentScore.score > prevSameColorScore.score ->
-                            (currentScore.score - prevSameColorScore.score).coerceAtMost(maxDiff)
-                        else ->
-                            (currentScore.score - prevSameColorScore.score).coerceAtLeast(-maxDiff)
-                    }
-
-                    else -> 0f
-                }
-
-                val clampedDiff = rawDiff.coerceIn(-maxDiff, maxDiff)
-                val barHeight = kotlin.math.abs(clampedDiff / maxDiff) * (height / 2 - 4)
-
-                val barX = moveIndex * barSpacing + (barSpacing - barWidth) / 2
-                val color = if (rawDiff >= 0) goodMoveColor else blunderColor
-
-                if (rawDiff >= 0) {
-                    // Bar goes up from center
-                    drawRect(
-                        color = color,
-                        topLeft = Offset(barX, centerY - barHeight),
-                        size = androidx.compose.ui.geometry.Size(barWidth, barHeight)
-                    )
-                } else {
-                    // Bar goes down from center
-                    drawRect(
-                        color = color,
-                        topLeft = Offset(barX, centerY),
-                        size = androidx.compose.ui.geometry.Size(barWidth, barHeight)
-                    )
-                }
-            }
-        }
-
-        // Draw current move indicator (only in manual stage)
-        if (isManualStage && currentMoveIndex >= 0 && currentMoveIndex < totalMoves) {
-            val x = currentMoveIndex * barSpacing + barSpacing / 2
-            drawLine(
-                color = currentMoveColor,
-                start = Offset(x, 0f),
-                end = Offset(x, height),
-                strokeWidth = 3f
-            )
-        }
+        drawScoreAxis()
+        drawScoreLineAreas(previewScores, analyseScores, totalMoves, currentStage, maxScore, lightPositive, lightNegative, scratchPath)
+        drawScoreBars(previewScores, analyseScores, totalMoves, currentStage, graphSettings.barGraphRange.toFloat(), positive, negative)
+        drawAnalyseProgressLine(analyseScores, totalMoves, currentStage, maxScore, Color(graphSettings.analyseLineColor.toInt()))
+        drawCurrentMoveLine(currentMoveIndex, totalMoves, currentStage, Color(graphSettings.verticalLineColor.toInt()), 5f)
     }
 }
 
@@ -706,6 +590,24 @@ fun StockfishLinesCard(
     onExploreLine: ((String, Int) -> Unit)? = null
 ) {
     val isWhiteTurn = board.getTurn() == PieceColor.WHITE
+    // Scores use White's perspective (Stockfish reports them for the side to move).
+    val whiteScores = result.lines.map { line ->
+        if (isWhiteTurn) MoveScore(line.score, line.isMate, line.mateIn)
+        else MoveScore(-line.score, line.isMate, -line.mateIn)
+    }
+    // One score column for all lines, wide enough that the longest score (e.g. "+12.5") stays on
+    // one line at any font scale.
+    val textMeasurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val scoreStyle = LocalTextStyle.current.merge(PvScoreStyle)
+    val scoreTexts = whiteScores.map { it.formatDisplay() }
+    val scoreWidth = remember(scoreTexts, scoreStyle, density) {
+        val widest = scoreTexts.maxOfOrNull {
+            textMeasurer.measure(it, scoreStyle, maxLines = 1, softWrap = false).size.width
+        } ?: 0
+        // 1.dp absorbs dp/px rounding.
+        maxOf(50.dp, with(density) { widest.toDp() } + PvScoreHorizontalPadding * 2 + 1.dp)
+    }
     Card(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
@@ -741,12 +643,14 @@ fun StockfishLinesCard(
                     color = AppColors.MediumGray
                 )
             }
-            result.lines.forEach { line ->
+            result.lines.forEachIndexed { index, line ->
                 val onMoveClick: ((Int) -> Unit)? = onExploreLine?.let { explore ->
                     { moveIndex -> explore(line.pv, moveIndex) }
                 }
                 PvLineRow(
                     line = line,
+                    whiteScore = whiteScores[index],
+                    scoreWidth = scoreWidth,
                     board = board,
                     isWhiteTurn = isWhiteTurn,
                     onMoveClick = onMoveClick
@@ -756,22 +660,23 @@ fun StockfishLinesCard(
     }
 }
 
+private val PvScoreStyle = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium)
+private val PvScoreHorizontalPadding = 6.dp
+
 /**
  * Row displaying a single principal variation line with score and clickable moves.
  */
 @Composable
 private fun PvLineRow(
     line: PvLine,
+    whiteScore: MoveScore,
+    scoreWidth: Dp,
     board: ChessBoard,
     isWhiteTurn: Boolean,
     onMoveClick: ((Int) -> Unit)?
 ) {
     // Score display: always from WHITE's perspective (positive = good for white)
-    // Convert score to WHITE's perspective (Stockfish gives score from side-to-move's view)
-    val adjustedScore = if (isWhiteTurn) line.score else -line.score
-    val adjustedMateIn = if (isWhiteTurn) line.mateIn else -line.mateIn
-
-    val whiteScore = MoveScore(adjustedScore, line.isMate, adjustedMateIn)
+    val adjustedScore = whiteScore.score
     val displayScore = whiteScore.formatDisplay()
 
     val scoreColor = when {
@@ -797,16 +702,17 @@ private fun PvLineRow(
         // Score box - consistent styling for all lines
         Box(
             modifier = Modifier
-                .width(50.dp)
+                .width(scoreWidth)
                 .background(AppColors.AnalysisPanelBg, RoundedCornerShape(4.dp))
-                .padding(horizontal = 6.dp, vertical = 4.dp),
+                .padding(horizontal = PvScoreHorizontalPadding, vertical = 4.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = displayScore,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = scoreColor
+                style = LocalTextStyle.current.merge(PvScoreStyle),
+                color = scoreColor,
+                maxLines = 1,
+                softWrap = false
             )
         }
 

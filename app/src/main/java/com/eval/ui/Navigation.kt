@@ -12,7 +12,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -20,8 +20,6 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 
 /**
  * Navigation routes for the app.
@@ -74,9 +72,7 @@ fun EvalNavHost(
     }
 
     // Collect only what the menu needs: the host must not recompose on every engine update.
-    val canReload by remember(viewModel) {
-        viewModel.uiState.map { it.game != null || it.hasLastServerUser }.distinctUntilChanged()
-    }.collectAsState(initial = viewModel.uiState.value.let { it.game != null || it.hasLastServerUser })
+    val canReload by viewModel.canReloadGame.collectAsState()
     val menu = remember(navController, viewModel, canReload) {
         val home: () -> Unit = {
             viewModel.dismissSharedContent()

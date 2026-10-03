@@ -77,6 +77,15 @@ fun InterfaceSettingsScreen(
                 )
 
                 SettingsToggle(
+                    label = "Score Combi graph",
+                    checked = preview.showScoreCombiGraph,
+                    onCheckedChange = {
+                        preview = preview.copy(showScoreCombiGraph = it)
+                        save()
+                    }
+                )
+
+                SettingsToggle(
                     label = "Result bar",
                     checked = preview.showResultBar,
                     onCheckedChange = {
@@ -146,6 +155,15 @@ fun InterfaceSettingsScreen(
                     checked = analyse.showScoreBarsGraph,
                     onCheckedChange = {
                         analyse = analyse.copy(showScoreBarsGraph = it)
+                        save()
+                    }
+                )
+
+                SettingsToggle(
+                    label = "Score Combi graph",
+                    checked = analyse.showScoreCombiGraph,
+                    onCheckedChange = {
+                        analyse = analyse.copy(showScoreCombiGraph = it)
                         save()
                     }
                 )
@@ -253,6 +271,15 @@ fun InterfaceSettingsScreen(
                     checked = manual.showScoreBarsGraph,
                     onCheckedChange = {
                         manual = manual.copy(showScoreBarsGraph = it)
+                        save()
+                    }
+                )
+
+                SettingsToggle(
+                    label = "Score Combi graph",
+                    checked = manual.showScoreCombiGraph,
+                    onCheckedChange = {
+                        manual = manual.copy(showScoreCombiGraph = it)
                         save()
                     }
                 )

@@ -5,11 +5,11 @@ This file provides guidance to Claude Code when working with this repository.
 ## Build Commands
 
 ```bash
-# Build debug APK (requires Java 17)
-JAVA_HOME=/opt/homebrew/opt/openjdk@17 ./gradlew assembleDebug
+# Build debug APK (requires Java 25)
+JAVA_HOME=/opt/homebrew/opt/openjdk@25 ./gradlew assembleDebug
 
 # Build release APK (requires keystore in local.properties)
-JAVA_HOME=/opt/homebrew/opt/openjdk@17 ./gradlew assembleRelease
+JAVA_HOME=/opt/homebrew/opt/openjdk@25 ./gradlew assembleRelease
 
 # Clean build
 ./gradlew clean
@@ -33,7 +33,7 @@ cp app/build/outputs/apk/debug/app-debug.apk /Users/herbert/cloud/eval.apk
 
 Eval is an Android chess analysis app. It fetches games from Lichess.org, imports games and positions from files, web pages, images, the camera, the clipboard and shares, and provides three-stage Stockfish analysis with an interactive board. AI reports are delegated to an external companion app (`com.ai`).
 
-**Codebase:** about 80 Kotlin files, ~28,000 lines (plus JVM tests in `app/src/test` and instrumented tests in `app/src/androidTest`) | **SDK:** minSdk 26, targetSdk 34 | **UI:** Jetpack Compose + Material 3
+**Codebase:** about 80 Kotlin files, ~28,000 lines (plus JVM tests in `app/src/test` and instrumented tests in `app/src/androidTest`) | **SDK:** minSdk 26, compileSdk/targetSdk 37 | **Toolchain:** Gradle 9.8, AGP 9.4, Kotlin 2.4, JDK 25 (same as the AI app) | **UI:** Jetpack Compose + Material 3
 
 ## Architecture
 
@@ -186,7 +186,7 @@ Settings via `SettingsPreferences` using SharedPreferences (`eval_prefs`). Key g
 - Stockfish per-stage: seconds/depth, threads, hash, NNUE, multiPV; AI moves and AI engine cards
 - Board layout: colors, coordinates, player bars, eval bar
 - Graph: colors, ranges, scales
-- Interface visibility: ~23 toggles across 3 stages
+- Interface visibility: ~26 toggles across 3 stages
 - General: move sounds, full screen, Lichess username
 - AI setup: system prompts, prompts, instructions, last selection
 - Settings export/import: typed JSON (schema v5), max 2 MB; unknown legacy keys are skipped
@@ -243,7 +243,7 @@ Use `restartAnalysisForExploringLine()` in `AnalysisOrchestrator`: stop -> newGa
 
 ## Verification Checklist
 
-- [ ] Build: `JAVA_HOME=/opt/homebrew/opt/openjdk@17 ./gradlew assembleDebug`
+- [ ] Build: `JAVA_HOME=/opt/homebrew/opt/openjdk@25 ./gradlew assembleDebug`
 - [ ] JVM tests: `./gradlew testDebugUnitTest`; release shrinking: `./gradlew :app:minifyReleaseWithR8`
 - [ ] No `AlertDialog`, `Dialog`, `DropdownMenu` or `ExposedDropdownMenu` outside the AI interface editor's choice popups
 - [ ] Title bar visible on all screens

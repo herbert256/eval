@@ -3,9 +3,7 @@ package com.eval
 import android.content.Intent
 import android.content.ClipboardManager
 import android.graphics.drawable.ColorDrawable
-import android.os.Build
 import android.os.Bundle
-import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -23,7 +21,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
@@ -39,8 +36,6 @@ import com.eval.ui.GameViewModel
 import com.eval.ui.theme.EvalTheme
 import com.eval.data.SharedChessInput
 import com.eval.data.ClipboardHistory
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -66,17 +61,9 @@ class MainActivity : ComponentActivity() {
     @Suppress("DEPRECATION") // System-bar colors still apply before Android 15.
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Also opts into the display cutout area, so a hidden status bar does not move the
+        // window down; Compose owns the safe insets in both modes.
         enableEdgeToEdge()
-        // Activity 1.8 does not opt into the cutout area. Unlike AI's newer
-        // edge-to-edge setup, Android then moves the entire window below the
-        // hidden status bar. Let Compose own the safe insets for both modes.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            window.attributes = window.attributes.apply {
-                layoutInDisplayCutoutMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
-                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
-                else WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
-            }
-        }
         gameViewModel = ViewModelProvider(this)[GameViewModel::class.java]
         // Keep a pending share across rotation, and restore it after process death.
         // Once dismissed/opened, recreating the activity must not import it again.
@@ -85,15 +72,11 @@ class MainActivity : ComponentActivity() {
         }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                gameViewModel.uiState.map { it.generalSettings.fullScreen }
-                    .distinctUntilChanged()
-                    .collect { applyFullScreen(it) }
+                gameViewModel.fullScreen.collect { applyFullScreen(it) }
             }
         }
         setContent {
-            val fullScreen by remember {
-                gameViewModel.uiState.map { it.generalSettings.fullScreen }.distinctUntilChanged()
-            }.collectAsState(initial = gameViewModel.uiState.value.generalSettings.fullScreen)
+            val fullScreen by gameViewModel.fullScreen.collectAsState()
             EvalTheme {
                 val background = MaterialTheme.colorScheme.background
                 SideEffect {

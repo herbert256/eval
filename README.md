@@ -21,8 +21,8 @@ A chess game analysis app for Android. Fetches games from Lichess.org and provid
 ## Quick Start
 
 ```bash
-# Build (requires Java 17)
-JAVA_HOME=/opt/homebrew/opt/openjdk@17 ./gradlew assembleDebug
+# Build (requires Java 25)
+JAVA_HOME=/opt/homebrew/opt/openjdk@25 ./gradlew assembleDebug
 
 # Install and launch
 adb install -r app/build/outputs/apk/debug/app-debug.apk
@@ -41,10 +41,10 @@ adb shell am start -n com.eval/.MainActivity
 
 | Component | Technology |
 |-----------|-----------|
-| Language | Kotlin 1.9.22 |
+| Language | Kotlin 2.4 (JDK 25, Gradle 9.8, AGP 9.4) |
 | UI | Jetpack Compose + Material 3 |
 | Architecture | MVVM with StateFlow |
-| Networking | Retrofit 2.9 + OkHttp 4.12 |
+| Networking | Retrofit 3 + OkHttp 5 |
 | Chess Engine | Installed Stockfish app via UCI protocol |
 | Navigation | Jetpack Navigation Compose |
 

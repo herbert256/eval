@@ -1,10 +1,11 @@
 import java.util.Calendar
 import java.util.Locale
 import java.util.Properties
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.compose.compiler)
 }
 
 // Generate version from timestamp: yy.DDD.minutes (year.dayOfYear.minutesInDay)
@@ -27,7 +28,10 @@ if (keystoreFile.exists()) {
 
 android {
     namespace = "com.eval"
-    compileSdk = 34
+    compileSdk {
+        version = release(37) { minorApiLevel = 2 }
+    }
+    buildToolsVersion = "37.0.0"
 
     // Keep editable defaults at the repository root and package them as Android assets.
     sourceSets.getByName("main").assets.srcDir(rootProject.file("assets"))
@@ -47,7 +51,7 @@ android {
     defaultConfig {
         applicationId = "com.eval"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 37
         versionCode = versionCodeFromTimestamp
         versionName = versionFromTimestamp
 
@@ -69,11 +73,8 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-    kotlinOptions {
-        jvmTarget = "17"
+        sourceCompatibility = JavaVersion.VERSION_25
+        targetCompatibility = JavaVersion.VERSION_25
     }
     buildFeatures {
         compose = true
@@ -83,9 +84,6 @@ android {
         // JVM tests exercise repository code that logs through android.util.Log.
         unitTests.isReturnDefaultValues = true
     }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.8"
-    }
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -93,6 +91,12 @@ android {
             // post-quantum parameter tables the app never uses.
             excludes += "org/bouncycastle/pqc/**"
         }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_25)
     }
 }
 
@@ -123,7 +127,7 @@ dependencies {
     // PDF text extraction on all supported Android versions. Page images use Android's renderer.
     implementation(libs.pdfbox.android)
 
-    // Retrofit's converter pulls Gson 2.8.5 (CVE-2022-25647); use a current release.
+    // Gson is used directly (models, storage), so it tracks its own release, as in the AI app.
     implementation(libs.gson)
 
     testImplementation(libs.junit)
@@ -135,7 +139,7 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
 }
 
-val validateBundledPrompts by tasks.registering {
+val validateBundledPrompts = tasks.register("validateBundledPrompts") {
     val promptDirectories = listOf("assets/system_prompts", "assets/prompts")
     promptDirectories.forEach { inputs.dir(rootProject.file(it)) }
     // A marker output lets Gradle skip the check while the prompts are unchanged.

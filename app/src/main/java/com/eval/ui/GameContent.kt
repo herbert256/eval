@@ -316,6 +316,12 @@ fun GameContent(
         AnalysisStage.ANALYSE -> visibilitySettings.analyseStage.showScoreBarsGraph
         AnalysisStage.MANUAL -> visibilitySettings.manualStage.showScoreBarsGraph
     }
+    val showScoreCombiGraph = when (uiState.currentStage) {
+        AnalysisStage.PREVIEW -> visibilitySettings.previewStage.showScoreCombiGraph
+        AnalysisStage.ANALYSE -> visibilitySettings.analyseStage.showScoreCombiGraph
+        AnalysisStage.MANUAL -> visibilitySettings.manualStage.showScoreCombiGraph
+    }
+    val showScoreGraphs = showScoreLineGraph || showScoreBarsGraph || showScoreCombiGraph
     val showBoard = when (uiState.currentStage) {
         AnalysisStage.PREVIEW -> visibilitySettings.previewStage.showBoard
         AnalysisStage.ANALYSE -> visibilitySettings.analyseStage.showBoard
@@ -353,6 +359,13 @@ fun GameContent(
 
     // Conditional graph content
     val ConditionalGraphContent: @Composable () -> Unit = {
+        val onGraphMoveSelected: (Int) -> Unit = { moveIndex ->
+            when (uiState.currentStage) {
+                AnalysisStage.PREVIEW -> { /* Not interruptible - ignore clicks */ }
+                AnalysisStage.ANALYSE -> viewModel.enterManualStageAtMove(moveIndex)
+                AnalysisStage.MANUAL -> viewModel.restartAnalysisAtMove(moveIndex)
+            }
+        }
         Column(modifier = Modifier.offset(y = (-8).dp)) {
             if (uiState.moveDetails.isNotEmpty()) {
                 // Line graph
@@ -367,13 +380,7 @@ fun GameContent(
                         currentStage = uiState.currentStage,
                         userPlayedBlack = uiState.userPlayedBlack,
                         graphSettings = uiState.graphSettings,
-                        onMoveSelected = { moveIndex ->
-                            when (uiState.currentStage) {
-                                AnalysisStage.PREVIEW -> { /* Not interruptible - ignore clicks */ }
-                                AnalysisStage.ANALYSE -> viewModel.enterManualStageAtMove(moveIndex)
-                                AnalysisStage.MANUAL -> viewModel.restartAnalysisAtMove(moveIndex)
-                            }
-                        },
+                        onMoveSelected = onGraphMoveSelected,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(lineGraphHeight)
@@ -392,16 +399,27 @@ fun GameContent(
                         currentStage = uiState.currentStage,
                         userPlayedBlack = uiState.userPlayedBlack,
                         graphSettings = uiState.graphSettings,
-                        onMoveSelected = { moveIndex ->
-                            when (uiState.currentStage) {
-                                AnalysisStage.PREVIEW -> { /* Not interruptible - ignore clicks */ }
-                                AnalysisStage.ANALYSE -> viewModel.enterManualStageAtMove(moveIndex)
-                                AnalysisStage.MANUAL -> viewModel.restartAnalysisAtMove(moveIndex)
-                            }
-                        },
+                        onMoveSelected = onGraphMoveSelected,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(barGraphHeight)
+                    )
+                }
+
+                // Line and bars in one graph, when enabled for the current stage
+                if (showScoreCombiGraph) {
+                    if (showScoreLineGraph || showScoreBarsGraph) Spacer(modifier = Modifier.height(8.dp))
+                    CombinedScoreGraph(
+                        previewScores = uiState.previewScores,
+                        analyseScores = uiState.analyseScores,
+                        totalMoves = uiState.moveDetails.size,
+                        currentMoveIndex = uiState.currentMoveIndex,
+                        currentStage = uiState.currentStage,
+                        graphSettings = uiState.graphSettings,
+                        onMoveSelected = onGraphMoveSelected,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height((120 * uiState.graphSettings.lineGraphScale / 100).dp)
                     )
                 }
 
@@ -439,7 +457,7 @@ fun GameContent(
     }
 
     // Show game info card at top during preview and analyse stages
-    if (uiState.currentStage != AnalysisStage.MANUAL && (showScoreLineGraph || showScoreBarsGraph)) {
+    if (uiState.currentStage != AnalysisStage.MANUAL && showScoreGraphs) {
         GameInfoCard()
         Spacer(modifier = Modifier.height(8.dp))
     }
@@ -905,7 +923,7 @@ fun GameContent(
     }
 
     // Show graph cards between Stockfish panel and moves list during manual stage
-    if (uiState.currentStage == AnalysisStage.MANUAL && (showScoreLineGraph || showScoreBarsGraph)) {
+    if (uiState.currentStage == AnalysisStage.MANUAL && showScoreGraphs) {
         Spacer(modifier = Modifier.height(16.dp))
         ConditionalGraphContent()
     }

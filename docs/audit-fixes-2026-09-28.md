@@ -25,7 +25,7 @@ Work started from commit `076ca73` plus the uncommitted camera rework, which was
 | IDs | Reason |
 | --- | --- |
 | BLD-3 | Distributing a release build instead of the debug APK needs your keystore and a change to the cloud workflow. Release R8 now passes, so this is ready when you want it. |
-| BLD-6 (toolchain part) | AGP/Kotlin 2 and targetSdk 35 are a separate upgrade with an edge-to-edge UI review; only the Gson CVE was addressed here. |
+| BLD-6 (toolchain part) | Done afterwards: the toolchain now matches the AI app (Gradle 9.8.0, AGP 9.4.1, Kotlin 2.4.20, JDK 25, compileSdk/targetSdk 37, current AndroidX, Compose BOM 2026.09.00, Retrofit 3, OkHttp 5). |
 | UI-18, SET-5, NET-7 | Informational (localisation, dead settings code, nullable API models); no user-visible defect. |
 | TST-3 | Replacing fixed sleeps with idle synchronisation needs the Compose test library across ~20 test files. |
 | Partly | STA-5 (the explored variation is still not saved), STA-7 (still SharedPreferences, not Room), STA-18 (dead state fields and the unreachable live-follow code remain), UI-4 (no strong skipping; `GameContent` still takes the whole state), UI-10 (stepper buttons and board semantics), UI-17 (single taps still wait for the double-tap timeout while double-tap navigation is enabled), SEC-10 (title extra and WebView storage), EXP-6 (GIFs still use Unicode pieces). |

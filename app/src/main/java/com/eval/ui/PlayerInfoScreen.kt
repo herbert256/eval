@@ -322,14 +322,14 @@ fun PlayerInfoScreen(
 
                         // Created date
                         if (playerInfo.createdAt != null) {
-                            val date = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                            val date = java.text.SimpleDateFormat("yyyy-MM-dd", LocalConfiguration.current.locales[0])
                                 .format(java.util.Date(playerInfo.createdAt))
                             PlayerInfoRow("Member Since", date)
                         }
 
                         // Last seen
                         if (playerInfo.lastOnline != null) {
-                            val date = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+                            val date = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", LocalConfiguration.current.locales[0])
                                 .format(java.util.Date(playerInfo.lastOnline))
                             PlayerInfoRow("Last Seen", date)
                         }

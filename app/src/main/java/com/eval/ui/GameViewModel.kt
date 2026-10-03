@@ -28,8 +28,11 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 
@@ -63,6 +66,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow(GameUiState())
     val uiState: StateFlow<GameUiState> = _uiState.asStateFlow()
+
+    // Slices for the Activity and the navigation host, which must not recompose on every engine update.
+    val fullScreen: StateFlow<Boolean> = uiState.map { it.generalSettings.fullScreen }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, uiState.value.generalSettings.fullScreen)
+    val canReloadGame: StateFlow<Boolean> = uiState.map { it.game != null || it.hasLastServerUser }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, uiState.value.let { it.game != null || it.hasLastServerUser })
 
     private val _sharedImport = MutableStateFlow<SharedChessInput?>(null)
     internal val sharedImport = _sharedImport.asStateFlow()

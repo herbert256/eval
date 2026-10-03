@@ -200,6 +200,7 @@ data class BoardLayoutSettings(
 // Note: Score Line graph and Game Information are always shown in Preview
 data class PreviewStageVisibility(
     val showScoreBarsGraph: Boolean = false,
+    val showScoreCombiGraph: Boolean = false,
     val showResultBar: Boolean = false,
     val showBoard: Boolean = false,
     val showMoveList: Boolean = false,
@@ -210,6 +211,7 @@ data class PreviewStageVisibility(
 data class AnalyseStageVisibility(
     val showScoreLineGraph: Boolean = true,
     val showScoreBarsGraph: Boolean = true,
+    val showScoreCombiGraph: Boolean = false,
     val showBoard: Boolean = true,
     val showStockfishAnalyse: Boolean = true,
     val showResultBar: Boolean = false,
@@ -222,8 +224,9 @@ data class AnalyseStageVisibility(
 // Note: Board, Navigation bar, and Stockfish panel are always shown in Manual
 data class ManualStageVisibility(
     val showResultBar: Boolean = true,
-    val showScoreLineGraph: Boolean = true,
-    val showScoreBarsGraph: Boolean = true,
+    val showScoreLineGraph: Boolean = false,
+    val showScoreBarsGraph: Boolean = false,
+    val showScoreCombiGraph: Boolean = true,
     val showTimeGraph: Boolean = false,
     val showOpeningExplorer: Boolean = false,
     val showOpeningName: Boolean = false,

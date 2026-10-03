@@ -139,7 +139,8 @@ private val helpSections = listOf(
             "• Green = good for you\n" +
             "• Red = bad for you\n" +
             "• Yellow line = deep analysis scores\n\n" +
-            "The bar graph shows score changes between moves - tall red bars indicate blunders!"
+            "The bar graph shows score changes between moves - tall red bars indicate blunders!\n\n" +
+            "The combi graph shows both in one: the line graph in light colours with the bars on top."
     ),
     HelpEntry(
         title = "Analysis Arrows",
